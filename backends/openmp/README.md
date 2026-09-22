@@ -1,3 +1,3 @@
-# OpenMP backend placeholder
+# OpenMP backend
 
-Phase 2 will implement the shared acceleration contract here. It has not been built or validated.
+Enable with `-DNBODY_ENABLE_OPENMP=ON`. The implementation parallelizes the outer destination-body loop using static scheduling. Each destination acceleration is private to one iteration, while the inner source-body loop retains ascending index order.

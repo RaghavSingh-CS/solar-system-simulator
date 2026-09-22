@@ -20,6 +20,24 @@ For each `(scenario, N, dt, steps, precision)`:
 4. Independently compute total energy, linear momentum, angular momentum, and center of mass.
 5. Mark the backend/configuration invalid if any preregistered threshold fails.
 
+Stage 2 uses OpenMP thread counts 1, 2, and 4 on both the analytic binary and a fixed-seed 32-body scenario. Mixed comparison tolerances handle near-zero quantities:
+
+- Position: absolute `<= 1e-6 m` **or** scaled relative `<= 1e-13` (denominator floor `1 m`).
+- Velocity: absolute `<= 1e-9 m/s` **or** scaled relative `<= 1e-13` (denominator floor `1 m/s`).
+- Cross-backend momentum: absolute `<= 1e6 kg m/s` **or** normalized by total scalar momentum `<= 1e-13`.
+- Cross-backend center of mass: absolute `<= 1e-6 m` **or** normalized by initial position scale `<= 1e-13`.
+- Per-backend normalized momentum and center-of-mass drift: `<= 1e-12`.
+- Relative energy drift `<= 5e-6`; normalized angular-momentum drift `<= 5e-10`.
+
+The absolute momentum bound appears large only because masses are astronomical; the normalized alternative is the meaningful general criterion. Tests also require repeatability under the same mixed position/velocity tolerances and reject zero thread counts, zero timesteps, negative `G`, and coincident positions.
+
+### Stage 2 observed results
+
+With GCC 15.1.0/libgomp in Release mode, every sequential-vs-OpenMP and repeated-OpenMP position/velocity difference was exactly zero for 1, 2, and 4 threads. This exact equality is an observation explained by per-destination ownership and identical inner accumulation order, not a portability requirement.
+
+- Analytic binary over two periods: energy drift `1.5114788315343793e-15`, angular-momentum drift `3.5096052562406509e-16`, normalized momentum drift `8.4290933028685295e-16`, normalized center-of-mass drift `1.9951356883117746e-20`.
+- Seeded 32-body system over 250 steps: energy drift `1.2963732290918661e-15`, angular-momentum drift `7.6765086087405374e-16`, normalized momentum drift `1.5187263362149679e-16`, normalized center-of-mass drift `8.1671414833805418e-17`.
+
 Initial thresholds for the analytic two-body CI test are implementation guards, not scientific claims: maximum relative energy drift `<= 5e-6`, relative separation error `<= 5e-5`, normalized angular-momentum drift `<= 5e-10`, and center-of-mass drift `<= 1e-9` of initial separation over five periods. Scenario-specific research thresholds must be fixed before collecting benchmark outcomes.
 
 ## Real Solar System validation

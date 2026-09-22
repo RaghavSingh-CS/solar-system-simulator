@@ -20,7 +20,7 @@ This does **not** establish suitability for Gyr Solar System prediction. Before 
 scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  |
                         |                  +-- sequential (reference)
-                        |                  +-- OpenMP (planned)
+                        |                  +-- OpenMP (implemented)
                         |                  +-- CUDA (planned)
                         |                  +-- MPI (optional)
                         +-> diagnostics -> CSV/headless benchmark
@@ -29,7 +29,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 
 - `include/nbody`: dependency-free domain types and public APIs.
 - `src`: sequential backend, integrator, scenarios, diagnostics, CSV runner.
-- `backends/openmp`: Phase 2 backend.
+- `backends/openmp`: optional outer-loop-parallel OpenMP backend.
 - `backends/cuda`: Phase 3 `.cu` kernels and Colab validation material.
 - `backends/mpi`: optional stretch implementation.
 - `visualization`: independent viewer; it may link the simulation library but simulation code never depends on OpenGL.
@@ -37,11 +37,17 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 
 ## Shared representation and determinism
 
-`Body` stores a stable name, mass, position, and velocity in double precision. The reference backend iterates `i` then `j` in ascending index order. Backends share input/output contracts but parallel reductions need only meet declared numerical tolerances, not bitwise identity.
+`Body` stores a stable name, mass, position, and velocity in double precision. `ForceBackend` owns the acceleration contract; the integrator accepts any backend, while the original overload still selects the sequential reference. The reference backend iterates `i` then `j` in ascending index order. Backends share input/output contracts but parallel implementations need only meet declared numerical tolerances, not bitwise identity.
 
 ## Backend interface plan
 
-The first stage keeps acceleration calculation as a replaceable function. Phase 2 will formalize `IForceBackend::compute_accelerations(state, parameters)` without changing integrator/scenario/diagnostic APIs. Backend selection will sit above this interface and will never alter physics parameters to make a backend pass.
+The interface is `ForceBackend::compute_accelerations(state, G)`. `sequential_force_backend()` wraps the original reference function. `OpenMpForceBackend(thread_count)` uses `schedule(static)` over destination bodies; each loop iteration owns its local accumulator and one output element, so there are no concurrent accumulator writes. Every destination body still visits source bodies in ascending index order. Invalid masses are rejected before the parallel region; coincident/invalid positions are flagged within the region and reported afterward.
+
+OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the reference, headless runner, and sequential benchmark without finding or linking OpenMP. When explicitly enabled, CMake requires `OpenMP::OpenMP_CXX` and emits a targeted configuration error if unavailable.
+
+## Deterministic synthetic scenario
+
+`make_seeded_synthetic_system` uses `std::mt19937_64` raw output with an explicit 53-bit integer-to-double mapping, avoiding implementation-defined standard-library distributions. It generates generic SI-valued bodies, then removes center-of-mass position and velocity. It is a repeatable scaling/validation input, not a physical Solar System model.
 
 ## Visualization dependency decision
 

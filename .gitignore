@@ -3,6 +3,7 @@
 /.cache/
 /.vs/
 /.vscode/
+/.tools/
 /out/
 *.exe
 *.obj

@@ -5,6 +5,26 @@
 
 namespace nbody {
 
+namespace {
+
+class SequentialForceBackend final : public ForceBackend {
+public:
+    const char* name() const noexcept override { return "sequential"; }
+
+    std::vector<Vec3> compute_accelerations(
+        const SimulationState& state,
+        double gravitational_constant_value) const override {
+        return nbody::compute_accelerations(state, gravitational_constant_value);
+    }
+};
+
+}  // namespace
+
+const ForceBackend& sequential_force_backend() {
+    static const SequentialForceBackend backend;
+    return backend;
+}
+
 std::vector<Vec3> compute_accelerations(
     const SimulationState& state,
     double gravitational_constant_value) {
@@ -40,11 +60,20 @@ void velocity_verlet_step(
     SimulationState& state,
     double dt_s,
     double gravitational_constant_value) {
+    velocity_verlet_step(state, dt_s, sequential_force_backend(), gravitational_constant_value);
+}
+
+void velocity_verlet_step(
+    SimulationState& state,
+    double dt_s,
+    const ForceBackend& force_backend,
+    double gravitational_constant_value) {
     if (!(dt_s > 0.0) || !std::isfinite(dt_s)) {
         throw std::invalid_argument("time step must be finite and positive");
     }
 
-    const auto old_accelerations = compute_accelerations(state, gravitational_constant_value);
+    const auto old_accelerations =
+        force_backend.compute_accelerations(state, gravitational_constant_value);
     const double half_dt_squared = 0.5 * dt_s * dt_s;
 
     for (std::size_t i = 0; i < state.bodies.size(); ++i) {
@@ -52,7 +81,8 @@ void velocity_verlet_step(
             state.bodies[i].velocity_m_s * dt_s + old_accelerations[i] * half_dt_squared;
     }
 
-    const auto new_accelerations = compute_accelerations(state, gravitational_constant_value);
+    const auto new_accelerations =
+        force_backend.compute_accelerations(state, gravitational_constant_value);
     const double half_dt = 0.5 * dt_s;
     for (std::size_t i = 0; i < state.bodies.size(); ++i) {
         state.bodies[i].velocity_m_s +=

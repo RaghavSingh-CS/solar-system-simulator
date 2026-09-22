@@ -2,6 +2,9 @@
 
 #include "nbody/simulation.hpp"
 
+#include <cstddef>
+#include <cstdint>
+
 namespace nbody {
 
 struct TwoBodyScenario {
@@ -11,5 +14,9 @@ struct TwoBodyScenario {
 };
 
 TwoBodyScenario make_analytic_circular_two_body();
+
+SimulationState make_seeded_synthetic_system(
+    std::size_t body_count,
+    std::uint64_t seed = 0x4e424f4459ULL);
 
 }  // namespace nbody
