@@ -75,4 +75,4 @@ CMake, OpenMP, CUDA, MPI, and visualization were **not** built or tested in this
 ## Commit references
 
 - `2d16155` — research, novelty assessment, scope, architecture, validation plan, and benchmark protocol.
-- Sequential foundation commit: pending below in Git history at the time this ledger entry was written.
+- `c241ca7` — deterministic sequential implementation, tests, headless runner, and project scaffolding.
