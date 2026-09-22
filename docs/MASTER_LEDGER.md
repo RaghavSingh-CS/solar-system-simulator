@@ -103,3 +103,5 @@ Exact Stage 2 configure/build/test commands (PowerShell, executed from the repos
 
 - `2d16155` — research, novelty assessment, scope, architecture, validation plan, and benchmark protocol.
 - `c241ca7` — deterministic sequential implementation, tests, headless runner, and project scaffolding.
+- `7f6e2bc` — Stage 1 validation evidence and exact foundation commit references.
+- `1485d54` — Stage 2 OpenMP backend, validation suite, benchmark harness, and documentation.
