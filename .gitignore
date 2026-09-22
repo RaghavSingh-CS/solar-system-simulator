@@ -1,0 +1,14 @@
+/build/
+/build-*/
+/.cache/
+/.vs/
+/.vscode/
+/out/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+*.user
+*.csv
+!data/**/*.csv
