@@ -9,7 +9,7 @@ Select a GPU runtime in Colab. In a shell cell, clone the repository and check o
 ```bash
 git clone https://github.com/RaghavSingh-CS/solar-system-simulator.git
 cd solar-system-simulator
-git checkout <STAGE4_PREPARATION_COMMIT>
+git checkout ae6117b
 git status --short
 nvidia-smi
 nvcc --version

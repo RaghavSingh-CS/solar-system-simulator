@@ -258,3 +258,4 @@ No raw CUDA measurements or summary table exists yet. Colab GPU timings must not
 - `a4c9eb1` — frozen Stage 3 controlled benchmark harness and protocol used for measurement.
 - `94dbf19` — Stage 3 raw measurements, statistical summaries, environment evidence, and analysis.
 - `bc03018` — Stage 3 commit provenance and synchronized completion point.
+- `ae6117b` — Stage 4 optional CUDA backend and exact real-GPU validation preparation point; GPU evidence remains pending.
