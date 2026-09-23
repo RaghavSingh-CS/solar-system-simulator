@@ -1,0 +1,105 @@
+{
+  "experiment_id": "stage4-cuda-controlled",
+  "environment_id": "colab-Tesla_T4-20260923T173009Z",
+  "started_utc": "2026-09-23T17:37:54.968035+00:00",
+  "completed_utc": "2026-09-23T17:41:28.604257+00:00",
+  "git": {
+    "head": null,
+    "branch": null,
+    "status": null
+  },
+  "platform": {
+    "system": "Linux",
+    "release": "6.6.122+",
+    "version": "#1 SMP Thu Apr 30 18:17:14 UTC 2026",
+    "machine": "x86_64",
+    "python": "3.13.15",
+    "logical_processors": 2
+  },
+  "tools": {
+    "nvidia_smi": {
+      "command": [
+        "nvidia-smi"
+      ],
+      "return_code": 0,
+      "stdout": "Wed Sep 23 17:41:28 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 580.82.07              Driver Version: 580.82.07      CUDA Version: 13.0     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  Tesla T4                       Off |   00000000:00:04.0 Off |                    0 |\n| N/A   58C    P0             39W /   70W |       0MiB /  15360MiB |    100%      Default |\n|                                         |                        |                  N/A |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|  No running processes found                                                             |\n+-----------------------------------------------------------------------------------------+",
+      "stderr": ""
+    },
+    "nvidia_smi_query": {
+      "command": [
+        "nvidia-smi",
+        "--query-gpu=name,compute_cap,memory.total,driver_version",
+        "--format=csv,noheader"
+      ],
+      "return_code": 0,
+      "stdout": "Tesla T4, 7.5, 15360 MiB, 580.82.07",
+      "stderr": ""
+    },
+    "nvcc": {
+      "command": [
+        "nvcc",
+        "--version"
+      ],
+      "return_code": 0,
+      "stdout": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0",
+      "stderr": ""
+    },
+    "cmake": {
+      "command": [
+        "cmake",
+        "--version"
+      ],
+      "return_code": 0,
+      "stdout": "cmake version 3.31.10\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+      "stderr": ""
+    },
+    "compiler": {
+      "command": [
+        "c++",
+        "--version"
+      ],
+      "return_code": 0,
+      "stdout": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+      "stderr": ""
+    },
+    "uname": {
+      "command": [
+        "uname",
+        "-a"
+      ],
+      "return_code": 0,
+      "stdout": "Linux aae32237ae87 6.6.122+ #1 SMP Thu Apr 30 18:17:14 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+      "stderr": ""
+    }
+  },
+  "protocol": {
+    "bodies": [
+      64,
+      96,
+      128,
+      160,
+      192,
+      256,
+      384,
+      512,
+      768,
+      1024,
+      1536,
+      2048,
+      3072,
+      4096
+    ],
+    "steps": 100,
+    "dt_seconds": 10.0,
+    "warmups_before_each_measurement": 1,
+    "measured_repetitions": 11,
+    "benchmark_seed": 24301,
+    "order_seed": 20260923,
+    "device": 0,
+    "ordering": "one seeded Fisher-Yates shuffle per complete block using xorshift64*",
+    "device_compute": "CUDA events around all four kernels per Velocity Verlet step",
+    "transfer_inclusive": "CUDA events from H2D start through kernels, D2H, and completion",
+    "allocation": "one-time context, stream, event, device, and pinned-host setup; reported separately",
+    "host_staging": "structure conversion before H2D and after D2H; reported separately"
+  }
+}
