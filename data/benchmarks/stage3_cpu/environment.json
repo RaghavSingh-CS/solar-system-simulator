@@ -1,0 +1,123 @@
+{
+  "experiment_id": "stage3-cpu-2026-09-23",
+  "started_utc": "2026-09-23T16:30:03.992290+00:00",
+  "completed_utc": "2026-09-23T16:33:30.737486+00:00",
+  "duration_seconds": 206.745196,
+  "git": {
+    "head": "a4c9eb1176c0ff2efede6ee110ecad75e5bc423f",
+    "branch": "main",
+    "status": "?? data/benchmarks/"
+  },
+  "platform": {
+    "system": "Windows",
+    "release": "11",
+    "version": "10.0.26200",
+    "machine": "AMD64",
+    "python": "3.12.10",
+    "logical_processors": 16,
+    "physical_cores_supplied": 8
+  },
+  "windows_cim_snapshot": {
+    "available": true,
+    "snapshot": {
+      "cpu": {
+        "Name": "AMD Ryzen 7 5700U with Radeon Graphics         ",
+        "Manufacturer": "AuthenticAMD",
+        "NumberOfCores": 8,
+        "NumberOfLogicalProcessors": 16,
+        "MaxClockSpeed": 1801,
+        "CurrentClockSpeed": 1801
+      },
+      "os": {
+        "Caption": "Microsoft Windows 11 Home Single Language",
+        "Version": "10.0.26200",
+        "BuildNumber": "26200",
+        "OSArchitecture": "64-bit"
+      }
+    }
+  },
+  "thermal_telemetry": {
+    "available": false,
+    "reason": "Get-CimInstance : Not supported \nAt line:1 char:31\n+ ... ence='Stop';Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_The ...\n+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n    + CategoryInfo          : NotImplemented: (root/wmi:MSAcpi_ThermalZoneTemperature:String) [Get-CimInstance], CimEx \n   ception\n    + FullyQualifiedErrorId : HRESULT 0x8004100c,Microsoft.Management.Infrastructure.CimCmdlets.GetCimInstanceCommand"
+  },
+  "affinity": {
+    "command": [
+      "C:\\Projects\\PCAP\\solar-system-simulator\\build-openmp\\nbody_benchmark.exe",
+      "--backend",
+      "openmp",
+      "--bodies",
+      "64",
+      "--steps",
+      "2",
+      "--dt",
+      "10",
+      "--threads",
+      "4",
+      "--warmups",
+      "0",
+      "--repetitions",
+      "1",
+      "--seed",
+      "24301"
+    ],
+    "return_code": 0,
+    "requested": {
+      "OMP_PROC_BIND": "CLOSE",
+      "OMP_PLACES": "CORES"
+    },
+    "supported": false,
+    "result": "unsupported by this libgomp/Windows configuration",
+    "evidence": "affinity_probe.txt"
+  },
+  "measurement_environment": {
+    "OMP_DYNAMIC": "FALSE",
+    "OMP_PROC_BIND": "FALSE",
+    "OMP_PLACES": "unset",
+    "GOMP_CPU_AFFINITY": "unset",
+    "note": "OS scheduler placement; affinity is not claimed as controlled"
+  },
+  "protocol": {
+    "bodies": [
+      64,
+      96,
+      128,
+      160,
+      192,
+      256,
+      384,
+      512,
+      768,
+      1024
+    ],
+    "openmp_threads": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "steps": 100,
+    "dt_seconds": 10.0,
+    "warmups_immediately_before_each_measurement": 1,
+    "measured_repetitions_per_configuration": 11,
+    "benchmark_seed": 24301,
+    "order_seed": 20260923,
+    "ordering": "one seeded Fisher-Yates shuffle per complete repetition block using xorshift64*",
+    "timer_scope": "Velocity Verlet integration only, including both force evaluations per step",
+    "excluded_from_timer": [
+      "process startup",
+      "scenario generation",
+      "state copy",
+      "warm-up integration",
+      "diagnostics",
+      "CSV formatting",
+      "runner I/O"
+    ],
+    "bootstrap_resamples": 10000
+  },
+  "outputs": {
+    "raw": "raw_timings.csv",
+    "summary": "summary.csv",
+    "affinity_probe": "affinity_probe.txt"
+  }
+}
