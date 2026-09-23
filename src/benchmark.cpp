@@ -207,14 +207,25 @@ int main(int argc, char** argv) {
                         initial_diagnostics.angular_momentum_kg_m2_s) /
             std::max(nbody::norm(initial_diagnostics.angular_momentum_kg_m2_s), 1.0);
 
+        int effective_threads = 1;
+        int openmp_specification_date = 0;
+#ifdef NBODY_HAS_OPENMP
+        if (options.backend == "openmp") {
+            effective_threads = nbody::openmp_effective_thread_count(options.threads);
+            openmp_specification_date = nbody::openmp_specification_date();
+        }
+#endif
+
         std::cout << std::setprecision(17)
-                  << "backend,requested_threads,bodies,steps,dt_s,warmups,repetitions,median_s,"
+                  << "backend,requested_threads,effective_threads,bodies,steps,dt_s,warmups,repetitions,median_s,"
                      "iqr_s,min_s,max_s,initial_energy_j,final_energy_j,relative_energy_drift,"
                      "relative_angular_momentum_drift,final_momentum_norm_kg_m_s,"
                      "final_center_of_mass_norm_m,checksum,compiler,build_configuration,"
-                     "hardware_threads,host,processor\n"
+                     "hardware_threads,host,processor,openmp_specification_date,omp_dynamic,"
+                     "omp_proc_bind,omp_places,gomp_cpu_affinity\n"
                   << backend->name() << ','
                   << (options.backend == "openmp" ? options.threads : 1) << ','
+                  << effective_threads << ','
                   << options.bodies << ',' << options.steps << ',' << options.dt_s << ','
                   << options.warmups << ',' << options.repetitions << ','
                   << quantile(timings, 0.5) << ','
@@ -229,7 +240,12 @@ int main(int argc, char** argv) {
                   << csv_quote(NBODY_BUILD_CONFIGURATION) << ','
                   << std::thread::hardware_concurrency() << ','
                   << csv_quote(environment_value("COMPUTERNAME", "unknown")) << ','
-                  << csv_quote(environment_value("PROCESSOR_IDENTIFIER", "unknown")) << '\n';
+                  << csv_quote(environment_value("PROCESSOR_IDENTIFIER", "unknown")) << ','
+                  << openmp_specification_date << ','
+                  << csv_quote(environment_value("OMP_DYNAMIC", "unset")) << ','
+                  << csv_quote(environment_value("OMP_PROC_BIND", "unset")) << ','
+                  << csv_quote(environment_value("OMP_PLACES", "unset")) << ','
+                  << csv_quote(environment_value("GOMP_CPU_AFFINITY", "unset")) << '\n';
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << '\n';

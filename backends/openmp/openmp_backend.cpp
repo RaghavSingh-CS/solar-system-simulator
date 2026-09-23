@@ -67,4 +67,19 @@ int openmp_processor_count() noexcept { return omp_get_num_procs(); }
 
 int openmp_runtime_max_threads() noexcept { return omp_get_max_threads(); }
 
+int openmp_effective_thread_count(int requested_thread_count) {
+    if (requested_thread_count <= 0) {
+        throw std::invalid_argument("OpenMP thread count must be positive");
+    }
+    int effective_thread_count = 0;
+#pragma omp parallel num_threads(requested_thread_count)
+    {
+#pragma omp single
+        effective_thread_count = omp_get_num_threads();
+    }
+    return effective_thread_count;
+}
+
+int openmp_specification_date() noexcept { return _OPENMP; }
+
 }  // namespace nbody

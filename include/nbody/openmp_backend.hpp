@@ -20,5 +20,7 @@ private:
 
 int openmp_processor_count() noexcept;
 int openmp_runtime_max_threads() noexcept;
+int openmp_effective_thread_count(int requested_thread_count);
+int openmp_specification_date() noexcept;
 
 }  // namespace nbody

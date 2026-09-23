@@ -230,6 +230,13 @@ void test_invalid_inputs() {
         rejected_gravity = true;
     }
     require(rejected_gravity, "OpenMP backend accepted a negative gravitational constant");
+
+    for (const int requested_threads : std::array<int, 3>{1, 2, 4}) {
+        require(nbody::openmp_effective_thread_count(requested_threads) == requested_threads,
+                "OpenMP runtime did not honor the requested thread count");
+    }
+    require(nbody::openmp_specification_date() >= 201511,
+            "OpenMP runtime is older than the required 4.5 specification");
 }
 
 }  // namespace

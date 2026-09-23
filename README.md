@@ -14,7 +14,7 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Deterministic seeded multi-body scenarios for validation and CPU scaling tests.
 - Energy, linear momentum, angular momentum, and center-of-mass diagnostics.
 - Headless CSV output and dependency-free tests.
-- Computation-only benchmark with warm-ups, repetitions, median/IQR timing, hardware/build metadata, diagnostics, and an output checksum.
+- Computation-only benchmark plus a controlled, block-randomized CPU experiment runner with raw and summary CSV output.
 
 CUDA, MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are planned but are not implemented or validated yet.
 
@@ -52,7 +52,15 @@ Run one reproducible benchmark configuration:
 ./build-openmp/nbody_benchmark.exe --backend openmp --threads 4 --bodies 512 --steps 50 --dt 10 --warmups 1 --repetitions 5 --seed 24301
 ```
 
-The benchmark writes one CSV header and row to standard output. Redirect it only when intentionally collecting results; generated benchmark files are not committed.
+The benchmark writes one CSV header and row to standard output. Ad hoc output is disposable; only controlled datasets with protocol and environment provenance belong under `data/benchmarks/`.
+
+Run the controlled Stage 3 CPU matrix after configuring the OpenMP Release build:
+
+```powershell
+python -B scripts/run_cpu_benchmarks.py --physical-cores 8
+```
+
+The runner executes one untimed warm-up before each measured sample, counterbalances configuration order with a recorded deterministic seed, validates checksums and effective thread counts, and writes raw timings, summary statistics, environment metadata, and affinity-probe evidence under `data/benchmarks/stage3_cpu/`. See the benchmark protocol before interpreting results on another machine.
 
 ## Project map
 
@@ -61,6 +69,7 @@ The benchmark writes one CSV header and row to standard output. Redirect it only
 - `docs/validation_plan.md`: correctness criteria.
 - `docs/benchmark_protocol.md`: same-machine experimental method.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
+- `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
 - `backends`: future OpenMP/CUDA/MPI implementations.
 - `visualization`: future independent desktop viewer.
 
