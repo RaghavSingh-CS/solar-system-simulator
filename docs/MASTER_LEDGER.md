@@ -277,3 +277,4 @@ The next methodological stage is a controlled **same-machine** sequential/OpenMP
 - `ca1df10` — pre-execution workflow bookkeeping and pilot-review gate.
 - `1353b55` — verified Stage 4 pilot/full evidence, byte-preservation rules, and independent audit tooling.
 - `3481272` — permanent Colab line-ending, dependency-preflight, and dual-mode provenance repairs.
+- `194bf04` — Stage 4 completion analysis, scientific boundary, and research-ledger update.
