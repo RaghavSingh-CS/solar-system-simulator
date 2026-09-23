@@ -51,3 +51,21 @@ Initial thresholds for the analytic two-body CI test are implementation guards, 
 ## Reproducibility
 
 Every result row must carry commit, build type, compiler/options, backend, hardware, scenario hash, seed, precision, N, dt, steps, repetition, and warm-up policy. Failed runs remain in raw data with a reason.
+
+## Stage 4 CUDA criteria (frozen before GPU execution)
+
+CUDA uses binary64 (`double`) for masses, positions, velocities, accelerations, constants, and accumulation. CPU/CUDA bit identity is not required because host and CUDA compilers may contract multiply-adds differently even when each destination body preserves ascending source order.
+
+CUDA validation covers the analytic two-body system, seeded 8/32/128-body force evaluations, seeded 32-body integration, repeated CUDA integration, conservation diagnostics, collision rejection, NaN rejection, CUDA API failures, launch failures, and synchronization failures.
+
+Predeclared CPU/CUDA mixed tolerances are:
+
+- acceleration: absolute `1e-18 m/s²` or scaled `1e-12`;
+- final position: absolute `1e-3 m` or scaled `2e-12`;
+- final velocity: absolute `1e-8 m/s` or scaled `2e-12`;
+- CPU/CUDA final energy and angular momentum: scaled `2e-12`;
+- CUDA energy drift guard: `5e-6`;
+- benchmark angular-momentum drift guard: `5e-10`;
+- normalized linear-momentum and center-of-mass drift: `1e-12`.
+
+These thresholds are deliberately looser than the exact CPU/OpenMP equality observed in Stage 2, yet far below the integrator-level drift guards. They must not be changed merely to accept a failing GPU result; any revision requires preserved failure evidence and a numerical rationale.

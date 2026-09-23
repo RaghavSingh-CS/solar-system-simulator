@@ -1,6 +1,6 @@
 # Workload-Aware Parallel N-Body Simulation
 
-A research-oriented C++17 project for comparing sequential, OpenMP, and CUDA direct N-body backends under explicit numerical-accuracy constraints. The current foundation contains a deterministic sequential reference, an optional OpenMP backend, analytic and seeded synthetic scenarios, numerical validation, and a headless benchmark harness.
+A research-oriented C++17 project for comparing sequential, OpenMP, and CUDA direct N-body backends under explicit numerical-accuracy constraints. The repository contains deterministic sequential and OpenMP backends plus an optional CUDA backend awaiting real-GPU validation.
 
 The literature review found that CPU/GPU crossover and adaptive heterogeneous mapping are established topics. Accordingly, this project does **not** claim a new scheduling algorithm. Its proposed study asks whether a small, calibrated selector can find the fastest backend on one target machine while rejecting configurations that violate predeclared conservation bounds. See [novelty assessment](docs/research/novelty_assessment.md).
 
@@ -15,8 +15,9 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Energy, linear momentum, angular momentum, and center-of-mass diagnostics.
 - Headless CSV output and dependency-free tests.
 - Computation-only benchmark plus a controlled, block-randomized CPU experiment runner with raw and summary CSV output.
+- Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and dual-regime CUDA benchmark preparation.
 
-CUDA, MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are planned but are not implemented or validated yet.
+The CUDA code and Colab workflow are prepared but have not been compiled or executed on NVIDIA hardware. MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are not implemented or validated.
 
 ## Build and test
 
@@ -62,6 +63,16 @@ python -B scripts/run_cpu_benchmarks.py --physical-cores 8
 
 The runner executes one untimed warm-up before each measured sample, counterbalances configuration order with a recorded deterministic seed, validates checksums and effective thread counts, and writes raw timings, summary statistics, environment metadata, and affinity-probe evidence under `data/benchmarks/stage3_cpu/`. See the benchmark protocol before interpreting results on another machine.
 
+CUDA remains opt-in and does not affect either CPU build. On an NVIDIA-equipped host:
+
+```bash
+cmake -S . -B build-cuda -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_ENABLE_CUDA=ON
+cmake --build build-cuda
+ctest --test-dir build-cuda --output-on-failure
+```
+
+Use `docs/colab_cuda_workflow.md` for the controlled pilot and full benchmark. Do not compare Colab CUDA timings directly with the Stage 3 Windows CPU dataset.
+
 ## Project map
 
 - `docs/research`: source-by-source review, novelty verdict, and research questions.
@@ -70,7 +81,7 @@ The runner executes one untimed warm-up before each measured sample, counterbala
 - `docs/benchmark_protocol.md`: same-machine experimental method.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
-- `backends`: future OpenMP/CUDA/MPI implementations.
+- `backends`: implemented optional OpenMP/CUDA backends and the future MPI placeholder.
 - `visualization`: future independent desktop viewer.
 
 ## Scientific boundary

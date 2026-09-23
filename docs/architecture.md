@@ -21,7 +21,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  |
                         |                  +-- sequential (reference)
                         |                  +-- OpenMP (implemented)
-                        |                  +-- CUDA (planned)
+                        |                  +-- CUDA (prepared; GPU validation pending)
                         |                  +-- MPI (optional)
                         +-> diagnostics -> CSV/headless benchmark
                         +-> immutable snapshots -> OpenGL viewer
@@ -30,7 +30,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 - `include/nbody`: dependency-free domain types and public APIs.
 - `src`: sequential backend, integrator, scenarios, diagnostics, CSV runner.
 - `backends/openmp`: optional outer-loop-parallel OpenMP backend.
-- `backends/cuda`: Phase 3 `.cu` kernels and Colab validation material.
+- `backends/cuda`: optional direct-force CUDA kernels and device-resident integrator.
 - `backends/mpi`: optional stretch implementation.
 - `visualization`: independent viewer; it may link the simulation library but simulation code never depends on OpenGL.
 - `tests`: physics invariants and regression tests.
@@ -42,6 +42,8 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 ## Backend interface plan
 
 The interface is `ForceBackend::compute_accelerations(state, G)`. `sequential_force_backend()` wraps the original reference function. `OpenMpForceBackend(thread_count)` uses `schedule(static)` over destination bodies; each loop iteration owns its local accumulator and one output element, so there are no concurrent accumulator writes. Every destination body still visits source bodies in ascending index order. Invalid masses are rejected before the parallel region; coincident/invalid positions are flagged within the region and reported afterward.
+
+`CudaForceBackend` implements the same interface with one CUDA thread per destination body and ascending source traversal. `CudaVelocityVerlet` adds a reusable device-resident execution path: old acceleration, position update, new acceleration, and velocity update remain on the GPU for every step. This avoids presenting a force-only kernel as complete integration timing while retaining the shared force contract for correctness tests.
 
 OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the reference, headless runner, and sequential benchmark without finding or linking OpenMP. When explicitly enabled, CMake requires `OpenMP::OpenMP_CXX` and emits a targeted configuration error if unavailable.
 
@@ -56,8 +58,9 @@ Use GLFW plus core OpenGL, with GLAD (or another generated loader) vendored or f
 ## CUDA build split
 
 - Default CMake project declares only C++ and succeeds without a CUDA toolkit.
-- A later `NBODY_ENABLE_CUDA=ON` path will use `check_language(CUDA)` and fail with a targeted message only when explicitly requested.
-- Colab validates compilation and correctness against exported sequential fixtures; its performance numbers are reported only for that Colab GPU.
+- `NBODY_ENABLE_CUDA=ON` uses `check_language(CUDA)` and `enable_language(CUDA)` only when requested, and fails with a targeted message if no toolkit is usable.
+- CUDA uses `double` throughout, direct O(N²) interactions, reusable allocations, explicit error checking, and no mixed precision or approximate algorithm.
+- Colab must validate compilation and correctness against the sequential reference; its performance numbers are reported only for that Colab environment.
 - Final crossover calibration is rerun end-to-end on the RTX 4050. No local CPU/Colab GPU timing mixture is permitted.
 
 ## Data provenance

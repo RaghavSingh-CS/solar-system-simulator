@@ -87,3 +87,18 @@ python -B scripts/run_cpu_benchmarks.py `
   --bootstrap-resamples 10000 --physical-cores 8 `
   --experiment-id stage3-cpu-2026-09-23
 ```
+
+## Stage 4 CUDA protocol (prepared, not yet executed)
+
+Stage 4 keeps GPU data separate from Stage 3 Windows CPU data. CUDA validation must pass on the same NVIDIA environment before any performance row is accepted.
+
+The CUDA benchmark reports two primary regimes from the same GPU-resident Velocity Verlet run:
+
+- `device_compute_ms`: CUDA-event time after H2D completion through the invalid-flag reset and all four kernels per step—old acceleration, position update, new acceleration, and velocity update;
+- `transfer_inclusive_ms`: CUDA-event time from H2D start through device computation, D2H positions/velocities/status, and explicit event completion.
+
+One-time context/stream/event/device/pinned-host allocation, host structure staging, individual H2D/D2H components, and full backend wall time are separate fields. Neither primary regime includes diagnostics, CSV, process startup, or scenario generation.
+
+The required pilot uses 64, 256, 1024, 2048, and 4096 bodies, 10 steps, one warm-up, and three measured repetitions. The pilot determines the safe upper bound. The proposed full matrix preserves all Stage 3 sizes and adds 1536, 2048, 3072, and 4096 where practical, with 100 steps and 11 measured repetitions. Each repetition block shuffles body counts deterministically. Failed correctness/status rows invalidate the affected configuration rather than being averaged.
+
+Summaries report median, mean, sample standard deviation, min/max, IQR, coefficient of variation, transfer/compute ratio, and transfer penalty. They do not compute a Stage 3 Windows CPU versus Colab GPU speedup. Same-VM Colab CPU controls may be analyzed only as explicitly Colab-specific evidence.

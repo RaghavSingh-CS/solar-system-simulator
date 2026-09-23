@@ -3,11 +3,11 @@ cmake_minimum_required(VERSION 3.20)
 project(solar_system_simulator VERSION 0.1.0 LANGUAGES CXX)
 
 option(NBODY_ENABLE_OPENMP "Build the OpenMP force backend" OFF)
-option(NBODY_ENABLE_CUDA "Build the CUDA force backend (future stage)" OFF)
+option(NBODY_ENABLE_CUDA "Build the CUDA force backend" OFF)
 option(NBODY_ENABLE_MPI "Build the optional MPI backend (future stage)" OFF)
 option(NBODY_BUILD_VISUALIZATION "Build the GLFW/OpenGL viewer (future stage)" OFF)
 
-foreach(feature IN ITEMS NBODY_ENABLE_CUDA NBODY_ENABLE_MPI NBODY_BUILD_VISUALIZATION)
+foreach(feature IN ITEMS NBODY_ENABLE_MPI NBODY_BUILD_VISUALIZATION)
     if(${feature})
         message(FATAL_ERROR "${feature}=ON is not implemented in the foundation stage; leave it OFF")
     endif()
@@ -25,6 +25,35 @@ if(MSVC)
     target_compile_options(nbody_core PRIVATE /W4 /permissive-)
 else()
     target_compile_options(nbody_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(NBODY_ENABLE_CUDA)
+    include(CheckLanguage)
+    check_language(CUDA)
+    if(NOT CMAKE_CUDA_COMPILER)
+        message(FATAL_ERROR
+            "NBODY_ENABLE_CUDA=ON, but no usable CUDA compiler was found. "
+            "Install the NVIDIA CUDA toolkit or configure with NBODY_ENABLE_CUDA=OFF."
+        )
+    endif()
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+
+    add_library(nbody_cuda backends/cuda/cuda_backend.cu)
+    target_include_directories(nbody_cuda PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_features(nbody_cuda PUBLIC cxx_std_17)
+    target_link_libraries(nbody_cuda PUBLIC nbody_core CUDA::cudart)
+    set_target_properties(nbody_cuda PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED YES
+        CUDA_EXTENSIONS NO
+    )
+
+    add_executable(nbody_cuda_benchmark src/cuda_benchmark.cpp)
+    target_link_libraries(nbody_cuda_benchmark PRIVATE nbody_cuda)
+    target_compile_definitions(nbody_cuda_benchmark PRIVATE
+        NBODY_BUILD_CONFIGURATION="$<CONFIG>"
+    )
 endif()
 add_executable(nbody_headless src/main.cpp)
 target_link_libraries(nbody_headless PRIVATE nbody_core)
@@ -68,5 +97,11 @@ if(BUILD_TESTING)
         add_executable(nbody_openmp_tests tests/test_openmp.cpp)
         target_link_libraries(nbody_openmp_tests PRIVATE nbody_openmp)
         add_test(NAME nbody_openmp_validation COMMAND nbody_openmp_tests)
+    endif()
+
+    if(NBODY_ENABLE_CUDA)
+        add_executable(nbody_cuda_tests tests/test_cuda.cpp)
+        target_link_libraries(nbody_cuda_tests PRIVATE nbody_cuda)
+        add_test(NAME nbody_cuda_validation COMMAND nbody_cuda_tests)
     endif()
 endif()
