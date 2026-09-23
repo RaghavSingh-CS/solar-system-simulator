@@ -11,7 +11,7 @@ Last updated: 2026-09-23
 | Sequential reference | Complete | Direct GCC build, physics tests, and CSV smoke run passed |
 | OpenMP backend | Complete | GCC/libgomp Release build; 1/2/4-thread validation passed |
 | Controlled CPU benchmarking | Complete | 660 raw samples; randomized 64–1024-body sequential/OpenMP matrix |
-| CUDA backend | Prepared / GPU validation pending | Optional code, tests, benchmark, and Colab workflow exist; no real-GPU evidence yet |
+| CUDA backend | Complete | Tesla T4 build/tests plus verified 15-row pilot and 154-row controlled matrix |
 | MPI backend | Optional/not started | Stretch goal only |
 | OpenGL visualization | Not started | Optional dependency plan only |
 | Final experiment | Not started | Requires all candidate backends on same RTX 4050 machine |
@@ -31,14 +31,14 @@ Last updated: 2026-09-23
 - Stage 3 records crossover evidence only; it does not encode a backend-selection threshold.
 - The controlled CPU matrix uses block-randomized order, one same-process warm-up per sample, and raw repetition retention.
 - Windows/libgomp affinity is explicitly classified as uncontrolled after the runtime rejected the requested placement policy.
-- Stage 4 cannot complete on the local non-NVIDIA machine; CUDA compilation, correctness, and timing require retained real-GPU evidence.
+- Stage 4 real-GPU evidence is environment-scoped to a Colab Tesla T4; the local Windows machine still cannot compile or execute CUDA.
 - Colab CUDA results remain a separate environment and cannot be combined with Stage 3 Windows CPU timings to infer a workstation crossover.
 
 ## Assumptions and unresolved questions
 
 - Intended RTX 4050 exact model, driver, power limit, CPU, and memory configuration are unknown.
 - Faculty acceptance criteria for “realistic” horizon and tolerated position error need confirmation before final study.
-- Stage 4 fixes CUDA at double precision and freezes comparison/conservation thresholds before the first GPU run; their adequacy remains to be tested.
+- Stage 4 fixed CUDA at double precision; all predeclared comparison/conservation thresholds passed on the Tesla T4 without revision.
 - OpenMP is validated with GCC 15.1.0/libgomp; availability and numerical behavior under the final MSVC toolchain remain untested.
 
 ## Research evidence
@@ -183,7 +183,7 @@ python -B scripts\run_cpu_benchmarks.py --executable build-openmp\nbody_benchmar
 
 ### Status and objective
 
-Stage 4 is **incomplete and paused at the real-GPU execution gate**. The local Windows machine has neither `nvcc` nor `nvidia-smi`. The repository now contains the optional CUDA implementation, frozen correctness criteria, dual-regime benchmark, statistical runner, and Colab workflow, but no CUDA compilation or execution result is claimed.
+Stage 4 is **complete**. Preparation commit `ae6117b` was compiled and executed on a real NVIDIA Tesla T4. The accepted pilot, controlled benchmark, environment capture, CTest logs, and independent raw-data verification are retained under `data/benchmarks/stage4_cuda/`.
 
 The objective is to validate the same direct O(N²) physical model in double precision and measure GPU scaling without implementing visualization, heterogeneous execution, automatic selection, or a final CPU/GPU crossover policy.
 
@@ -195,59 +195,74 @@ The objective is to validate the same direct O(N²) physical model in double pre
 - CUDA API calls, allocations, copies, event operations, kernel launches, event synchronization, and stream synchronization are checked. Kernels flag coincident/non-finite separations; host validation rejects invalid mass/state inputs and non-finite outputs.
 - The implementation uses `double` for state, force, constants, and accumulation. No mixed precision, fast approximate algorithm, softening, tree method, or CPU/GPU decomposition is introduced.
 
-### Frozen numerical validation
+### Numerical validation
 
-Prepared real-GPU tests cover analytic two-body and seeded 8/32/128-body force cases, CPU/CUDA integration comparison, repeated CUDA runs, conservation diagnostics, collision rejection, and NaN rejection. Before observing GPU output, tolerances were fixed at acceleration absolute `1e-18 m/s²` or scaled `1e-12`; position absolute `1e-3 m` or scaled `2e-12`; velocity absolute `1e-8 m/s` or scaled `2e-12`; final energy/angular CPU-CUDA scaled difference `2e-12`; energy drift `5e-6`; angular drift `5e-10`; and normalized momentum/center-of-mass drift `1e-12`.
+Before observing GPU output, tolerances were fixed at acceleration absolute `1e-18 m/s²` or scaled `1e-12`; position absolute `1e-3 m` or scaled `2e-12`; velocity absolute `1e-8 m/s` or scaled `2e-12`; final energy/angular CPU-CUDA scaled difference `2e-12`; energy drift `5e-6`; angular drift `5e-10`; and normalized momentum/center-of-mass drift `1e-12`.
 
-Bit identity is not required because CPU and CUDA compiler contraction/FMA may differ. Any tolerance revision after GPU execution must retain the failure evidence and provide a numerical rationale; it may not be changed solely to make a test pass.
+Real-GPU CTest passed `2/2`. `nbody_cuda_validation` covered analytic two-body and seeded 8/32/128-body force cases, analytic and seeded CPU/CUDA integration comparison, repeated CUDA runs, conservation diagnostics, collision rejection, and NaN rejection. No threshold changed. The log establishes that cross-backend differences were within tolerance but does not print their individual values; bitwise identity is not claimed. All 154 benchmark rows passed, and checksums are identical across repetitions within each N. Maximum benchmark relative energy drift was `1.1779626463387057e-13`; maximum relative angular-momentum drift was `3.740862421005083e-15`.
 
-### Timing definitions and proposed matrix
+### Environment, provenance, and protocol
+
+- Environment ID: `colab-Tesla_T4-20260923T173009Z`; Linux 6.6.122+; two logical host processors.
+- GPU: Tesla T4, compute capability 7.5, 15,360 MiB, 40 multiprocessors.
+- Driver 580.82.07. `nvidia-smi` displayed CUDA 13.0; `nvcc` independently reported toolkit/compiler 13.3 / V13.3.73. These are retained as distinct facts.
+- Release build: CMake 3.31.10 and GCC/G++ 13.3.0.
+- The private repository could not be cloned anonymously. The Windows host produced `solar-system-simulator.zip` with `git archive --format=zip ae6117b`; SHA-256 is `00fc9f3922ceb09647668a877a6193e10c7758338690fe945f16810e8e1b00fd`. A fresh export reproduced it byte-for-byte.
+- Git metadata was absent by design after archive extraction. `STAGE4_COMMIT=ae6117b` explicitly declared the source snapshot, so null `git.head/branch/status` fields are preserved. This is archive-declared provenance, weaker than automated checkout verification but not unknown source code.
+- Pilot archive SHA-256: `ba84c4c3438135e8450e4aeb6cec6d6743a5502edf4d82a06e2130bcab7c24a2`; full archive SHA-256: `7d3ed161f8bedbc70ec8896f087381bcfe324edcefeab7224660aa3804731326`.
+
+The pilot used N=64/256/1024/2048/4096, 10 steps, one warm-up, and three repetitions (15 rows). The accepted full run used N=64/96/128/160/192/256/384/512/768/1024/1536/2048/3072/4096, 100 steps, `dt=10 s`, seed 24301, one warm-up, and 11 seeded block-randomized repetitions (154 rows).
+
+### Timing definitions and results
 
 - Device-compute timing uses CUDA events after H2D completion through the invalid-flag reset and all four kernels for every requested Velocity Verlet step.
 - Transfer-inclusive timing uses CUDA events from H2D start through compute, D2H positions/velocities/status, and explicit completion.
 - One-time CUDA context, stream, events, device allocations, and pinned-host allocations are reported separately as setup. Host structure staging, H2D, D2H, and full backend wall time are also separate columns.
 - Scenario generation, diagnostics, CSV formatting, process startup, and allocation are excluded from both primary regimes.
 
-The pilot is 64/256/1024/2048/4096 bodies, 10 steps, one warm-up, and three repetitions. It determines a practical upper bound. The proposed controlled matrix retains all Stage 3 sizes, optionally adds 1536/2048/3072/4096, uses 100 steps, one warm-up, and 11 block-randomized repetitions. The runner preserves every row and generates median, mean, sample standard deviation, min/max, IQR, CV, transfer/compute ratio, and transfer penalty.
+Independent verification recomputed every supplied summary statistic, matched the deterministic shuffled schedule, found no missing/duplicate rows, confirmed positive finite timings and all-pass status, and retained every observation. Full per-N results are tabulated in `data/benchmarks/stage4_cuda/README.md` and machine-readable `verification.json` files.
 
-### Local validation evidence
+- Median device-compute time rises from 34.903 ms at N=64 to 2140.987 ms at N=4096. Full-run CV is 0.132–0.545%, with no defensible exclusion.
+- Median transfer-inclusive overhead is 0.021–0.074 ms and 0.0034–0.0939%. It is negligible for this GPU-resident 100-step definition; allocation and host staging are separate, so this is not a general transfer-cost claim.
+- Pilot and full medians normalized per step agree within 1.1% at all five shared sizes.
+- The direct algorithm performs O(N²) interactions, but this grid does not display quadratic elapsed-time growth: a 64× N increase produces 61.34× compute time (observed global exponent 0.990); 1024→2048 and 2048→4096 ratios are 1.885× and 1.942×. Hardware utilization and fixed launch costs can influence this curve, but causation was not directly measured.
 
-- Refreshed `origin/main` matched clean expected HEAD `bc03018` before editing.
+### Reproducibility defects and repairs
+
+- The uploaded shell script had CRLF endings and initially failed in Colab. `.gitattributes` now enforces LF for `*.sh`; the script contains no CR bytes.
+- Git-only clean/HEAD checks rejected a legitimate archive tree. The helper now distinguishes `git-verified` and `archive-declared` modes, requires explicit commit plus archive SHA-256 in archive mode, and the runner records structured source provenance.
+- `-G Ninja` was assumed although Ninja was absent. The helper now preflights `nvidia-smi`, `nvcc`, `cmake`, `ctest`, `ninja`, and `python3` and prints the explicit Colab `ninja-build` installation command without installing packages itself.
+- The accepted run used equivalent temporary repairs: CRLF removal, omission of Git-only checks, and manual `ninja-build` installation. The permanent changes affect orchestration/provenance only; CUDA code, tests, workload, timing semantics, and thresholds remain exactly those in evidenced commit `ae6117b`, so a GPU rerun is not required to accept the existing scientific evidence.
+
+### Local completion validation
+
 - CUDA-disabled CPU Release configure/build succeeded; CTest `1/1` passed.
 - CUDA-disabled OpenMP Release configure/build succeeded; CTest `2/2` passed.
 - Host C++ syntax checks passed for the CUDA benchmark and CUDA test translation units.
-- Python runner help/parse and shell `bash -n` checks passed.
-- `NBODY_ENABLE_CUDA=ON` without `nvcc` failed intentionally with the targeted `no usable CUDA compiler was found` diagnostic.
-- The `.cu` translation unit has not been compiled locally and CUDA CTest has not run; this is the explicit external gate, not a successful CUDA validation.
+- Python runner/verifier compile, help, and evidence checks passed; Bash syntax and LF checks passed.
+- `NBODY_ENABLE_CUDA=ON` still fails locally with the intended targeted diagnostic because `nvcc` and NVIDIA hardware remain unavailable. Real CUDA build/test evidence comes from the retained T4 run, not this machine.
 
-### Remote workflow, raw results, and comparability
+### Scientific boundary and next requirement
 
-`docs/colab_cuda_workflow.md` and `scripts/run_colab_stage4.sh` define pilot/full commands. Expected evidence belongs under `data/benchmarks/stage4_cuda/` and includes the CTest log, repetition-level CSV, summary CSV, and environment JSON containing GPU model, compute capability, memory, driver, runtime/toolkit, host, OS, compiler, CMake, and Git SHA.
+No CPU control was measured on the same Colab VM. Stage 3 Windows CPU times must not be divided by Stage 4 Colab CUDA times; no CPU/GPU speedup, crossover, or selector calibration is supported. Stage 4 establishes real-NVIDIA buildability, CUDA correctness within frozen tolerances, repeatability, conservation, stable T4-only scaling, and negligible transfer overhead under the declared GPU-resident timing scope. It does not answer the final research question.
 
-No raw CUDA measurements or summary table exists yet. Colab GPU timings must not be divided by Stage 3 Windows CPU timings. A provisional CPU/GPU comparison is valid only if the CPU control is collected on the same Colab VM and labeled Colab-specific. A legitimate sequential/OpenMP/CUDA selection policy ultimately requires all candidate backends measured under one frozen protocol on the same target workstation.
-
-### Unresolved questions and next recommendation
-
-- Which GPU model and compute capability Colab assigns is unknown until runtime allocation.
-- The safe full-matrix upper bound is unknown until the pilot.
-- Actual CPU/CUDA numerical differences, repeatability, transfer penalty, scaling, and saturation are unknown until real execution.
-- Next action is manual Colab pilot execution, evidence return, inspection, and only then the controlled full run. Stage 5 must not begin before Stage 4 evidence is accepted.
+The next methodological stage is a controlled **same-machine** sequential/OpenMP/CUDA experiment on the intended NVIDIA-capable workstation, with one frozen build/protocol/environment and accuracy gate. Only then may calibration/held-out selector work begin. Stage 5 is not started here.
 
 ## Known limitations
 
 - No verified planetary initial-condition dataset yet.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
-- CUDA is implemented but uncompiled/unvalidated; MPI and the viewer remain placeholders.
+- CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI and the viewer remain placeholders.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
 - Eleven samples per configuration characterize this run but remain too few for strong distributional or cross-machine claims.
 
 ## Next actions
 
-1. Run the exact Stage 4 Colab pilot and return its unedited archive and SHA-256.
-2. Inspect CUDA build/test/numerical evidence; run the controlled full CUDA matrix only if the pilot is valid and practical.
-3. Later rerun CPU/OpenMP/CUDA together on the intended workstation before calibrating any selector.
-4. Do not begin Stage 5, OpenGL, or heterogeneous scheduling automatically.
+1. Freeze a same-machine sequential/OpenMP/CUDA protocol for the intended NVIDIA-capable workstation.
+2. Collect calibration and held-out measurements for all three backends on that one machine under the accuracy gate.
+3. Only after that evidence is accepted, evaluate selector policies against fixed baselines and an offline fastest-valid oracle.
+4. Do not add OpenGL, heterogeneous scheduling, or an automatic selector before the same-machine evidence stage is explicitly authorized.
 
 ## Commit references
 
@@ -258,4 +273,7 @@ No raw CUDA measurements or summary table exists yet. Colab GPU timings must not
 - `a4c9eb1` — frozen Stage 3 controlled benchmark harness and protocol used for measurement.
 - `94dbf19` — Stage 3 raw measurements, statistical summaries, environment evidence, and analysis.
 - `bc03018` — Stage 3 commit provenance and synchronized completion point.
-- `ae6117b` — Stage 4 optional CUDA backend and exact real-GPU validation preparation point; GPU evidence remains pending.
+- `ae6117b` — Stage 4 optional CUDA backend and exact source snapshot used for real-GPU validation.
+- `ca1df10` — pre-execution workflow bookkeeping and pilot-review gate.
+- `1353b55` — verified Stage 4 pilot/full evidence, byte-preservation rules, and independent audit tooling.
+- `3481272` — permanent Colab line-ending, dependency-preflight, and dual-mode provenance repairs.

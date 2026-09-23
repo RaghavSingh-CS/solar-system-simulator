@@ -88,7 +88,7 @@ python -B scripts/run_cpu_benchmarks.py `
   --experiment-id stage3-cpu-2026-09-23
 ```
 
-## Stage 4 CUDA protocol (prepared, not yet executed)
+## Stage 4 CUDA protocol and accepted execution
 
 Stage 4 keeps GPU data separate from Stage 3 Windows CPU data. CUDA validation must pass on the same NVIDIA environment before any performance row is accepted.
 
@@ -102,3 +102,9 @@ One-time context/stream/event/device/pinned-host allocation, host structure stag
 The required pilot uses 64, 256, 1024, 2048, and 4096 bodies, 10 steps, one warm-up, and three measured repetitions. The pilot determines the safe upper bound. The proposed full matrix preserves all Stage 3 sizes and adds 1536, 2048, 3072, and 4096 where practical, with 100 steps and 11 measured repetitions. Each repetition block shuffles body counts deterministically. Failed correctness/status rows invalidate the affected configuration rather than being averaged.
 
 Summaries report median, mean, sample standard deviation, min/max, IQR, coefficient of variation, transfer/compute ratio, and transfer penalty. They do not compute a Stage 3 Windows CPU versus Colab GPU speedup. Same-VM Colab CPU controls may be analyzed only as explicitly Colab-specific evidence.
+
+The accepted execution used source snapshot `ae6117b` on a Colab Tesla T4. The 15-row pilot retained the full upper bound. The controlled run completed all 14 body counts × 11 repetitions = 154 rows with 100 steps per sample. Independent verification reproduced every supplied summary statistic, the seeded block order, row counts, correctness statuses, and within-size checksums; no row was excluded.
+
+Full-run compute CV was 0.132–0.545%. Median transfer-inclusive overhead was 0.021–0.074 ms (0.0034–0.0939%), negligible for this 100-step GPU-resident timing definition but not a general statement about transfer costs. The 64→4096 grid increased median compute time 61.34× for a 64× increase in N; therefore the measured grid did not expose quadratic elapsed-time growth even though the direct interaction count is O(N²). Fixed launch costs and changing device utilization remain possible explanations, not measured causal conclusions.
+
+No same-VM CPU control was collected. Stage 3 Windows CPU data and Stage 4 Colab CUDA data remain separate evidence sets and cannot establish a CPU/GPU crossover or calibrate a selector.

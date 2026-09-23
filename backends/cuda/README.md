@@ -10,4 +10,4 @@ CUDA events record H2D, complete device computation, D2H, and transfer-inclusive
 
 The implementation uses `double` throughout and does not use approximate math, mixed precision, tree methods, or CPU/GPU decomposition. CUDA and CPU may still differ slightly because compiler contraction/FMA and platform execution differ; validation uses predeclared mixed tolerances instead of bit identity.
 
-This code is **not yet NVIDIA-hardware validated**. See `docs/colab_cuda_workflow.md`.
+Preparation commit `ae6117b` was compiled and validated on a Tesla T4; controlled evidence is under `data/benchmarks/stage4_cuda/`. See `docs/colab_cuda_workflow.md` for the repaired reproducible workflow. The local Windows host still lacks CUDA hardware/tooling.

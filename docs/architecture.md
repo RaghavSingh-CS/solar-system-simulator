@@ -21,7 +21,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  |
                         |                  +-- sequential (reference)
                         |                  +-- OpenMP (implemented)
-                        |                  +-- CUDA (prepared; GPU validation pending)
+                        |                  +-- CUDA (validated on Tesla T4)
                         |                  +-- MPI (optional)
                         +-> diagnostics -> CSV/headless benchmark
                         +-> immutable snapshots -> OpenGL viewer

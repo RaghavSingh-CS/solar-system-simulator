@@ -1,6 +1,6 @@
 # Workload-Aware Parallel N-Body Simulation
 
-A research-oriented C++17 project for comparing sequential, OpenMP, and CUDA direct N-body backends under explicit numerical-accuracy constraints. The repository contains deterministic sequential and OpenMP backends plus an optional CUDA backend awaiting real-GPU validation.
+A research-oriented C++17 project for comparing sequential, OpenMP, and CUDA direct N-body backends under explicit numerical-accuracy constraints. The repository contains deterministic sequential and OpenMP backends plus an optional CUDA backend validated on an NVIDIA Tesla T4.
 
 The literature review found that CPU/GPU crossover and adaptive heterogeneous mapping are established topics. Accordingly, this project does **not** claim a new scheduling algorithm. Its proposed study asks whether a small, calibrated selector can find the fastest backend on one target machine while rejecting configurations that violate predeclared conservation bounds. See [novelty assessment](docs/research/novelty_assessment.md).
 
@@ -15,9 +15,9 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Energy, linear momentum, angular momentum, and center-of-mass diagnostics.
 - Headless CSV output and dependency-free tests.
 - Computation-only benchmark plus a controlled, block-randomized CPU experiment runner with raw and summary CSV output.
-- Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and dual-regime CUDA benchmark preparation.
+- Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
 
-The CUDA code and Colab workflow are prepared but have not been compiled or executed on NVIDIA hardware. MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are not implemented or validated.
+Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are not implemented or validated.
 
 ## Build and test
 
@@ -72,6 +72,13 @@ ctest --test-dir build-cuda --output-on-failure
 ```
 
 Use `docs/colab_cuda_workflow.md` for the controlled pilot and full benchmark. Do not compare Colab CUDA timings directly with the Stage 3 Windows CPU dataset.
+
+Verify the committed CUDA evidence independently:
+
+```bash
+python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/pilot
+python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
+```
 
 ## Project map
 

@@ -69,3 +69,9 @@ Predeclared CPU/CUDA mixed tolerances are:
 - normalized linear-momentum and center-of-mass drift: `1e-12`.
 
 These thresholds are deliberately looser than the exact CPU/OpenMP equality observed in Stage 2, yet far below the integrator-level drift guards. They must not be changed merely to accept a failing GPU result; any revision requires preserved failure evidence and a numerical rationale.
+
+### Stage 4 observed results
+
+On the Tesla T4, Release CTest passed `2/2`: the foundation test and `nbody_cuda_validation`. The CUDA suite exercised analytic and seeded force comparison, analytic and seeded integration against the CPU reference, repeat execution, energy/angular/linear-momentum/center-of-mass guards, coincident-position rejection, and NaN-input rejection. All predeclared thresholds above remained unchanged.
+
+The CTest executable reports pass/fail rather than individual CPU/CUDA errors, so the retained log establishes that the errors were within tolerance but does not support a bitwise-identity or exact-error claim. In the controlled benchmark, all 154 rows passed; repeat checksums match exactly within each body count. Maximum recorded relative energy drift was `1.1779626463387057e-13`, and maximum relative angular-momentum drift was `3.740862421005083e-15`, below the `5e-6` and `5e-10` benchmark guards.
