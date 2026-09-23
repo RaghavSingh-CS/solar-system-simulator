@@ -19,7 +19,10 @@ from pathlib import Path
 
 
 DEFAULT_BODIES = (64, 96, 128, 160, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096)
-RAW_PREFIX = ("experiment_id", "environment_id", "order_seed", "block_id", "order_index")
+RAW_PREFIX = (
+    "experiment_id", "environment_id", "source_commit", "provenance_mode",
+    "source_archive_sha256", "order_seed", "block_id", "order_index",
+)
 
 
 class XorShift64Star:
@@ -68,6 +71,12 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--environment-id", required=True)
     parser.add_argument("--experiment-id", default="stage4-cuda")
+    parser.add_argument("--source-commit", required=True)
+    parser.add_argument(
+        "--provenance-mode", required=True,
+        choices=("git-verified", "archive-declared"),
+    )
+    parser.add_argument("--source-archive-sha256")
     return parser.parse_args()
 
 
@@ -212,6 +221,9 @@ def main() -> int:
                 enriched = {
                     "experiment_id": args.experiment_id,
                     "environment_id": args.environment_id,
+                    "source_commit": args.source_commit,
+                    "provenance_mode": args.provenance_mode,
+                    "source_archive_sha256": args.source_archive_sha256 or "",
                     "order_seed": str(args.order_seed),
                     "block_id": str(block),
                     "order_index": str(order_index),
@@ -261,6 +273,12 @@ def main() -> int:
             "head": git_value("rev-parse", "HEAD"),
             "branch": git_value("branch", "--show-current"),
             "status": git_value("status", "--porcelain=v1"),
+        },
+        "source_provenance": {
+            "mode": args.provenance_mode,
+            "source_commit": args.source_commit,
+            "source_archive_sha256": args.source_archive_sha256,
+            "git_metadata_expected": args.provenance_mode == "git-verified",
         },
         "platform": {
             "system": platform.system(),

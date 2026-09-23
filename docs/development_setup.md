@@ -33,11 +33,12 @@ The validated run used Ninja 1.13.2 and the portable executable at `.tools/cmake
 
 ## Google Colab CUDA workflow
 
-1. Clone or upload the exact Git commit.
-2. Record `nvidia-smi`, `nvcc --version`, OS image, compiler, and CMake versions.
-3. Configure with CUDA enabled and an architecture supported by the assigned Colab GPU.
-4. Run deterministic cross-backend correctness fixtures before timing.
-5. Store raw JSON/CSV results with the commit hash and hardware metadata.
-6. Treat Colab timings as Colab-only; do not infer the RTX 4050 crossover from them.
+1. Install Ninja if absent: `apt-get update && apt-get install -y ninja-build`.
+2. Clone the exact Git commit, or upload a hashed `git archive` and declare both its commit and archive SHA-256.
+3. Record `nvidia-smi`, `nvcc --version`, OS image, compiler, and CMake versions.
+4. Configure with CUDA enabled and an architecture supported by the assigned Colab GPU.
+5. Run deterministic cross-backend correctness fixtures before timing.
+6. Store raw JSON/CSV results with the commit hash, provenance mode, and hardware metadata.
+7. Treat Colab timings as Colab-only; do not infer the RTX 4050 crossover from them.
 
-The optional CUDA code is prepared but has not been compiled or executed on NVIDIA hardware. Use the exact preparation commit and retain the CTest log, raw timings, statistical summary, and environment metadata. Stage 4 remains incomplete until that evidence is returned and reviewed.
+The optional CUDA code from preparation commit `ae6117b` was compiled and validated on a Tesla T4. The accepted CTest log, raw timings, statistical summary, environment metadata, and independent verification are retained under `data/benchmarks/stage4_cuda/`. The local Windows machine still has no CUDA compiler or NVIDIA device.

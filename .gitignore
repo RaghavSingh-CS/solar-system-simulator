@@ -5,6 +5,7 @@
 /.vscode/
 /.tools/
 /out/
+/solar-system-simulator.zip
 *.exe
 *.obj
 *.o
