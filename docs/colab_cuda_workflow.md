@@ -31,9 +31,18 @@ This configures a Release build for the assigned compute capability, builds the 
 
 Stop immediately if configuration, compilation, CTest, correctness status, repeatability checksum, or CUDA error checking fails. Preserve the output; do not loosen tolerances to continue.
 
+Archive and return the pilot before starting the full matrix:
+
+```bash
+tar -czf stage4-cuda-pilot.tar.gz data/benchmarks/stage4_cuda/pilot
+sha256sum stage4-cuda-pilot.tar.gz
+```
+
+Return `stage4-cuda-pilot.tar.gz` and its SHA-256 for inspection. Do not run `full` until the pilot evidence has been accepted.
+
 ## 3. Select the full upper bound
 
-Inspect pilot runtime and variability. If 4096 bodies is practical, retain the default full matrix. Otherwise record the reason and set a reduced, explicit matrix that still preserves 64–1024:
+After the pilot has been accepted, inspect its runtime and variability. If 4096 bodies is practical, retain the default full matrix. Otherwise record the reason and set a reduced, explicit matrix that still preserves 64–1024:
 
 ```bash
 export STAGE4_BODIES="64,96,128,160,192,256,384,512,768,1024,1536,2048,3072,4096"
