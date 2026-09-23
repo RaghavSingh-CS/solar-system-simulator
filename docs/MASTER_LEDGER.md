@@ -200,3 +200,4 @@ python -B scripts\run_cpu_benchmarks.py --executable build-openmp\nbody_benchmar
 - `7f6e2bc` — Stage 1 validation evidence and exact foundation commit references.
 - `1485d54` — Stage 2 OpenMP backend, validation suite, benchmark harness, and documentation.
 - `a4c9eb1` — frozen Stage 3 controlled benchmark harness and protocol used for measurement.
+- `94dbf19` — Stage 3 raw measurements, statistical summaries, environment evidence, and analysis.
