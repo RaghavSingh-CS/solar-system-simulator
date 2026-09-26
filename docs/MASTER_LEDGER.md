@@ -309,7 +309,7 @@ pilot and controlled full matrix on the intended Windows RTX 4050 machine.
 The candidate frozen source revision is:
 
 ```text
-STAGE5_FROZEN_SOURCE_COMMIT
+4916b3c43298fa3f3bd15cb4af1698b5074abed3
 ```
 
 The follow-up provenance commit records that preparation revision without
@@ -433,4 +433,4 @@ No Stage 5 performance matrix was run on the development machine.
 - `3481272` — permanent Colab line-ending, dependency-preflight, and dual-mode provenance repairs.
 - `194bf04` — Stage 4 completion analysis, scientific boundary, and research-ledger update.
 - `6d9a162` — standalone sequential conservation-study harness and fixed 30-configuration protocol.
-- `STAGE5_FROZEN_SOURCE_COMMIT` — Stage 5A frozen protocol, runner, verifier, environment capture, and RTX 4050 runbook.
+- `4916b3c` — Stage 5A frozen protocol, runner, verifier, environment capture, and RTX 4050 runbook; exact RTX source revision `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.

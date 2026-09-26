@@ -8,7 +8,7 @@ approval record.
 Authoritative frozen source revision:
 
 ```text
-STAGE5_FROZEN_SOURCE_COMMIT
+4916b3c43298fa3f3bd15cb4af1698b5074abed3
 ```
 
 The revision above is the Stage 5A preparation commit, not necessarily the
@@ -23,7 +23,8 @@ PowerShell from it, and run:
 git clone https://github.com/RaghavSingh-CS/solar-system-simulator.git
 Set-Location solar-system-simulator
 git fetch origin
-git checkout --detach STAGE5_FROZEN_SOURCE_COMMIT
+$stage5FrozenCommit = '4916b3c43298fa3f3bd15cb4af1698b5074abed3'
+git checkout --detach $stage5FrozenCommit
 git rev-parse HEAD
 git status --short
 ```
@@ -77,7 +78,6 @@ chosen list once and do not change it between pilot and full:
 
 ```powershell
 $stage5OmpThreads = '1,2,4,8,REPLACE_PHYSICAL,REPLACE_LOGICAL'
-$stage5FrozenCommit = 'STAGE5_FROZEN_SOURCE_COMMIT'
 ```
 
 ## D. Configure and build Release binaries

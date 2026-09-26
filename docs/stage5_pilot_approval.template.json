@@ -1,7 +1,7 @@
 {
   "approved": true,
   "protocol_version": "stage5-v1.0",
-  "source_commit": "STAGE5_FROZEN_SOURCE_COMMIT",
+  "source_commit": "4916b3c43298fa3f3bd15cb4af1698b5074abed3",
   "environment_id": "REPLACE_WITH_PILOT_ENVIRONMENT_ID",
   "openmp_threads": [1, 2, 4, 8],
   "reviewer": "REPLACE_WITH_REVIEWER",
