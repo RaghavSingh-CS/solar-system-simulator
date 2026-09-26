@@ -2,6 +2,7 @@
 
 #include "nbody/simulation.hpp"
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -28,5 +29,11 @@ inline constexpr const char* solar_system_physical_source =
     "NASA NSSDCA planetary fact sheets (mass and volumetric mean radius)";
 
 SolarSystemScenario make_approximate_solar_system();
+
+// Presentation-only reference curves sampled from the same JPL mean-element
+// model used for initialization. Index 0 (Sun) is empty; planet paths are in
+// physical metres in the initial barycentric frame and do not drive motion.
+std::vector<std::vector<Vec3>> make_approximate_solar_reference_orbits(
+    std::size_t samples_per_orbit = 257);
 
 }  // namespace nbody

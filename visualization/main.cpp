@@ -1,6 +1,7 @@
 #include "nbody/visualization/camera.hpp"
 #include "nbody/visualization/conservation.hpp"
 #include "nbody/visualization/controller.hpp"
+#include "nbody/visualization/presentation.hpp"
 #include "nbody/visualization/render_space.hpp"
 #include "nbody/visualization/scenario.hpp"
 #include "nbody/visualization/trails.hpp"
@@ -49,7 +50,7 @@ struct Options {
 void print_usage(const char* program) {
     std::cout << "Usage: " << program << " [options]\n"
               << "  --scenario solar|synthetic        Default: solar\n"
-              << "  --backend sequential|openmp|cuda  CUDA reports unavailable in Stage 6B\n"
+              << "  --backend sequential|openmp|cuda  CUDA reports unavailable in Stage 6C\n"
               << "  --threads N                        OpenMP threads (default 4)\n"
               << "  --bodies N                         Synthetic body count (default 32)\n"
               << "  --seed N                           Synthetic seed (default 24301)\n"
@@ -98,7 +99,7 @@ Options parse_options(int argc, char** argv) {
     }
     if (options.backend == "cuda") {
         throw std::runtime_error(
-            "CUDA visualization is unavailable in Stage 6B; choose sequential or openmp. "
+            "CUDA visualization is unavailable in Stage 6C; choose sequential or openmp. "
             "Auto awaits Stage 5 calibration and is not operational.");
     }
     if (options.bodies < 2 || options.openmp_threads <= 0 ||
@@ -141,12 +142,46 @@ public:
     explicit ImGuiRuntime(GLFWwindow* window) {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        ImGui::GetIO().IniFilename = nullptr;
+        auto& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        float x_scale = 1.0F;
+        float y_scale = 1.0F;
+        glfwGetWindowContentScale(window, &x_scale, &y_scale);
+        const float ui_scale = std::clamp((x_scale + y_scale) * 0.5F, 1.0F, 1.35F);
+        io.FontGlobalScale = 1.08F * ui_scale;
         ImGui::StyleColorsDark();
         auto& style = ImGui::GetStyle();
-        style.WindowRounding = 6.0F;
-        style.FrameRounding = 4.0F;
-        style.WindowPadding = {12.0F, 10.0F};
+        style.ScaleAllSizes(ui_scale);
+        style.WindowRounding = 10.0F;
+        style.ChildRounding = 7.0F;
+        style.FrameRounding = 6.0F;
+        style.PopupRounding = 7.0F;
+        style.GrabRounding = 6.0F;
+        style.WindowPadding = {16.0F, 14.0F};
+        style.FramePadding = {10.0F, 7.0F};
+        style.ItemSpacing = {9.0F, 8.0F};
+        style.ItemInnerSpacing = {7.0F, 5.0F};
+        style.IndentSpacing = 18.0F;
+        style.ScrollbarSize = 13.0F;
+        style.WindowBorderSize = 1.0F;
+        style.FrameBorderSize = 0.0F;
+        auto* colors = style.Colors;
+        colors[ImGuiCol_WindowBg] = {0.025F, 0.035F, 0.060F, 0.96F};
+        colors[ImGuiCol_Border] = {0.18F, 0.27F, 0.38F, 0.78F};
+        colors[ImGuiCol_FrameBg] = {0.075F, 0.105F, 0.145F, 0.96F};
+        colors[ImGuiCol_FrameBgHovered] = {0.11F, 0.17F, 0.23F, 1.0F};
+        colors[ImGuiCol_FrameBgActive] = {0.13F, 0.22F, 0.29F, 1.0F};
+        colors[ImGuiCol_Button] = {0.10F, 0.20F, 0.27F, 1.0F};
+        colors[ImGuiCol_ButtonHovered] = {0.16F, 0.34F, 0.43F, 1.0F};
+        colors[ImGuiCol_ButtonActive] = {0.18F, 0.43F, 0.50F, 1.0F};
+        colors[ImGuiCol_Header] = {0.10F, 0.24F, 0.31F, 1.0F};
+        colors[ImGuiCol_HeaderHovered] = {0.15F, 0.34F, 0.42F, 1.0F};
+        colors[ImGuiCol_HeaderActive] = {0.19F, 0.42F, 0.49F, 1.0F};
+        colors[ImGuiCol_CheckMark] = {0.35F, 0.82F, 0.78F, 1.0F};
+        colors[ImGuiCol_SliderGrab] = {0.31F, 0.68F, 0.70F, 1.0F};
+        colors[ImGuiCol_SliderGrabActive] = {0.46F, 0.88F, 0.82F, 1.0F};
+        colors[ImGuiCol_Text] = {0.88F, 0.92F, 0.96F, 1.0F};
+        colors[ImGuiCol_TextDisabled] = {0.43F, 0.51F, 0.60F, 1.0F};
         if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
             ImGui::DestroyContext();
             throw std::runtime_error("Dear ImGui GLFW backend initialization failed");
@@ -183,6 +218,7 @@ struct ApplicationModel {
     std::optional<std::size_t> focused_body;
     bool show_trails{true};
     bool show_labels{true};
+    bool show_reference_orbits{true};
 
     ApplicationModel(const Options& options, BackendKind backend)
         : scenario(nbody::visualization::make_visual_scenario(
@@ -216,6 +252,8 @@ struct ApplicationModel {
             controller.state(), 768, scenario.trail_sample_interval_s);
         speed_index = next_speed;
         selected_body = scenario.kind == ScenarioKind::solar_system ? 3U : 0U;
+        show_labels = true;
+        show_reference_orbits = scenario.kind == ScenarioKind::solar_system;
         focused_body.reset();
     }
 
@@ -394,17 +432,34 @@ void update_render_trails(
     std::vector<nbody::visualization::RenderTrail>& output) {
     if (!app.show_trails) {
         output.clear();
-        return;
+    } else {
+        const auto& physical = app.trails.positions();
+        output.resize(physical.size());
+        for (std::size_t index = 0; index < physical.size(); ++index) {
+            auto& trail = output[index];
+            trail.color = app.scenario.styles[index].color * 0.76F;
+            trail.alpha = 0.68F;
+            trail.fade_with_age = true;
+            trail.points.clear();
+            trail.points.reserve(physical[index].size());
+            for (const auto& point : physical[index]) {
+                trail.points.push_back(app.render_space.to_render_position(point));
+            }
+        }
     }
-    const auto& physical = app.trails.positions();
-    output.resize(physical.size());
-    for (std::size_t index = 0; index < physical.size(); ++index) {
-        auto& trail = output[index];
-        trail.color = app.scenario.styles[index].color * 0.72F;
-        trail.points.clear();
-        trail.points.reserve(physical[index].size());
-        for (const auto& point : physical[index]) {
-            trail.points.push_back(app.render_space.to_render_position(point));
+    if (app.show_reference_orbits && !app.scenario.reference_paths_m.empty()) {
+        const std::size_t first_reference = output.size();
+        output.resize(first_reference + app.scenario.reference_paths_m.size());
+        for (std::size_t index = 0; index < app.scenario.reference_paths_m.size(); ++index) {
+            auto& guide = output[first_reference + index];
+            guide.color = app.scenario.styles[index].color * 0.48F;
+            guide.alpha = 0.24F;
+            guide.fade_with_age = false;
+            guide.points.clear();
+            guide.points.reserve(app.scenario.reference_paths_m[index].size());
+            for (const auto& point : app.scenario.reference_paths_m[index]) {
+                guide.points.push_back(app.render_space.to_render_position(point));
+            }
         }
     }
 }
@@ -424,10 +479,19 @@ std::string human_time(double seconds) {
 
 struct UiActions {
     std::optional<ScenarioKind> scenario;
+    std::optional<nbody::visualization::CameraPreset> camera_preset;
     bool reset{false};
-    bool overview{false};
     bool frame_focus{false};
+    float panel_right{0.0F};
 };
+
+void section_heading(const char* label) {
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.43F, 0.86F, 0.82F, 1.0F));
+    ImGui::TextUnformatted(label);
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+}
 
 UiActions draw_control_panel(
     ApplicationModel& app,
@@ -436,40 +500,61 @@ UiActions draw_control_panel(
     std::uint64_t synthetic_seed) {
     UiActions actions;
     ImGui::SetNextWindowPos({16.0F, 16.0F}, ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize({390.0F, 820.0F}, ImGuiCond_FirstUseEver);
-    ImGui::Begin("Solar System Control", nullptr, ImGuiWindowFlags_NoCollapse);
+    ImGui::SetNextWindowSize({438.0F, 980.0F}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints({410.0F, 600.0F}, {480.0F, ImGui::GetIO().DisplaySize.y - 24.0F});
+    ImGui::Begin("Scientific Visualization", nullptr, ImGuiWindowFlags_NoCollapse);
 
-    ImGui::TextUnformatted("SIMULATION");
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96F, 0.79F, 0.35F, 1.0F));
+    ImGui::SetWindowFontScale(1.16F);
+    ImGui::TextUnformatted("SOLAR SYSTEM SIMULATOR");
+    ImGui::SetWindowFontScale(1.0F);
+    ImGui::PopStyleColor();
+    ImGui::TextDisabled("N-body dynamics  /  parallel compute  /  live integrity");
+
+    section_heading("SIMULATION");
     int scenario_index = app.scenario.kind == ScenarioKind::solar_system ? 0 : 1;
-    const char* scenarios[] = {"Solar System", "Synthetic N-body"};
+    const char* scenarios[] = {"Solar System", "Compute Experiment"};
     if (ImGui::Combo("Scenario", &scenario_index, scenarios, 2)) {
         actions.scenario = scenario_index == 0 ? ScenarioKind::solar_system : ScenarioKind::synthetic;
     }
-    ImGui::TextWrapped("%s", app.scenario.provenance.c_str());
-    if (ImGui::Button(app.controller.paused() ? "Resume" : "Pause")) {
+    if (app.scenario.kind == ScenarioKind::synthetic) {
+        ImGui::TextDisabled(
+            "Deterministic synthetic N-body workload  /  N=%zu  seed=%llu",
+            synthetic_bodies, static_cast<unsigned long long>(synthetic_seed));
+    }
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16F, 0.38F, 0.42F, 1.0F));
+    if (ImGui::Button(app.controller.paused() ? "PLAY" : "PAUSE", {112.0F, 0.0F})) {
         app.controller.toggle_paused();
     }
+    ImGui::PopStyleColor();
     ImGui::SameLine();
-    if (ImGui::Button("Reset")) {
+    if (ImGui::Button("RESET", {92.0F, 0.0F})) {
         actions.reset = true;
     }
-    ImGui::Text("State: %s", app.controller.paused() ? "PAUSED" : "RUNNING");
-    ImGui::Text("Elapsed: %s", human_time(app.controller.state().time_s).c_str());
+    ImGui::SameLine();
+    ImGui::TextColored(
+        app.controller.paused() ? ImVec4(0.92F, 0.72F, 0.35F, 1.0F)
+                                : ImVec4(0.40F, 0.88F, 0.62F, 1.0F),
+        "%s", app.controller.paused() ? "PAUSED" : "RUNNING");
+    ImGui::Text("Elapsed simulated time     %s", human_time(app.controller.state().time_s).c_str());
 
     std::vector<const char*> speed_names;
     for (const auto& preset : app.scenario.speed_presets) {
         speed_names.push_back(preset.name);
     }
     int speed_index = static_cast<int>(app.speed_index);
-    if (ImGui::Combo("Simulation speed", &speed_index, speed_names.data(),
+    ImGui::SetNextItemWidth(-1.0F);
+    if (ImGui::Combo("##SimulationSpeed", &speed_index, speed_names.data(),
                      static_cast<int>(speed_names.size()))) {
         app.speed_index = static_cast<std::size_t>(speed_index);
         app.controller.set_steps_per_frame(
             app.scenario.speed_presets[app.speed_index].steps_per_frame);
     }
+    ImGui::TextDisabled("Fixed-step simulation batch; actual wall-time rate follows render FPS.");
 
-    ImGui::Separator();
-    ImGui::TextUnformatted("COMPUTE");
+    section_heading("COMPUTE");
+    ImGui::Text("ACTIVE  %s", app.controller.backend_kind() == BackendKind::openmp
+        ? "OPENMP" : "SEQUENTIAL");
     if (ImGui::RadioButton("Sequential", app.controller.backend_kind() == BackendKind::sequential)) {
         app.controller.select_backend(BackendKind::sequential);
     }
@@ -478,18 +563,23 @@ UiActions draw_control_panel(
     if (ImGui::RadioButton("OpenMP", app.controller.backend_kind() == BackendKind::openmp)) {
         app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
     }
-    const int hardware_threads = static_cast<int>(std::max(1U, std::thread::hardware_concurrency()));
-    const int maximum_threads = std::min(64, hardware_threads);
-    if (ImGui::SliderInt("OpenMP threads", &preferred_openmp_threads, 1, maximum_threads) &&
-        app.controller.backend_kind() == BackendKind::openmp) {
-        app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
-    }
     ImGui::EndDisabled();
-    ImGui::TextDisabled("CUDA - Not integrated in Stage 6B");
-    ImGui::TextDisabled("Auto - Awaiting Stage 5 calibration");
+    ImGui::SameLine();
+    ImGui::TextDisabled("CUDA");
+    ImGui::SameLine();
+    ImGui::TextDisabled("Auto");
+    if (app.controller.backend_kind() == BackendKind::openmp) {
+        const int hardware_threads =
+            static_cast<int>(std::max(1U, std::thread::hardware_concurrency()));
+        const int maximum_threads = std::min(64, hardware_threads);
+        if (ImGui::SliderInt("OpenMP threads", &preferred_openmp_threads, 1, maximum_threads)) {
+            app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+        }
+    }
+    ImGui::TextDisabled("CUDA not integrated  /  Auto awaits Stage 5 calibration");
 
-    ImGui::Separator();
-    ImGui::TextUnformatted("SELECTED BODY");
+    section_heading(app.scenario.kind == ScenarioKind::solar_system
+        ? "SELECTED BODY" : "SELECTED WORKLOAD BODY");
     std::vector<const char*> body_names;
     for (const auto& body : app.controller.state().bodies) {
         body_names.push_back(body.name.c_str());
@@ -500,67 +590,108 @@ UiActions draw_control_panel(
     }
     const auto& body = app.controller.state().bodies[app.selected_body];
     const auto& style = app.scenario.styles[app.selected_body];
-    ImGui::Text("Mass: %.6e kg", body.mass_kg);
-    if (style.physical_radius_m > 0.0) {
-        ImGui::Text("Mean radius: %.1f km", style.physical_radius_m / 1000.0);
-    } else {
-        ImGui::TextUnformatted("Physical radius: not defined for fixture");
-    }
-    ImGui::Text("Position: (%.3e, %.3e, %.3e) m",
-                body.position_m.x, body.position_m.y, body.position_m.z);
-    ImGui::Text("Velocity: (%.3e, %.3e, %.3e) m/s",
-                body.velocity_m_s.x, body.velocity_m_s.y, body.velocity_m_s.z);
-    ImGui::Text("Speed: %.3f km/s", nbody::norm(body.velocity_m_s) / 1000.0);
-    ImGui::Text("Distance from Sun/body 0: %.6f AU",
+    ImGui::Text("Name                       %s", body.name.c_str());
+    const char* distance_label = app.scenario.kind == ScenarioKind::solar_system
+        ? "Distance from Sun" : "Distance from body 0";
+    ImGui::Text("%-26s %.6f AU", distance_label,
                 nbody::norm(body.position_m - app.controller.state().bodies[0].position_m) /
                     149597870700.0);
-    if (ImGui::Button("Focus selected")) {
+    ImGui::Text("Speed                      %.3f km/s",
+                nbody::norm(body.velocity_m_s) / 1000.0);
+    ImGui::Text("Mass                       %.6e kg", body.mass_kg);
+    if (style.physical_radius_m > 0.0) {
+        ImGui::Text("Mean radius                %.1f km", style.physical_radius_m / 1000.0);
+    } else {
+        ImGui::TextDisabled("Physical radius not defined for synthetic workload");
+    }
+    if (ImGui::Button("FOCUS SELECTED", {154.0F, 0.0F})) {
         app.focused_body = app.selected_body;
         actions.frame_focus = true;
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Focus Sun/body 0")) {
-        app.focused_body = 0;
-        actions.frame_focus = true;
-    }
-    if (ImGui::Button("Return to overview")) {
-        actions.overview = true;
-    }
 
-    ImGui::Separator();
-    ImGui::TextUnformatted("NUMERICAL DIAGNOSTICS");
+    section_heading("NUMERICAL HEALTH");
     const auto& drift = app.conservation.drift();
-    ImGui::Text("Energy relative drift: %.6e", drift.energy_relative);
-    ImGui::Text("Energy maximum:        %.6e", drift.maximum_energy_relative);
-    ImGui::Text("Angular relative drift: %.6e", drift.angular_momentum_relative);
-    ImGui::Text("Angular maximum:        %.6e", drift.maximum_angular_momentum_relative);
+    const auto health = nbody::visualization::classify_numerical_health(
+        drift.energy_relative, drift.angular_momentum_relative);
+    const auto health_color = [](bool okay) {
+        return okay ? ImVec4(0.38F, 0.90F, 0.61F, 1.0F)
+                    : ImVec4(1.0F, 0.34F, 0.28F, 1.0F);
+    };
+    ImGui::Text("Energy drift       %.3e / %.1e", drift.energy_relative,
+                nbody::visualization::energy_drift_bound);
+    ImGui::SameLine();
+    ImGui::TextColored(health_color(health.energy_within_bound), "%s",
+        health.energy_within_bound ? "PASS" : "EXCEEDED");
+    ImGui::Text("Angular drift      %.3e / %.1e", drift.angular_momentum_relative,
+                nbody::visualization::angular_momentum_drift_bound);
+    ImGui::SameLine();
+    ImGui::TextColored(health_color(health.angular_momentum_within_bound), "%s",
+        health.angular_momentum_within_bound ? "PASS" : "EXCEEDED");
+    ImGui::TextColored(health_color(health.all_within_bounds()), "%s",
+        health.all_within_bounds() ? "WITHIN ESTABLISHED BOUNDS" : "NUMERICAL BOUND WARNING");
 
-    ImGui::Separator();
-    ImGui::TextUnformatted("VIEW");
-    ImGui::Checkbox("Orbital trails", &app.show_trails);
+    section_heading("VIEW");
+    if (ImGui::Button("OVERVIEW")) {
+        actions.camera_preset = nbody::visualization::CameraPreset::overview;
+    }
+    if (app.scenario.kind == ScenarioKind::solar_system) {
+        ImGui::SameLine();
+        if (ImGui::Button("INNER SYSTEM")) {
+            actions.camera_preset = nbody::visualization::CameraPreset::inner_system;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("EARTH")) {
+            actions.camera_preset = nbody::visualization::CameraPreset::earth;
+        }
+        if (ImGui::Button("JUPITER")) {
+            actions.camera_preset = nbody::visualization::CameraPreset::jupiter;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("SATURN")) {
+            actions.camera_preset = nbody::visualization::CameraPreset::saturn;
+        }
+    }
+    ImGui::Checkbox("Simulation history trails", &app.show_trails);
+    if (app.scenario.kind == ScenarioKind::solar_system) {
+        ImGui::Checkbox("Reference orbit guides", &app.show_reference_orbits);
+    }
     ImGui::Checkbox("Body labels", &app.show_labels);
     float radius_multiplier = app.render_space.radius_multiplier();
     if (ImGui::SliderFloat("Visual radius x", &radius_multiplier, 1.0F, 500.0F, "%.1f",
                            ImGuiSliderFlags_Logarithmic)) {
         app.render_space.set_radius_multiplier(radius_multiplier);
     }
-    int trail_capacity = static_cast<int>(app.trails.capacity());
-    if (ImGui::SliderInt("Trail points", &trail_capacity, 64, 2048)) {
-        app.trails.set_capacity(static_cast<std::size_t>(trail_capacity));
-    }
     ImGui::TextWrapped(
-        "Body sizes are exaggerated for readability; minimum render radius %.3f. Physics is unchanged.",
-        app.render_space.minimum_render_radius());
+        "Positions remain linear and physical. Body sizes and orbit guides are presentation-only.");
 
-    ImGui::Separator();
-    ImGui::TextUnformatted("VIEWER DIAGNOSTICS - NOT BENCHMARK EVIDENCE");
+    section_heading("VIEWER PERFORMANCE");
     const float fps = ImGui::GetIO().Framerate;
-    ImGui::Text("Render: %.1f FPS (%.2f ms/frame)", fps, fps > 0.0F ? 1000.0F / fps : 0.0F);
-    ImGui::Text("Fixed dt: %.2f hours", app.controller.dt_s() / 3600.0);
-    ImGui::Text("Physics steps/render: %zu", app.controller.steps_per_frame());
-    ImGui::Text("Synthetic request: N=%zu seed=%llu", synthetic_bodies,
-                static_cast<unsigned long long>(synthetic_seed));
+    ImGui::Text("%.1f FPS  /  %.2f ms frame", fps, fps > 0.0F ? 1000.0F / fps : 0.0F);
+    ImGui::TextColored(ImVec4(0.92F, 0.67F, 0.31F, 1.0F),
+                       "DISPLAY ONLY - NOT BENCHMARK EVIDENCE");
 
+    if (ImGui::CollapsingHeader("Advanced / Technical Details")) {
+        ImGui::TextWrapped("%s", app.scenario.provenance.c_str());
+        ImGui::Text("Position (m)  (%.3e, %.3e, %.3e)",
+                    body.position_m.x, body.position_m.y, body.position_m.z);
+        ImGui::Text("Velocity (m/s) (%.3e, %.3e, %.3e)",
+                    body.velocity_m_s.x, body.velocity_m_s.y, body.velocity_m_s.z);
+        ImGui::Text("Maximum energy drift        %.6e", drift.maximum_energy_relative);
+        ImGui::Text("Maximum angular drift       %.6e", drift.maximum_angular_momentum_relative);
+        ImGui::Text("Fixed physical dt           %.2f hours", app.controller.dt_s() / 3600.0);
+        ImGui::Text("Physics steps per render    %zu", app.controller.steps_per_frame());
+        ImGui::Text("Minimum render radius       %.3f", app.render_space.minimum_render_radius());
+        int trail_capacity = static_cast<int>(app.trails.capacity());
+        if (ImGui::SliderInt("Trail history points", &trail_capacity, 64, 2048)) {
+            app.trails.set_capacity(static_cast<std::size_t>(trail_capacity));
+        }
+        if (app.scenario.kind == ScenarioKind::synthetic) {
+            ImGui::Text("Deterministic workload N=%zu seed=%llu", synthetic_bodies,
+                        static_cast<unsigned long long>(synthetic_seed));
+        }
+    }
+
+    actions.panel_right = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x;
     ImGui::End();
     return actions;
 }
@@ -568,25 +699,56 @@ UiActions draw_control_panel(
 void draw_labels(
     const ApplicationModel& app,
     const std::vector<nbody::visualization::RenderBody>& bodies,
-    const nbody::visualization::OrbitCamera& camera) {
+    const nbody::visualization::OrbitCamera& camera,
+    float panel_right) {
     if (!app.show_labels) {
         return;
     }
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     auto* draw_list = ImGui::GetForegroundDrawList();
+    std::vector<nbody::visualization::LabelCandidate> candidates;
     for (std::size_t index = 0; index < bodies.size(); ++index) {
+        if (app.scenario.label_policy == nbody::visualization::LabelPolicy::selected_only &&
+            index != app.selected_body) {
+            continue;
+        }
         const auto screen = project_to_screen(bodies[index].position, camera, display);
         if (!screen || screen->x < 0.0F || screen->x > display.x ||
             screen->y < 0.0F || screen->y > display.y) {
             continue;
         }
-        const ImVec2 position{screen->x + 8.0F, screen->y - 8.0F};
         const char* label = app.controller.state().bodies[index].name.c_str();
-        draw_list->AddText({position.x + 1.0F, position.y + 1.0F}, IM_COL32(0, 0, 0, 220), label);
-        const ImU32 color = index == app.selected_body
+        const ImVec2 size = ImGui::CalcTextSize(label);
+        const bool selected = index == app.selected_body;
+        const int priority = selected ? 1000 : (index == 0 ? 900 : 700 - static_cast<int>(index));
+        candidates.push_back({
+            index,
+            {screen->x, screen->y},
+            {size.x + 10.0F, size.y + 6.0F},
+            priority,
+            selected,
+        });
+    }
+    const auto placements = nbody::visualization::declutter_labels(
+        std::move(candidates), {display.x, display.y}, panel_right + 8.0F, 5.0F);
+    for (const auto& placement : placements) {
+        const char* label = app.controller.state().bodies[placement.body_index].name.c_str();
+        const ImVec2 position{placement.position.x, placement.position.y};
+        if (placement.leader_line) {
+            draw_list->AddLine(
+                {placement.anchor.x, placement.anchor.y},
+                {position.x + 4.0F, position.y + placement.size.y * 0.5F},
+                IM_COL32(150, 170, 190, 120), 1.0F);
+        }
+        draw_list->AddRectFilled(
+            position,
+            {position.x + placement.size.x, position.y + placement.size.y},
+            placement.selected ? IM_COL32(44, 52, 62, 225) : IM_COL32(10, 16, 28, 185),
+            4.0F);
+        const ImU32 color = placement.selected
             ? IM_COL32(255, 230, 110, 255)
             : IM_COL32(225, 232, 245, 240);
-        draw_list->AddText(position, color, label);
+        draw_list->AddText({position.x + 5.0F, position.y + 3.0F}, color, label);
     }
 }
 
@@ -680,13 +842,6 @@ int main(int argc, char** argv) {
                 app.reset();
                 state_replaced = true;
             }
-            if (actions.overview) {
-                app.focused_body.reset();
-                camera.reset();
-            }
-            if (actions.frame_focus) {
-                camera.set_distance(4.5F);
-            }
             if (actions.scenario) {
                 app.switch_scenario(*actions.scenario, options.bodies, options.seed);
                 camera.reset();
@@ -696,10 +851,26 @@ int main(int argc, char** argv) {
                 app.render_space.update_snapshot(app.controller.state(), snapshot);
                 update_render_trails(app, render_trails);
             }
+            if (actions.camera_preset) {
+                const auto framing = nbody::visualization::camera_framing(
+                    *actions.camera_preset, app.scenario.kind, snapshot);
+                nbody::visualization::apply_camera_framing(camera, framing);
+                app.focused_body = framing.tracked_body;
+                if (framing.tracked_body) {
+                    app.selected_body = *framing.tracked_body;
+                }
+            }
+            if (actions.frame_focus && app.selected_body < snapshot.size()) {
+                camera.set_pose(
+                    camera.yaw_degrees(), camera.pitch_degrees(), 2.35F,
+                    snapshot[app.selected_body].position);
+            }
 
-            draw_labels(app, snapshot, camera);
+            draw_labels(app, snapshot, camera, actions.panel_right);
             ImGui::Render();
-            renderer.render(snapshot, render_trails, camera, framebuffer_width, framebuffer_height);
+            renderer.render(
+                snapshot, render_trails, camera, framebuffer_width, framebuffer_height,
+                app.selected_body);
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             glfwSwapBuffers(window.get());
         }

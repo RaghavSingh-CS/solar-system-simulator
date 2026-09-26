@@ -155,6 +155,7 @@ if(NBODY_BUILD_VISUALIZATION)
         visualization/camera.cpp
         visualization/conservation.cpp
         visualization/controller.cpp
+        visualization/presentation.cpp
         visualization/render_space.cpp
         visualization/scenario.cpp
         visualization/trails.cpp

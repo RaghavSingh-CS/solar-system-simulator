@@ -23,6 +23,22 @@ constexpr std::array<glm::vec3, 9> solar_colors{{
     {0.18F, 0.32F, 0.92F},  // Neptune
 }};
 
+constexpr std::array<BodyMaterial, 9> solar_materials{{
+    BodyMaterial::sun,
+    BodyMaterial::mercury,
+    BodyMaterial::venus,
+    BodyMaterial::earth,
+    BodyMaterial::mars,
+    BodyMaterial::jupiter,
+    BodyMaterial::saturn,
+    BodyMaterial::uranus,
+    BodyMaterial::neptune,
+}};
+
+constexpr std::array<float, 9> solar_visual_scales{{
+    1.35F, 0.92F, 1.0F, 1.08F, 1.0F, 1.25F, 1.18F, 1.05F, 1.05F,
+}};
+
 constexpr std::array<glm::vec3, 8> synthetic_colors{{
     {0.95F, 0.75F, 0.30F}, {0.35F, 0.70F, 1.00F},
     {0.75F, 0.40F, 0.95F}, {0.35F, 0.90F, 0.62F},
@@ -47,41 +63,52 @@ ScenarioDefinition make_visual_scenario(
         result.initial_state = std::move(solar.initial_state);
         result.dt_s = solar_system_recommended_dt_s;
         result.speed_presets = {
-            {"Slow - 6 h/frame", 1},
-            {"Normal - 1 day/frame", 4},
-            {"Fast - 4 days/frame", 16},
-            {"Very Fast - 16 days/frame", 64},
+            {"Slow - 6 simulated hours / render", 1},
+            {"Normal - 1 simulated day / render", 4},
+            {"Fast - 4 simulated days / render", 16},
+            {"Very Fast - 16 simulated days / render", 64},
         };
         result.default_speed_index = 1;
         result.trail_sample_interval_s = 86400.0;
         result.default_radius_multiplier = 80.0F;
+        result.reference_paths_m = make_approximate_solar_reference_orbits();
+        result.label_policy = LabelPolicy::all_bodies;
         for (std::size_t index = 0; index < solar.metadata.size(); ++index) {
             result.stable_ids.push_back(solar.metadata[index].stable_id);
             result.styles.push_back({
                 solar_colors[index],
                 solar.metadata[index].mean_radius_m,
                 index == 0,
+                solar_materials[index],
+                solar_visual_scales[index],
             });
         }
         return result;
     }
 
-    result.name = "Synthetic N-body fixture";
+    result.name = "Compute Experiment";
     result.provenance = "deterministic seed fixture; not the Solar System";
     result.initial_state = make_seeded_synthetic_system(synthetic_body_count, synthetic_seed);
     result.dt_s = 10.0;
     result.speed_presets = {
-        {"Slow - 8 steps/frame", 8},
-        {"Normal - 32 steps/frame", 32},
-        {"Fast - 128 steps/frame", 128},
-        {"Very Fast - 256 steps/frame", 256},
+        {"Slow - light compute batch", 8},
+        {"Normal - balanced compute batch", 32},
+        {"Fast - heavy compute batch", 128},
+        {"Very Fast - maximum compute batch", 256},
     };
     result.default_speed_index = 1;
     result.trail_sample_interval_s = 1000.0;
     result.default_radius_multiplier = 1.0F;
+    result.label_policy = LabelPolicy::selected_only;
     for (std::size_t index = 0; index < result.initial_state.bodies.size(); ++index) {
         result.stable_ids.push_back("synthetic_" + std::to_string(index));
-        result.styles.push_back({synthetic_colors[index % synthetic_colors.size()], 0.0, false});
+        result.styles.push_back({
+            synthetic_colors[index % synthetic_colors.size()],
+            0.0,
+            false,
+            BodyMaterial::generic,
+            1.0F,
+        });
     }
     return result;
 }

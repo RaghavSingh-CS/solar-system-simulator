@@ -9,17 +9,33 @@
 
 namespace nbody::visualization {
 
+enum class BodyMaterial {
+    generic,
+    sun,
+    mercury,
+    venus,
+    earth,
+    mars,
+    jupiter,
+    saturn,
+    uranus,
+    neptune,
+};
+
 struct RenderBody {
     glm::vec3 position;
     float radius{0.1F};
     glm::vec3 color{1.0F};
     bool emissive{false};
+    BodyMaterial material{BodyMaterial::generic};
 };
 
 struct RenderBodyStyle {
     glm::vec3 color{1.0F};
     double physical_radius_m{0.0};
     bool emissive{false};
+    BodyMaterial material{BodyMaterial::generic};
+    float visual_scale{1.0F};
 };
 
 class RenderSpaceTransform {

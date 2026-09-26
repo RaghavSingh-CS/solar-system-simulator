@@ -174,4 +174,28 @@ SolarSystemScenario make_approximate_solar_system() {
     return scenario;
 }
 
+std::vector<std::vector<Vec3>> make_approximate_solar_reference_orbits(
+    std::size_t samples_per_orbit) {
+    if (samples_per_orbit < 3) {
+        throw std::invalid_argument("reference orbit requires at least three samples");
+    }
+    const auto initial = make_approximate_solar_system();
+    const Vec3 initial_sun_position = initial.initial_state.bodies.front().position_m;
+    std::vector<std::vector<Vec3>> paths(planets.size() + 1);
+    for (std::size_t planet_index = 0; planet_index < planets.size(); ++planet_index) {
+        const auto& planet = planets[planet_index];
+        const double orbital_centuries =
+            360.0 / std::abs(planet.mean_longitude_deg.rate_per_century);
+        auto& path = paths[planet_index + 1];
+        path.reserve(samples_per_orbit);
+        for (std::size_t sample = 0; sample < samples_per_orbit; ++sample) {
+            const double phase = static_cast<double>(sample) /
+                static_cast<double>(samples_per_orbit - 1);
+            path.push_back(
+                initial_sun_position + heliocentric_position(planet, phase * orbital_centuries));
+        }
+    }
+    return paths;
+}
+
 }  // namespace nbody

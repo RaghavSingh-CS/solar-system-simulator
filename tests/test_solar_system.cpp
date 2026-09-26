@@ -69,6 +69,17 @@ void test_solar_system_definition() {
     require(mercury_sun_distance > 4.0e10 && mercury_sun_distance < 7.5e10,
             "Mercury J2000 distance is outside a defensible orbital range");
 
+    const auto reference_paths = nbody::make_approximate_solar_reference_orbits(65);
+    require(reference_paths.size() == expected.size() && reference_paths[0].empty(),
+            "Solar reference paths do not preserve the body index contract");
+    for (std::size_t index = 1; index < reference_paths.size(); ++index) {
+        require(reference_paths[index].size() == 65,
+                "Solar reference orbit has the wrong sample count");
+        for (const auto& point : reference_paths[index]) {
+            require(finite_vector(point), "Solar reference orbit contains a non-finite point");
+        }
+    }
+
     auto evolved = first.initial_state;
     const auto initial_diagnostics = nbody::compute_diagnostics(evolved);
     for (int step = 0; step < 352; ++step) {

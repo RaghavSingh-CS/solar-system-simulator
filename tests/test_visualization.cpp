@@ -3,6 +3,7 @@
 #include "nbody/visualization/camera.hpp"
 #include "nbody/visualization/conservation.hpp"
 #include "nbody/visualization/controller.hpp"
+#include "nbody/visualization/presentation.hpp"
 #include "nbody/visualization/render_space.hpp"
 #include "nbody/visualization/scenario.hpp"
 #include "nbody/visualization/trails.hpp"
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -102,6 +104,13 @@ void test_scenario_switch_and_diagnostics() {
             "visual Solar-System definition is incomplete");
     require(solar.dt_s == nbody::solar_system_recommended_dt_s,
             "visual Solar-System timestep differs from the declared value");
+    require(solar.reference_paths_m.size() == 9 &&
+                solar.label_policy == nbody::visualization::LabelPolicy::all_bodies &&
+                solar.styles[6].material == nbody::visualization::BodyMaterial::saturn,
+            "visual Solar-System presentation metadata is incomplete");
+    require(synthetic.label_policy == nbody::visualization::LabelPolicy::selected_only &&
+                synthetic.name == "Compute Experiment",
+            "synthetic mode is not intentionally framed as a low-clutter compute experiment");
 
     nbody::visualization::SimulationController controller(
         solar.initial_state,
@@ -182,6 +191,55 @@ void test_camera_math() {
             "camera overview reset did not restore the origin target");
 }
 
+void test_presentation_helpers() {
+    const auto within = nbody::visualization::classify_numerical_health(5.0e-6, 5.0e-10);
+    require(within.all_within_bounds(), "numerical-health bounds rejected exact limits");
+    const auto exceeded = nbody::visualization::classify_numerical_health(
+        5.0001e-6, std::numeric_limits<double>::infinity());
+    require(!exceeded.energy_within_bound && !exceeded.angular_momentum_within_bound,
+            "numerical-health warning mapping accepted invalid drift");
+
+    const auto solar = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    nbody::visualization::RenderSpaceTransform transform(
+        solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
+    std::vector<nbody::visualization::RenderBody> bodies;
+    transform.update_snapshot(solar.initial_state, bodies);
+    const auto earth = nbody::visualization::camera_framing(
+        nbody::visualization::CameraPreset::earth,
+        nbody::visualization::ScenarioKind::solar_system,
+        bodies);
+    require(earth.tracked_body == 3U && earth.target == bodies[3].position &&
+                earth.distance >= 2.0F,
+            "Earth camera preset is not deterministic or body-relative");
+    nbody::visualization::OrbitCamera camera;
+    nbody::visualization::apply_camera_framing(camera, earth);
+    require(camera.target() == bodies[3].position && camera.distance() == earth.distance,
+            "camera preset did not apply its exact framing");
+
+    std::vector<nbody::visualization::LabelCandidate> candidates{
+        {0, {500.0F, 300.0F}, {70.0F, 24.0F}, 900, false},
+        {1, {502.0F, 301.0F}, {70.0F, 24.0F}, 100, false},
+        {3, {501.0F, 300.0F}, {70.0F, 24.0F}, 1000, true},
+    };
+    const auto placements = nbody::visualization::declutter_labels(
+        candidates, {1280.0F, 720.0F}, 420.0F);
+    require(!placements.empty() && placements.front().body_index == 3 &&
+                placements.front().selected,
+            "selected label did not receive highest decluttering priority");
+    for (std::size_t left = 0; left < placements.size(); ++left) {
+        for (std::size_t right = left + 1; right < placements.size(); ++right) {
+            const auto& a = placements[left];
+            const auto& b = placements[right];
+            const bool overlap = a.position.x < b.position.x + b.size.x &&
+                a.position.x + a.size.x > b.position.x &&
+                a.position.y < b.position.y + b.size.y &&
+                a.position.y + a.size.y > b.position.y;
+            require(!overlap, "decluttered labels still overlap");
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -191,6 +249,7 @@ int main() {
         test_scenario_switch_and_diagnostics();
         test_trail_boundedness();
         test_camera_math();
+        test_presentation_helpers();
         std::cout << "all visualization model tests passed\n";
         return 0;
     } catch (const std::exception& error) {

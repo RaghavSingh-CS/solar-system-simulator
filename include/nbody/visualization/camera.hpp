@@ -13,6 +13,7 @@ public:
     void orbit(float delta_x, float delta_y);
     void dolly(float amount);
     void set_distance(float distance);
+    void set_pose(float yaw_degrees, float pitch_degrees, float distance, const glm::vec3& target);
     void approach_target(const glm::vec3& target, float fraction);
     void reset();
 

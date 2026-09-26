@@ -15,6 +15,11 @@ enum class ScenarioKind {
     synthetic,
 };
 
+enum class LabelPolicy {
+    all_bodies,
+    selected_only,
+};
+
 struct SpeedPreset {
     const char* name;
     std::size_t steps_per_frame;
@@ -27,11 +32,13 @@ struct ScenarioDefinition {
     SimulationState initial_state;
     std::vector<std::string> stable_ids;
     std::vector<RenderBodyStyle> styles;
+    std::vector<std::vector<Vec3>> reference_paths_m;
     double dt_s{1.0};
     std::vector<SpeedPreset> speed_presets;
     std::size_t default_speed_index{0};
     double trail_sample_interval_s{1.0};
     float default_radius_multiplier{1.0F};
+    LabelPolicy label_policy{LabelPolicy::all_bodies};
 };
 
 ScenarioDefinition make_visual_scenario(

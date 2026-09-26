@@ -46,6 +46,22 @@ void OrbitCamera::set_distance(float distance) {
     distance_ = std::clamp(distance, 2.0F, 120.0F);
 }
 
+void OrbitCamera::set_pose(
+    float yaw_degrees,
+    float pitch_degrees,
+    float distance,
+    const glm::vec3& target) {
+    if (!std::isfinite(yaw_degrees) || !std::isfinite(pitch_degrees) ||
+        !(distance > 0.0F) || !std::isfinite(distance) ||
+        !std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z)) {
+        throw std::invalid_argument("camera pose must be finite with positive distance");
+    }
+    yaw_degrees_ = yaw_degrees;
+    pitch_degrees_ = std::clamp(pitch_degrees, -85.0F, 85.0F);
+    distance_ = std::clamp(distance, 2.0F, 120.0F);
+    target_ = target;
+}
+
 void OrbitCamera::approach_target(const glm::vec3& target, float fraction) {
     if (!(fraction > 0.0F) || fraction > 1.0F || !std::isfinite(fraction) ||
         !std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z)) {
