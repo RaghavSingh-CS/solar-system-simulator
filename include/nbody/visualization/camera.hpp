@@ -12,12 +12,15 @@ public:
     void set_aspect_ratio(float aspect_ratio);
     void orbit(float delta_x, float delta_y);
     void dolly(float amount);
+    void set_distance(float distance);
+    void approach_target(const glm::vec3& target, float fraction);
     void reset();
 
     float aspect_ratio() const noexcept;
     float distance() const noexcept;
     float yaw_degrees() const noexcept;
     float pitch_degrees() const noexcept;
+    const glm::vec3& target() const noexcept;
     glm::vec3 position() const;
     glm::mat4 view_matrix() const;
     glm::mat4 projection_matrix() const;

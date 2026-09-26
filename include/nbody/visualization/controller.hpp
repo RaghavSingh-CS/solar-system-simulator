@@ -41,6 +41,10 @@ public:
     void toggle_paused() noexcept;
     void set_steps_per_frame(std::size_t steps);
     void select_backend(BackendKind backend, int openmp_threads = 1);
+    void replace_scenario(
+        SimulationState initial_state,
+        double dt_s,
+        std::size_t steps_per_frame);
     void advance_frame();
     void reset();
 

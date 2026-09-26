@@ -1,49 +1,59 @@
-#include "nbody/scenarios.hpp"
 #include "nbody/visualization/camera.hpp"
+#include "nbody/visualization/conservation.hpp"
 #include "nbody/visualization/controller.hpp"
 #include "nbody/visualization/render_space.hpp"
+#include "nbody/visualization/scenario.hpp"
+#include "nbody/visualization/trails.hpp"
 #include "renderer.hpp"
 
 #include <glad/gl.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+
+#include <glm/vec4.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
 
+using nbody::visualization::BackendKind;
+using nbody::visualization::ScenarioKind;
+
 struct Options {
-    std::string scenario{"synthetic32"};
+    ScenarioKind scenario{ScenarioKind::solar_system};
     std::string backend{"sequential"};
     std::size_t bodies{32};
     std::uint64_t seed{24301};
-    double dt_s{10.0};
-    std::size_t steps_per_frame{256};
     int openmp_threads{4};
-    int width{1280};
-    int height{720};
+    int width{1440};
+    int height{900};
 };
 
 void print_usage(const char* program) {
-    std::cout
-        << "Usage: " << program << " [options]\n"
-        << "  --scenario synthetic32|analytic   Deterministic fixture (default synthetic32)\n"
-        << "  --backend sequential|openmp|cuda  Manual backend request; CUDA is unavailable in Stage 6A\n"
-        << "  --threads N                        OpenMP threads (default 4)\n"
-        << "  --bodies N                         Synthetic body count (default 32)\n"
-        << "  --seed N                           Synthetic seed (default 24301)\n"
-        << "  --dt SECONDS                       Fixed physical timestep (default 10)\n"
-        << "  --steps-per-frame N                Fixed steps per rendered frame (default 256)\n"
-        << "  --width PIXELS --height PIXELS     Initial window size\n";
+    std::cout << "Usage: " << program << " [options]\n"
+              << "  --scenario solar|synthetic        Default: solar\n"
+              << "  --backend sequential|openmp|cuda  CUDA reports unavailable in Stage 6B\n"
+              << "  --threads N                        OpenMP threads (default 4)\n"
+              << "  --bodies N                         Synthetic body count (default 32)\n"
+              << "  --seed N                           Synthetic seed (default 24301)\n"
+              << "  --width PIXELS --height PIXELS     Initial window size\n";
 }
 
 Options parse_options(int argc, char** argv) {
@@ -59,7 +69,13 @@ Options parse_options(int argc, char** argv) {
         }
         const std::string value = argv[++index];
         if (argument == "--scenario") {
-            options.scenario = value;
+            if (value == "solar") {
+                options.scenario = ScenarioKind::solar_system;
+            } else if (value == "synthetic") {
+                options.scenario = ScenarioKind::synthetic;
+            } else {
+                throw std::invalid_argument("scenario must be solar or synthetic");
+            }
         } else if (argument == "--backend") {
             options.backend = value;
         } else if (argument == "--threads") {
@@ -68,10 +84,6 @@ Options parse_options(int argc, char** argv) {
             options.bodies = std::stoull(value);
         } else if (argument == "--seed") {
             options.seed = std::stoull(value);
-        } else if (argument == "--dt") {
-            options.dt_s = std::stod(value);
-        } else if (argument == "--steps-per-frame") {
-            options.steps_per_frame = std::stoull(value);
         } else if (argument == "--width") {
             options.width = std::stoi(value);
         } else if (argument == "--height") {
@@ -80,22 +92,19 @@ Options parse_options(int argc, char** argv) {
             throw std::invalid_argument("unknown option: " + argument);
         }
     }
-    if (options.scenario != "synthetic32" && options.scenario != "analytic") {
-        throw std::invalid_argument("scenario must be synthetic32 or analytic");
-    }
     if (options.backend != "sequential" && options.backend != "openmp" &&
         options.backend != "cuda") {
         throw std::invalid_argument("backend must be sequential, openmp, or cuda");
     }
     if (options.backend == "cuda") {
         throw std::runtime_error(
-            "CUDA visualization is unavailable in Stage 6A; choose sequential or openmp. "
-            "No automatic backend selector is implemented.");
+            "CUDA visualization is unavailable in Stage 6B; choose sequential or openmp. "
+            "Auto awaits Stage 5 calibration and is not operational.");
     }
-    if (options.bodies < 2 || options.steps_per_frame == 0 || options.openmp_threads <= 0 ||
-        !(options.dt_s > 0.0) || options.width <= 0 || options.height <= 0) {
+    if (options.bodies < 2 || options.openmp_threads <= 0 ||
+        options.width <= 0 || options.height <= 0) {
         throw std::invalid_argument(
-            "bodies >= 2, positive dt/steps/threads, and positive window dimensions are required");
+            "bodies >= 2, positive threads, and positive window dimensions are required");
     }
     return options;
 }
@@ -127,68 +136,167 @@ struct WindowDeleter {
     }
 };
 
+class ImGuiRuntime {
+public:
+    explicit ImGuiRuntime(GLFWwindow* window) {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGui::GetIO().IniFilename = nullptr;
+        ImGui::StyleColorsDark();
+        auto& style = ImGui::GetStyle();
+        style.WindowRounding = 6.0F;
+        style.FrameRounding = 4.0F;
+        style.WindowPadding = {12.0F, 10.0F};
+        if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
+            ImGui::DestroyContext();
+            throw std::runtime_error("Dear ImGui GLFW backend initialization failed");
+        }
+        if (!ImGui_ImplOpenGL3_Init("#version 330 core")) {
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+            throw std::runtime_error("Dear ImGui OpenGL3 backend initialization failed");
+        }
+        initialized_ = true;
+    }
+    ~ImGuiRuntime() {
+        if (initialized_) {
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+        }
+    }
+    ImGuiRuntime(const ImGuiRuntime&) = delete;
+    ImGuiRuntime& operator=(const ImGuiRuntime&) = delete;
+
+private:
+    bool initialized_{false};
+};
+
+struct ApplicationModel {
+    nbody::visualization::ScenarioDefinition scenario;
+    nbody::visualization::SimulationController controller;
+    nbody::visualization::RenderSpaceTransform render_space;
+    nbody::visualization::ConservationTracker conservation;
+    nbody::visualization::TrailHistory trails;
+    std::size_t speed_index{0};
+    std::size_t selected_body{0};
+    std::optional<std::size_t> focused_body;
+    bool show_trails{true};
+    bool show_labels{true};
+
+    ApplicationModel(const Options& options, BackendKind backend)
+        : scenario(nbody::visualization::make_visual_scenario(
+              options.scenario, options.bodies, options.seed)),
+          controller(
+              scenario.initial_state,
+              {scenario.dt_s,
+               scenario.speed_presets[scenario.default_speed_index].steps_per_frame,
+               backend,
+               options.openmp_threads}),
+          render_space(
+              scenario.initial_state,
+              scenario.styles,
+              9.0F,
+              scenario.default_radius_multiplier),
+          conservation(scenario.initial_state),
+          trails(scenario.initial_state, 768, scenario.trail_sample_interval_s),
+          speed_index(scenario.default_speed_index),
+          selected_body(scenario.kind == ScenarioKind::solar_system ? 3U : 0U) {}
+
+    void switch_scenario(ScenarioKind kind, std::size_t bodies, std::uint64_t seed) {
+        auto next = nbody::visualization::make_visual_scenario(kind, bodies, seed);
+        const std::size_t next_speed = next.default_speed_index;
+        controller.replace_scenario(
+            next.initial_state, next.dt_s, next.speed_presets[next_speed].steps_per_frame);
+        scenario = std::move(next);
+        render_space = nbody::visualization::RenderSpaceTransform(
+            scenario.initial_state, scenario.styles, 9.0F, scenario.default_radius_multiplier);
+        conservation.reset(controller.state());
+        trails = nbody::visualization::TrailHistory(
+            controller.state(), 768, scenario.trail_sample_interval_s);
+        speed_index = next_speed;
+        selected_body = scenario.kind == ScenarioKind::solar_system ? 3U : 0U;
+        focused_body.reset();
+    }
+
+    void reset() {
+        controller.reset();
+        conservation.reset(controller.state());
+        trails.reset(controller.state());
+    }
+};
+
 struct InteractionState {
     nbody::visualization::OrbitCamera* camera{nullptr};
-    nbody::visualization::SimulationController* controller{nullptr};
+    ApplicationModel* application{nullptr};
     int preferred_openmp_threads{1};
     bool dragging{false};
     double last_x{0.0};
     double last_y{0.0};
+    double drag_distance{0.0};
+    bool pending_selection{false};
+    double selection_x{0.0};
+    double selection_y{0.0};
 };
 
-InteractionState& interaction(GLFWwindow* window) {
-    auto* state = static_cast<InteractionState*>(glfwGetWindowUserPointer(window));
-    if (state == nullptr) {
-        throw std::runtime_error("window interaction state is unavailable");
-    }
-    return *state;
+InteractionState* interaction(GLFWwindow* window) noexcept {
+    return static_cast<InteractionState*>(glfwGetWindowUserPointer(window));
+}
+
+bool wants_keyboard() {
+    return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard;
+}
+
+bool wants_mouse() {
+    return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
 }
 
 void log_backend(const nbody::visualization::SimulationController& controller) {
     std::cout << "active_backend=" << controller.backend_name();
-    if (controller.backend_kind() == nbody::visualization::BackendKind::openmp) {
+    if (controller.backend_kind() == BackendKind::openmp) {
         std::cout << " threads=" << controller.openmp_threads();
     }
     std::cout << '\n';
 }
 
 void key_callback(GLFWwindow* window, int key, int, int action, int) {
-    if (action != GLFW_PRESS && action != GLFW_REPEAT) {
+    if ((action != GLFW_PRESS && action != GLFW_REPEAT) || wants_keyboard()) {
+        return;
+    }
+    auto* input = interaction(window);
+    if (input == nullptr) {
         return;
     }
     try {
-        auto& state = interaction(window);
+        auto& app = *input->application;
         const bool initial_press = action == GLFW_PRESS;
         if (key == GLFW_KEY_ESCAPE && initial_press) {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         } else if (key == GLFW_KEY_SPACE && initial_press) {
-            state.controller->toggle_paused();
-            std::cout << (state.controller->paused() ? "simulation_paused\n" : "simulation_resumed\n");
+            app.controller.toggle_paused();
         } else if (key == GLFW_KEY_R && initial_press) {
-            state.controller->reset();
-            std::cout << "scenario_reset\n";
+            app.reset();
         } else if (key == GLFW_KEY_C && initial_press) {
-            state.camera->reset();
+            app.focused_body.reset();
+            input->camera->reset();
         } else if (key == GLFW_KEY_1 && initial_press) {
-            state.controller->select_backend(nbody::visualization::BackendKind::sequential);
-            log_backend(*state.controller);
+            app.controller.select_backend(BackendKind::sequential);
+            log_backend(app.controller);
         } else if (key == GLFW_KEY_2 && initial_press) {
-            state.controller->select_backend(
-                nbody::visualization::BackendKind::openmp,
-                state.preferred_openmp_threads);
-            log_backend(*state.controller);
+            app.controller.select_backend(BackendKind::openmp, input->preferred_openmp_threads);
+            log_backend(app.controller);
         } else if (key == GLFW_KEY_A) {
-            state.camera->orbit(-8.0F, 0.0F);
+            input->camera->orbit(-8.0F, 0.0F);
         } else if (key == GLFW_KEY_D) {
-            state.camera->orbit(8.0F, 0.0F);
+            input->camera->orbit(8.0F, 0.0F);
         } else if (key == GLFW_KEY_UP) {
-            state.camera->orbit(0.0F, -8.0F);
+            input->camera->orbit(0.0F, -8.0F);
         } else if (key == GLFW_KEY_DOWN) {
-            state.camera->orbit(0.0F, 8.0F);
+            input->camera->orbit(0.0F, 8.0F);
         } else if (key == GLFW_KEY_W) {
-            state.camera->dolly(1.0F);
+            input->camera->dolly(1.0F);
         } else if (key == GLFW_KEY_S) {
-            state.camera->dolly(-1.0F);
+            input->camera->dolly(-1.0F);
         }
     } catch (const std::exception& error) {
         std::cerr << "input error: " << error.what() << '\n';
@@ -199,43 +307,287 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int) {
     if (button != GLFW_MOUSE_BUTTON_LEFT) {
         return;
     }
-    auto& state = interaction(window);
-    state.dragging = action == GLFW_PRESS;
-    if (state.dragging) {
-        glfwGetCursorPos(window, &state.last_x, &state.last_y);
+    auto* input = interaction(window);
+    if (input == nullptr || wants_mouse()) {
+        return;
+    }
+    if (action == GLFW_PRESS) {
+        input->dragging = true;
+        input->drag_distance = 0.0;
+        glfwGetCursorPos(window, &input->last_x, &input->last_y);
+    } else if (action == GLFW_RELEASE && input->dragging) {
+        input->dragging = false;
+        if (input->drag_distance < 5.0) {
+            input->pending_selection = true;
+            glfwGetCursorPos(window, &input->selection_x, &input->selection_y);
+        }
     }
 }
 
 void cursor_callback(GLFWwindow* window, double x, double y) {
-    auto& state = interaction(window);
-    if (state.dragging) {
-        state.camera->orbit(
-            static_cast<float>(x - state.last_x),
-            static_cast<float>(y - state.last_y));
+    auto* input = interaction(window);
+    if (input == nullptr || !input->dragging || wants_mouse()) {
+        return;
     }
-    state.last_x = x;
-    state.last_y = y;
+    const double delta_x = x - input->last_x;
+    const double delta_y = y - input->last_y;
+    input->drag_distance += std::hypot(delta_x, delta_y);
+    input->camera->orbit(static_cast<float>(delta_x), static_cast<float>(delta_y));
+    input->last_x = x;
+    input->last_y = y;
 }
 
 void scroll_callback(GLFWwindow* window, double, double y_offset) {
-    interaction(window).camera->dolly(static_cast<float>(y_offset));
+    auto* input = interaction(window);
+    if (input != nullptr && !wants_mouse()) {
+        input->camera->dolly(static_cast<float>(y_offset));
+    }
 }
 
-std::string window_title(
-    const Options& options,
-    const nbody::visualization::SimulationController& controller) {
-    std::ostringstream title;
-    title << "N-body Visualizer | "
-          << (options.scenario == "synthetic32" ? "synthetic fixture (not Solar System)" :
-                                                  "analytic two-body fixture")
-          << " | " << controller.backend_name();
-    if (controller.backend_kind() == nbody::visualization::BackendKind::openmp) {
-        title << '-' << controller.openmp_threads();
+std::optional<glm::vec2> project_to_screen(
+    const glm::vec3& position,
+    const nbody::visualization::OrbitCamera& camera,
+    const ImVec2& display_size) {
+    const glm::vec4 clip = camera.projection_matrix() * camera.view_matrix() *
+        glm::vec4(position, 1.0F);
+    if (clip.w <= 0.0F) {
+        return std::nullopt;
     }
-    title << " | " << (controller.paused() ? "PAUSED" : "RUNNING")
-          << " | t=" << std::fixed << std::setprecision(0) << controller.state().time_s << " s"
-          << " | " << controller.steps_per_frame() << " steps/frame";
-    return title.str();
+    const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+    if (ndc.z < -1.0F || ndc.z > 1.0F) {
+        return std::nullopt;
+    }
+    return glm::vec2(
+        (ndc.x * 0.5F + 0.5F) * display_size.x,
+        (-ndc.y * 0.5F + 0.5F) * display_size.y);
+}
+
+void select_nearest_body(
+    ApplicationModel& app,
+    const std::vector<nbody::visualization::RenderBody>& bodies,
+    const nbody::visualization::OrbitCamera& camera,
+    double mouse_x,
+    double mouse_y) {
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    float best_distance = 22.0F;
+    std::optional<std::size_t> best;
+    for (std::size_t index = 0; index < bodies.size(); ++index) {
+        const auto screen = project_to_screen(bodies[index].position, camera, display);
+        if (!screen) {
+            continue;
+        }
+        const float distance = std::hypot(
+            screen->x - static_cast<float>(mouse_x),
+            screen->y - static_cast<float>(mouse_y));
+        if (distance < best_distance) {
+            best_distance = distance;
+            best = index;
+        }
+    }
+    if (best) {
+        app.selected_body = *best;
+    }
+}
+
+void update_render_trails(
+    const ApplicationModel& app,
+    std::vector<nbody::visualization::RenderTrail>& output) {
+    if (!app.show_trails) {
+        output.clear();
+        return;
+    }
+    const auto& physical = app.trails.positions();
+    output.resize(physical.size());
+    for (std::size_t index = 0; index < physical.size(); ++index) {
+        auto& trail = output[index];
+        trail.color = app.scenario.styles[index].color * 0.72F;
+        trail.points.clear();
+        trail.points.reserve(physical[index].size());
+        for (const auto& point : physical[index]) {
+            trail.points.push_back(app.render_space.to_render_position(point));
+        }
+    }
+}
+
+std::string human_time(double seconds) {
+    std::ostringstream text;
+    const double days = seconds / 86400.0;
+    if (days < 2.0) {
+        text << std::fixed << std::setprecision(1) << seconds / 3600.0 << " hours";
+    } else if (days < 730.5) {
+        text << std::fixed << std::setprecision(2) << days << " days";
+    } else {
+        text << std::fixed << std::setprecision(3) << days / 365.25 << " years";
+    }
+    return text.str();
+}
+
+struct UiActions {
+    std::optional<ScenarioKind> scenario;
+    bool reset{false};
+    bool overview{false};
+    bool frame_focus{false};
+};
+
+UiActions draw_control_panel(
+    ApplicationModel& app,
+    int& preferred_openmp_threads,
+    std::size_t synthetic_bodies,
+    std::uint64_t synthetic_seed) {
+    UiActions actions;
+    ImGui::SetNextWindowPos({16.0F, 16.0F}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({390.0F, 820.0F}, ImGuiCond_FirstUseEver);
+    ImGui::Begin("Solar System Control", nullptr, ImGuiWindowFlags_NoCollapse);
+
+    ImGui::TextUnformatted("SIMULATION");
+    int scenario_index = app.scenario.kind == ScenarioKind::solar_system ? 0 : 1;
+    const char* scenarios[] = {"Solar System", "Synthetic N-body"};
+    if (ImGui::Combo("Scenario", &scenario_index, scenarios, 2)) {
+        actions.scenario = scenario_index == 0 ? ScenarioKind::solar_system : ScenarioKind::synthetic;
+    }
+    ImGui::TextWrapped("%s", app.scenario.provenance.c_str());
+    if (ImGui::Button(app.controller.paused() ? "Resume" : "Pause")) {
+        app.controller.toggle_paused();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) {
+        actions.reset = true;
+    }
+    ImGui::Text("State: %s", app.controller.paused() ? "PAUSED" : "RUNNING");
+    ImGui::Text("Elapsed: %s", human_time(app.controller.state().time_s).c_str());
+
+    std::vector<const char*> speed_names;
+    for (const auto& preset : app.scenario.speed_presets) {
+        speed_names.push_back(preset.name);
+    }
+    int speed_index = static_cast<int>(app.speed_index);
+    if (ImGui::Combo("Simulation speed", &speed_index, speed_names.data(),
+                     static_cast<int>(speed_names.size()))) {
+        app.speed_index = static_cast<std::size_t>(speed_index);
+        app.controller.set_steps_per_frame(
+            app.scenario.speed_presets[app.speed_index].steps_per_frame);
+    }
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("COMPUTE");
+    if (ImGui::RadioButton("Sequential", app.controller.backend_kind() == BackendKind::sequential)) {
+        app.controller.select_backend(BackendKind::sequential);
+    }
+    const bool openmp_available = nbody::visualization::SimulationController::openmp_available();
+    ImGui::BeginDisabled(!openmp_available);
+    if (ImGui::RadioButton("OpenMP", app.controller.backend_kind() == BackendKind::openmp)) {
+        app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+    }
+    const int hardware_threads = static_cast<int>(std::max(1U, std::thread::hardware_concurrency()));
+    const int maximum_threads = std::min(64, hardware_threads);
+    if (ImGui::SliderInt("OpenMP threads", &preferred_openmp_threads, 1, maximum_threads) &&
+        app.controller.backend_kind() == BackendKind::openmp) {
+        app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+    }
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("CUDA - Not integrated in Stage 6B");
+    ImGui::TextDisabled("Auto - Awaiting Stage 5 calibration");
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("SELECTED BODY");
+    std::vector<const char*> body_names;
+    for (const auto& body : app.controller.state().bodies) {
+        body_names.push_back(body.name.c_str());
+    }
+    int selected = static_cast<int>(app.selected_body);
+    if (ImGui::Combo("Body", &selected, body_names.data(), static_cast<int>(body_names.size()))) {
+        app.selected_body = static_cast<std::size_t>(selected);
+    }
+    const auto& body = app.controller.state().bodies[app.selected_body];
+    const auto& style = app.scenario.styles[app.selected_body];
+    ImGui::Text("Mass: %.6e kg", body.mass_kg);
+    if (style.physical_radius_m > 0.0) {
+        ImGui::Text("Mean radius: %.1f km", style.physical_radius_m / 1000.0);
+    } else {
+        ImGui::TextUnformatted("Physical radius: not defined for fixture");
+    }
+    ImGui::Text("Position: (%.3e, %.3e, %.3e) m",
+                body.position_m.x, body.position_m.y, body.position_m.z);
+    ImGui::Text("Velocity: (%.3e, %.3e, %.3e) m/s",
+                body.velocity_m_s.x, body.velocity_m_s.y, body.velocity_m_s.z);
+    ImGui::Text("Speed: %.3f km/s", nbody::norm(body.velocity_m_s) / 1000.0);
+    ImGui::Text("Distance from Sun/body 0: %.6f AU",
+                nbody::norm(body.position_m - app.controller.state().bodies[0].position_m) /
+                    149597870700.0);
+    if (ImGui::Button("Focus selected")) {
+        app.focused_body = app.selected_body;
+        actions.frame_focus = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Focus Sun/body 0")) {
+        app.focused_body = 0;
+        actions.frame_focus = true;
+    }
+    if (ImGui::Button("Return to overview")) {
+        actions.overview = true;
+    }
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("NUMERICAL DIAGNOSTICS");
+    const auto& drift = app.conservation.drift();
+    ImGui::Text("Energy relative drift: %.6e", drift.energy_relative);
+    ImGui::Text("Energy maximum:        %.6e", drift.maximum_energy_relative);
+    ImGui::Text("Angular relative drift: %.6e", drift.angular_momentum_relative);
+    ImGui::Text("Angular maximum:        %.6e", drift.maximum_angular_momentum_relative);
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("VIEW");
+    ImGui::Checkbox("Orbital trails", &app.show_trails);
+    ImGui::Checkbox("Body labels", &app.show_labels);
+    float radius_multiplier = app.render_space.radius_multiplier();
+    if (ImGui::SliderFloat("Visual radius x", &radius_multiplier, 1.0F, 500.0F, "%.1f",
+                           ImGuiSliderFlags_Logarithmic)) {
+        app.render_space.set_radius_multiplier(radius_multiplier);
+    }
+    int trail_capacity = static_cast<int>(app.trails.capacity());
+    if (ImGui::SliderInt("Trail points", &trail_capacity, 64, 2048)) {
+        app.trails.set_capacity(static_cast<std::size_t>(trail_capacity));
+    }
+    ImGui::TextWrapped(
+        "Body sizes are exaggerated for readability; minimum render radius %.3f. Physics is unchanged.",
+        app.render_space.minimum_render_radius());
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("VIEWER DIAGNOSTICS - NOT BENCHMARK EVIDENCE");
+    const float fps = ImGui::GetIO().Framerate;
+    ImGui::Text("Render: %.1f FPS (%.2f ms/frame)", fps, fps > 0.0F ? 1000.0F / fps : 0.0F);
+    ImGui::Text("Fixed dt: %.2f hours", app.controller.dt_s() / 3600.0);
+    ImGui::Text("Physics steps/render: %zu", app.controller.steps_per_frame());
+    ImGui::Text("Synthetic request: N=%zu seed=%llu", synthetic_bodies,
+                static_cast<unsigned long long>(synthetic_seed));
+
+    ImGui::End();
+    return actions;
+}
+
+void draw_labels(
+    const ApplicationModel& app,
+    const std::vector<nbody::visualization::RenderBody>& bodies,
+    const nbody::visualization::OrbitCamera& camera) {
+    if (!app.show_labels) {
+        return;
+    }
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    auto* draw_list = ImGui::GetForegroundDrawList();
+    for (std::size_t index = 0; index < bodies.size(); ++index) {
+        const auto screen = project_to_screen(bodies[index].position, camera, display);
+        if (!screen || screen->x < 0.0F || screen->x > display.x ||
+            screen->y < 0.0F || screen->y > display.y) {
+            continue;
+        }
+        const ImVec2 position{screen->x + 8.0F, screen->y - 8.0F};
+        const char* label = app.controller.state().bodies[index].name.c_str();
+        draw_list->AddText({position.x + 1.0F, position.y + 1.0F}, IM_COL32(0, 0, 0, 220), label);
+        const ImU32 color = index == app.selected_body
+            ? IM_COL32(255, 230, 110, 255)
+            : IM_COL32(225, 232, 245, 240);
+        draw_list->AddText(position, color, label);
+    }
 }
 
 }  // namespace
@@ -243,21 +595,9 @@ std::string window_title(
 int main(int argc, char** argv) {
     try {
         const Options options = parse_options(argc, argv);
-        nbody::SimulationState initial_state;
-        if (options.scenario == "analytic") {
-            initial_state = nbody::make_analytic_circular_two_body().initial_state;
-        } else {
-            initial_state = nbody::make_seeded_synthetic_system(options.bodies, options.seed);
-        }
-
-        const auto backend = options.backend == "openmp"
-            ? nbody::visualization::BackendKind::openmp
-            : nbody::visualization::BackendKind::sequential;
-        nbody::visualization::SimulationController controller(
-            std::move(initial_state),
-            {options.dt_s, options.steps_per_frame, backend, options.openmp_threads});
-        nbody::visualization::RenderSpaceTransform render_space(controller.initial_state());
-        nbody::visualization::OrbitCamera camera;
+        const auto backend = options.backend == "openmp" ? BackendKind::openmp : BackendKind::sequential;
+        ApplicationModel app(options, backend);
+        nbody::visualization::OrbitCamera camera(35.0F, 28.0F, 22.0F);
 
         GlfwRuntime glfw_runtime;
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -265,47 +605,45 @@ int main(int argc, char** argv) {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_SAMPLES, 4);
         std::unique_ptr<GLFWwindow, WindowDeleter> window(glfwCreateWindow(
-            options.width, options.height, "N-body Visualizer", nullptr, nullptr));
+            options.width, options.height, "N-body Solar System Simulator", nullptr, nullptr));
         if (!window) {
             throw std::runtime_error(
                 "OpenGL window/context creation failed; verify OpenGL 3.3 support and desktop access");
         }
         glfwMakeContextCurrent(window.get());
         glfwSwapInterval(1);
-        const int loaded_version = gladLoadGL(
-            reinterpret_cast<GLADloadfunc>(glfwGetProcAddress));
+        const int loaded_version = gladLoadGL(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress));
         if (loaded_version == 0) {
             throw std::runtime_error("OpenGL loader initialization failed after context creation");
         }
 
-        const auto gl_string = [](unsigned int name) {
-            const auto* value = glGetString(name);
-            return value == nullptr ? "unavailable" : reinterpret_cast<const char*>(value);
-        };
-        std::cout << "scenario=" << options.scenario
-                  << " provenance=deterministic_fixture_not_solar_system\n"
-                  << "fixed_dt_s=" << controller.dt_s()
-                  << " steps_per_rendered_frame=" << controller.steps_per_frame() << '\n'
-                  << "render_position_scale=" << render_space.position_scale()
-                  << " render_radius_exaggeration=" << render_space.radius_exaggeration() << '\n'
-                  << "OpenGL vendor=" << gl_string(GL_VENDOR)
-                  << " renderer=" << gl_string(GL_RENDERER)
-                  << " version=" << gl_string(GL_VERSION) << '\n'
-                  << "controls: Space pause/resume, R reset, 1 sequential, 2 OpenMP, "
-                     "left-drag/A-D/arrows orbit, wheel/W-S zoom, C reset camera, Esc exit\n";
-        log_backend(controller);
-
-        InteractionState input{&camera, &controller, options.openmp_threads};
+        InteractionState input{&camera, &app, options.openmp_threads};
         glfwSetWindowUserPointer(window.get(), &input);
         glfwSetKeyCallback(window.get(), key_callback);
         glfwSetMouseButtonCallback(window.get(), mouse_button_callback);
         glfwSetCursorPosCallback(window.get(), cursor_callback);
         glfwSetScrollCallback(window.get(), scroll_callback);
-
+        ImGuiRuntime imgui(window.get());
         nbody::visualization::BodyRenderer renderer;
+
+        const auto gl_string = [](unsigned int name) {
+            const auto* value = glGetString(name);
+            return value == nullptr ? "unavailable" : reinterpret_cast<const char*>(value);
+        };
+        std::cout << "scenario=" << app.scenario.name << '\n'
+                  << "provenance=" << app.scenario.provenance << '\n'
+                  << "fixed_dt_s=" << app.controller.dt_s() << '\n'
+                  << "OpenGL vendor=" << gl_string(GL_VENDOR)
+                  << " renderer=" << gl_string(GL_RENDERER)
+                  << " version=" << gl_string(GL_VERSION) << '\n'
+                  << "controls: ImGui panel; Space pause/resume, R reset, C overview, "
+                     "left-click select, left-drag orbit, wheel zoom, Esc exit\n";
+        log_backend(app.controller);
+
         std::vector<nbody::visualization::RenderBody> snapshot;
-        snapshot.reserve(controller.state().bodies.size());
-        double last_title_update = -1.0;
+        std::vector<nbody::visualization::RenderTrail> render_trails;
+        snapshot.reserve(app.controller.state().bodies.size());
+
         while (glfwWindowShouldClose(window.get()) == GLFW_FALSE) {
             glfwPollEvents();
             int framebuffer_width = 0;
@@ -315,18 +653,55 @@ int main(int argc, char** argv) {
                 glfwWaitEventsTimeout(0.05);
                 continue;
             }
+
             camera.set_aspect_ratio(
                 static_cast<float>(framebuffer_width) / static_cast<float>(framebuffer_height));
-            controller.advance_frame();
-            render_space.update_snapshot(controller.state(), snapshot);
-            renderer.render(snapshot, camera, framebuffer_width, framebuffer_height);
-            glfwSwapBuffers(window.get());
-
-            const double now = glfwGetTime();
-            if (now - last_title_update >= 0.25) {
-                glfwSetWindowTitle(window.get(), window_title(options, controller).c_str());
-                last_title_update = now;
+            app.controller.advance_frame();
+            app.trails.sample(app.controller.state());
+            app.conservation.update(app.controller.state());
+            app.render_space.update_snapshot(app.controller.state(), snapshot);
+            if (app.focused_body && *app.focused_body < snapshot.size()) {
+                camera.approach_target(snapshot[*app.focused_body].position, 0.14F);
             }
+            update_render_trails(app, render_trails);
+
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+            if (input.pending_selection && !ImGui::GetIO().WantCaptureMouse) {
+                select_nearest_body(app, snapshot, camera, input.selection_x, input.selection_y);
+            }
+            input.pending_selection = false;
+
+            const UiActions actions = draw_control_panel(
+                app, input.preferred_openmp_threads, options.bodies, options.seed);
+            bool state_replaced = false;
+            if (actions.reset) {
+                app.reset();
+                state_replaced = true;
+            }
+            if (actions.overview) {
+                app.focused_body.reset();
+                camera.reset();
+            }
+            if (actions.frame_focus) {
+                camera.set_distance(4.5F);
+            }
+            if (actions.scenario) {
+                app.switch_scenario(*actions.scenario, options.bodies, options.seed);
+                camera.reset();
+                state_replaced = true;
+            }
+            if (state_replaced) {
+                app.render_space.update_snapshot(app.controller.state(), snapshot);
+                update_render_trails(app, render_trails);
+            }
+
+            draw_labels(app, snapshot, camera);
+            ImGui::Render();
+            renderer.render(snapshot, render_trails, camera, framebuffer_width, framebuffer_height);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            glfwSwapBuffers(window.get());
         }
         return 0;
     } catch (const std::exception& error) {

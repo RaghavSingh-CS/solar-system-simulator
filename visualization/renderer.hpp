@@ -9,6 +9,11 @@
 
 namespace nbody::visualization {
 
+struct RenderTrail {
+    std::vector<glm::vec3> points;
+    glm::vec3 color{1.0F};
+};
+
 class BodyRenderer {
 public:
     BodyRenderer();
@@ -20,6 +25,7 @@ public:
 
     void render(
         const std::vector<RenderBody>& bodies,
+        const std::vector<RenderTrail>& trails,
         const OrbitCamera& camera,
         int framebuffer_width,
         int framebuffer_height) const;
@@ -31,11 +37,19 @@ private:
     unsigned int vertex_array_{0};
     unsigned int vertex_buffer_{0};
     unsigned int index_buffer_{0};
+    unsigned int line_program_{0};
+    unsigned int line_vertex_array_{0};
+    unsigned int line_vertex_buffer_{0};
     int index_count_{0};
     int model_location_{-1};
     int view_location_{-1};
     int projection_location_{-1};
     int color_location_{-1};
+    int sun_position_location_{-1};
+    int emissive_location_{-1};
+    int line_view_location_{-1};
+    int line_projection_location_{-1};
+    int line_color_location_{-1};
 };
 
 }  // namespace nbody::visualization

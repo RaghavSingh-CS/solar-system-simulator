@@ -23,28 +23,55 @@ uniform mat4 view;
 uniform mat4 projection;
 
 out vec3 world_normal;
+out vec3 world_position;
 
 void main() {
+    world_position = vec3(model * vec4(in_position, 1.0));
     world_normal = mat3(transpose(inverse(model))) * in_normal;
-    gl_Position = projection * view * model * vec4(in_position, 1.0);
+    gl_Position = projection * view * vec4(world_position, 1.0);
 }
 )glsl";
 
 constexpr const char* fragment_shader_source = R"glsl(
 #version 330 core
 in vec3 world_normal;
+in vec3 world_position;
 
 uniform vec3 body_color;
+uniform vec3 sun_position;
+uniform int emissive;
 
 out vec4 fragment_color;
 
 void main() {
+    if (emissive != 0) {
+        fragment_color = vec4(body_color, 1.0);
+        return;
+    }
     vec3 normal = normalize(world_normal);
-    vec3 light_direction = normalize(vec3(0.45, 0.75, 0.35));
+    vec3 light_direction = normalize(sun_position - world_position);
     float diffuse = max(dot(normal, light_direction), 0.0);
-    float rim = pow(1.0 - max(normal.z, 0.0), 2.0) * 0.12;
-    vec3 color = body_color * (0.22 + 0.78 * diffuse) + rim * body_color;
+    vec3 color = body_color * (0.18 + 0.82 * diffuse);
     fragment_color = vec4(color, 1.0);
+}
+)glsl";
+
+constexpr const char* line_vertex_shader_source = R"glsl(
+#version 330 core
+layout(location = 0) in vec3 in_position;
+uniform mat4 view;
+uniform mat4 projection;
+void main() {
+    gl_Position = projection * view * vec4(in_position, 1.0);
+}
+)glsl";
+
+constexpr const char* line_fragment_shader_source = R"glsl(
+#version 330 core
+uniform vec3 trail_color;
+out vec4 fragment_color;
+void main() {
+    fragment_color = vec4(trail_color, 0.58);
 }
 )glsl";
 
@@ -98,6 +125,36 @@ unsigned int create_program() {
     throw std::runtime_error("shader program link failed: " + log);
 }
 
+unsigned int create_line_program() {
+    const unsigned int vertex =
+        compile_shader(GL_VERTEX_SHADER, line_vertex_shader_source, "trail vertex");
+    unsigned int fragment = 0;
+    try {
+        fragment = compile_shader(
+            GL_FRAGMENT_SHADER, line_fragment_shader_source, "trail fragment");
+    } catch (...) {
+        glDeleteShader(vertex);
+        throw;
+    }
+    const unsigned int program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    int linked = 0;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked == GL_TRUE) {
+        return program;
+    }
+    int length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    std::string log(static_cast<std::size_t>(length > 0 ? length : 1), '\0');
+    glGetProgramInfoLog(program, length, nullptr, log.data());
+    glDeleteProgram(program);
+    throw std::runtime_error("trail shader program link failed: " + log);
+}
+
 void make_sphere(std::vector<Vertex>& vertices, std::vector<unsigned int>& indices) {
     constexpr int stacks = 16;
     constexpr int sectors = 24;
@@ -143,6 +200,7 @@ int uniform_location(unsigned int program, const char* name) {
 
 BodyRenderer::BodyRenderer() : program_(create_program()) {
     try {
+        line_program_ = create_line_program();
         std::vector<Vertex> vertices;
         std::vector<unsigned int> indices;
         make_sphere(vertices, indices);
@@ -178,9 +236,24 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
         view_location_ = uniform_location(program_, "view");
         projection_location_ = uniform_location(program_, "projection");
         color_location_ = uniform_location(program_, "body_color");
+        sun_position_location_ = uniform_location(program_, "sun_position");
+        emissive_location_ = uniform_location(program_, "emissive");
+
+        glGenVertexArrays(1, &line_vertex_array_);
+        glGenBuffers(1, &line_vertex_buffer_);
+        glBindVertexArray(line_vertex_array_);
+        glBindBuffer(GL_ARRAY_BUFFER, line_vertex_buffer_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+        glBindVertexArray(0);
+        line_view_location_ = uniform_location(line_program_, "view");
+        line_projection_location_ = uniform_location(line_program_, "projection");
+        line_color_location_ = uniform_location(line_program_, "trail_color");
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glCullFace(GL_BACK);
     } catch (...) {
         release();
@@ -191,6 +264,18 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
 BodyRenderer::~BodyRenderer() { release(); }
 
 void BodyRenderer::release() noexcept {
+    if (line_vertex_buffer_ != 0) {
+        glDeleteBuffers(1, &line_vertex_buffer_);
+        line_vertex_buffer_ = 0;
+    }
+    if (line_vertex_array_ != 0) {
+        glDeleteVertexArrays(1, &line_vertex_array_);
+        line_vertex_array_ = 0;
+    }
+    if (line_program_ != 0) {
+        glDeleteProgram(line_program_);
+        line_program_ = 0;
+    }
     if (index_buffer_ != 0) {
         glDeleteBuffers(1, &index_buffer_);
         index_buffer_ = 0;
@@ -211,6 +296,7 @@ void BodyRenderer::release() noexcept {
 
 void BodyRenderer::render(
     const std::vector<RenderBody>& bodies,
+    const std::vector<RenderTrail>& trails,
     const OrbitCamera& camera,
     int framebuffer_width,
     int framebuffer_height) const {
@@ -220,11 +306,38 @@ void BodyRenderer::render(
     glViewport(0, 0, framebuffer_width, framebuffer_height);
     glClearColor(0.006F, 0.009F, 0.022F, 1.0F);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(program_);
     const glm::mat4 view = camera.view_matrix();
     const glm::mat4 projection = camera.projection_matrix();
+
+    glUseProgram(line_program_);
+    glUniformMatrix4fv(line_view_location_, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(line_projection_location_, 1, GL_FALSE, glm::value_ptr(projection));
+    glBindVertexArray(line_vertex_array_);
+    for (const auto& trail : trails) {
+        if (trail.points.size() < 2) {
+            continue;
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, line_vertex_buffer_);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(trail.points.size() * sizeof(glm::vec3)),
+            trail.points.data(),
+            GL_DYNAMIC_DRAW);
+        glUniform3fv(line_color_location_, 1, glm::value_ptr(trail.color));
+        glDrawArrays(GL_LINE_STRIP, 0, static_cast<int>(trail.points.size()));
+    }
+
+    glUseProgram(program_);
     glUniformMatrix4fv(view_location_, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(projection_location_, 1, GL_FALSE, glm::value_ptr(projection));
+    glm::vec3 sun_position(0.0F);
+    for (const auto& body : bodies) {
+        if (body.emissive) {
+            sun_position = body.position;
+            break;
+        }
+    }
+    glUniform3fv(sun_position_location_, 1, glm::value_ptr(sun_position));
     glBindVertexArray(vertex_array_);
     for (const auto& body : bodies) {
         glm::mat4 model(1.0F);
@@ -232,6 +345,7 @@ void BodyRenderer::render(
         model = glm::scale(model, glm::vec3(body.radius));
         glUniformMatrix4fv(model_location_, 1, GL_FALSE, glm::value_ptr(model));
         glUniform3fv(color_location_, 1, glm::value_ptr(body.color));
+        glUniform1i(emissive_location_, body.emissive ? 1 : 0);
         glDrawElements(GL_TRIANGLES, index_count_, GL_UNSIGNED_INT, nullptr);
     }
     glBindVertexArray(0);

@@ -1,7 +1,11 @@
 #include "nbody/scenarios.hpp"
+#include "nbody/solar_system.hpp"
 #include "nbody/visualization/camera.hpp"
+#include "nbody/visualization/conservation.hpp"
 #include "nbody/visualization/controller.hpp"
 #include "nbody/visualization/render_space.hpp"
+#include "nbody/visualization/scenario.hpp"
+#include "nbody/visualization/trails.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -76,7 +80,7 @@ void test_controller() {
 void test_render_space_is_read_only() {
     const auto state = nbody::make_seeded_synthetic_system(12, 91);
     const auto original = state;
-    nbody::visualization::RenderSpaceTransform transform(state, 8.0F, 1.5F);
+    nbody::visualization::RenderSpaceTransform transform(state, {}, 8.0F, 1.5F);
     std::vector<nbody::visualization::RenderBody> snapshot;
     transform.update_snapshot(state, snapshot);
     require(snapshot.size() == state.bodies.size(), "render snapshot body count differs");
@@ -89,6 +93,67 @@ void test_render_space_is_read_only() {
     require(same_state(original, state), "render-space conversion modified physics state");
 }
 
+void test_scenario_switch_and_diagnostics() {
+    const auto solar = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    const auto synthetic = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::synthetic, 10, 24301);
+    require(solar.initial_state.bodies.size() == 9 && solar.styles.size() == 9,
+            "visual Solar-System definition is incomplete");
+    require(solar.dt_s == nbody::solar_system_recommended_dt_s,
+            "visual Solar-System timestep differs from the declared value");
+
+    nbody::visualization::SimulationController controller(
+        solar.initial_state,
+        {solar.dt_s, 1, nbody::visualization::BackendKind::sequential, 1});
+    controller.replace_scenario(synthetic.initial_state, synthetic.dt_s, 3);
+    require(controller.state().bodies.size() == 10 && controller.state().time_s == 0.0 &&
+                controller.dt_s() == synthetic.dt_s && controller.steps_per_frame() == 3,
+            "scenario replacement did not reset controller state/configuration");
+    controller.advance_frame();
+    controller.reset();
+    require(same_state(synthetic.initial_state, controller.state()),
+            "reset after scenario replacement did not restore the replacement state");
+
+    nbody::visualization::ConservationTracker tracker(solar.initial_state);
+    const auto initial_drift = tracker.update(solar.initial_state);
+    require(initial_drift.energy_relative == 0.0 &&
+                initial_drift.angular_momentum_relative == 0.0,
+            "conservation tracker reference drift is not zero");
+    auto evolved = solar.initial_state;
+    nbody::velocity_verlet_step(evolved, solar.dt_s);
+    const auto evolved_drift = tracker.update(evolved);
+    require(std::isfinite(evolved_drift.energy_relative) &&
+                std::isfinite(evolved_drift.angular_momentum_relative) &&
+                evolved_drift.maximum_energy_relative >= evolved_drift.energy_relative,
+            "conservation tracker produced invalid established drift metrics");
+    tracker.reset(evolved);
+    require(tracker.drift().energy_relative == 0.0 &&
+                tracker.drift().maximum_angular_momentum_relative == 0.0,
+            "conservation reset did not clear current/maximum drift");
+}
+
+void test_trail_boundedness() {
+    auto state = nbody::make_seeded_synthetic_system(4, 7);
+    nbody::visualization::TrailHistory trails(state, 3, 10.0);
+    for (int step = 0; step < 8; ++step) {
+        nbody::velocity_verlet_step(state, 10.0);
+        trails.sample(state);
+    }
+    require(trails.positions().size() == 4, "trail body count differs");
+    for (const auto& trail : trails.positions()) {
+        require(trail.size() == 3, "trail exceeded or failed to fill bounded capacity");
+    }
+    trails.set_capacity(2);
+    for (const auto& trail : trails.positions()) {
+        require(trail.size() == 2, "trail capacity reduction did not trim old samples");
+    }
+    trails.reset(state);
+    for (const auto& trail : trails.positions()) {
+        require(trail.size() == 1, "trail reset did not clear and seed history");
+    }
+}
+
 void test_camera_math() {
     nbody::visualization::OrbitCamera camera;
     camera.set_aspect_ratio(16.0F / 9.0F);
@@ -97,6 +162,8 @@ void test_camera_math() {
     camera.dolly(2.0F);
     require(camera.distance() >= 2.0F && camera.distance() <= 120.0F,
             "camera dolly escaped its safe range");
+    camera.set_distance(4.5F);
+    require(camera.distance() == 4.5F, "camera focus framing distance was not applied");
     require(camera.position() != original_position, "camera controls did not change position");
     const auto view = camera.view_matrix();
     const auto projection = camera.projection_matrix();
@@ -107,6 +174,12 @@ void test_camera_math() {
     }
     camera.reset();
     require(camera.position() == original_position, "camera reset did not restore its framing");
+    camera.approach_target({4.0F, -2.0F, 1.0F}, 0.25F);
+    require(camera.target() == glm::vec3(1.0F, -0.5F, 0.25F),
+            "camera focus target did not move smoothly by the requested fraction");
+    camera.reset();
+    require(camera.target() == glm::vec3(0.0F),
+            "camera overview reset did not restore the origin target");
 }
 
 }  // namespace
@@ -115,6 +188,8 @@ int main() {
     try {
         test_controller();
         test_render_space_is_read_only();
+        test_scenario_switch_and_diagnostics();
+        test_trail_boundedness();
         test_camera_math();
         std::cout << "all visualization model tests passed\n";
         return 0;

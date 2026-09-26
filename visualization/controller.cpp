@@ -69,6 +69,21 @@ void SimulationController::select_backend(BackendKind backend, int openmp_thread
     configure_backend(backend, openmp_threads);
 }
 
+void SimulationController::replace_scenario(
+    SimulationState initial_state,
+    double dt_s,
+    std::size_t steps_per_frame) {
+    validate_state(initial_state);
+    if (!(dt_s > 0.0) || !std::isfinite(dt_s) || steps_per_frame == 0) {
+        throw std::invalid_argument("replacement scenario requires positive finite dt and steps");
+    }
+    initial_state_ = std::move(initial_state);
+    state_ = initial_state_;
+    config_.dt_s = dt_s;
+    config_.steps_per_frame = steps_per_frame;
+    paused_ = false;
+}
+
 void SimulationController::advance_frame() {
     if (paused_) {
         return;

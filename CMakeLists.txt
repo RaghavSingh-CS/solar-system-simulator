@@ -16,6 +16,7 @@ endforeach()
 add_library(nbody_core
     src/diagnostics.cpp
     src/scenarios.cpp
+    src/solar_system.cpp
     src/simulation.cpp
 )
 target_include_directories(nbody_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -95,7 +96,7 @@ endif()
 
 if(NBODY_BUILD_VISUALIZATION)
     message(STATUS
-        "Visualization enabled: fetching pinned GLFW and GLM dependencies if absent; using vendored GLAD loader"
+        "Visualization enabled: fetching pinned GLFW, GLM, and Dear ImGui dependencies if absent; using vendored GLAD loader"
     )
     enable_language(C)
     include(FetchContent)
@@ -120,7 +121,14 @@ if(NBODY_BUILD_VISUALIZATION)
         GIT_PROGRESS TRUE
     )
 
-    FetchContent_MakeAvailable(glfw glm)
+    FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG f1cc2ae15e53a861a874c3034aae6798fde194ab
+        GIT_PROGRESS TRUE
+    )
+
+    FetchContent_MakeAvailable(glfw glm imgui)
 
     # Generated reproducibly from GLAD 2.0.6 at the pinned revision documented
     # in third_party/glad/README.md. Keeping the generated loader in-tree avoids
@@ -128,10 +136,28 @@ if(NBODY_BUILD_VISUALIZATION)
     add_library(nbody_glad STATIC third_party/glad/src/gl.c)
     target_include_directories(nbody_glad PUBLIC third_party/glad/include)
 
+    add_library(nbody_imgui STATIC
+        "${imgui_SOURCE_DIR}/imgui.cpp"
+        "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+        "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+        "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp"
+    )
+    target_include_directories(nbody_imgui PUBLIC
+        "${imgui_SOURCE_DIR}"
+        "${imgui_SOURCE_DIR}/backends"
+    )
+    target_compile_features(nbody_imgui PUBLIC cxx_std_17)
+    target_link_libraries(nbody_imgui PUBLIC glfw)
+
     add_library(nbody_visualization_model
         visualization/camera.cpp
+        visualization/conservation.cpp
         visualization/controller.cpp
         visualization/render_space.cpp
+        visualization/scenario.cpp
+        visualization/trails.cpp
     )
     target_include_directories(nbody_visualization_model PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_features(nbody_visualization_model PUBLIC cxx_std_17)
@@ -150,6 +176,7 @@ if(NBODY_BUILD_VISUALIZATION)
     target_link_libraries(nbody_visualizer PRIVATE
         nbody_visualization_model
         nbody_glad
+        nbody_imgui
         glfw
     )
 
@@ -167,6 +194,10 @@ if(BUILD_TESTING)
     add_executable(nbody_tests tests/test_two_body.cpp)
     target_link_libraries(nbody_tests PRIVATE nbody_core)
     add_test(NAME nbody_two_body COMMAND nbody_tests)
+
+    add_executable(nbody_solar_system_tests tests/test_solar_system.cpp)
+    target_link_libraries(nbody_solar_system_tests PRIVATE nbody_core)
+    add_test(NAME nbody_solar_system COMMAND nbody_solar_system_tests)
 
     if(NBODY_ENABLE_OPENMP)
         add_executable(nbody_openmp_tests tests/test_openmp.cpp)

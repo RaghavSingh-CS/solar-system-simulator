@@ -39,16 +39,33 @@ void OrbitCamera::dolly(float amount) {
     distance_ = std::clamp(distance_, 2.0F, 120.0F);
 }
 
+void OrbitCamera::set_distance(float distance) {
+    if (!(distance > 0.0F) || !std::isfinite(distance)) {
+        throw std::invalid_argument("camera distance must be finite and positive");
+    }
+    distance_ = std::clamp(distance, 2.0F, 120.0F);
+}
+
+void OrbitCamera::approach_target(const glm::vec3& target, float fraction) {
+    if (!(fraction > 0.0F) || fraction > 1.0F || !std::isfinite(fraction) ||
+        !std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z)) {
+        throw std::invalid_argument("camera target and smoothing fraction must be finite");
+    }
+    target_ += (target - target_) * fraction;
+}
+
 void OrbitCamera::reset() {
     yaw_degrees_ = initial_yaw_degrees_;
     pitch_degrees_ = initial_pitch_degrees_;
     distance_ = initial_distance_;
+    target_ = glm::vec3(0.0F);
 }
 
 float OrbitCamera::aspect_ratio() const noexcept { return aspect_ratio_; }
 float OrbitCamera::distance() const noexcept { return distance_; }
 float OrbitCamera::yaw_degrees() const noexcept { return yaw_degrees_; }
 float OrbitCamera::pitch_degrees() const noexcept { return pitch_degrees_; }
+const glm::vec3& OrbitCamera::target() const noexcept { return target_; }
 
 glm::vec3 OrbitCamera::position() const {
     const float yaw = glm::radians(yaw_degrees_);
