@@ -18,9 +18,9 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
 - Reproducible sequential conservation-study harness with retained timestep-duration evidence.
 - Prepared Stage 5 same-machine runner and independent evidence verifier; no Stage 5 timings collected yet.
-- Optional GLFW/OpenGL 3.3 + ImGui interactive viewer with Solar/Synthetic scenarios, trails, labels, selection/focus, conservation diagnostics, and manual Sequential/OpenMP selection.
+- Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with Solar/Compute Experiment modes, deterministic camera presets, reference orbit guides, fading trails, decluttered labels, procedural planet identity, Saturn rings, starfield, live numerical-health bounds, and manual Sequential/OpenMP selection.
 
-Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI and ephemeris-grade JPL Horizons initial conditions are not implemented. The Stage 6B viewer is implemented, but final native-window visual inspection remains pending.
+Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI and ephemeris-grade JPL Horizons initial conditions are not implemented. Stage 6B was manually inspected; the Stage 6C final presentation pass is implemented with final user visual validation pending.
 
 An independent 30-configuration sequential conservation characterization is
 documented in `docs/conservation_study.md`, with evidence under
@@ -60,17 +60,19 @@ ctest --test-dir build-visual --output-on-failure
 
 The first visualization configure requires network access to fetch exact pinned revisions of GLFW 3.4, GLM 1.0.1, and Dear ImGui 1.92.9b. The generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, so Python, Jinja2, copied DLLs, and runtime asset discovery are not required. Shaders are embedded in the executable.
 
-The default is a nine-body Solar System demonstration at J2000.0. Planet positions come from JPL's published 1800--2050 approximate mean-element model; centered finite differences of that same model provide initial velocities, then the state is shifted to its center of mass. This is a deterministic educational approximation, not a Horizons ephemeris. The physical timestep remains fixed at six hours and named UI speed presets change only the number of physics steps per rendered frame. A deterministic seeded synthetic scenario remains available with `--scenario synthetic`.
+The default is a nine-body Solar System demonstration at J2000.0. Planet positions come from JPL's published 1800--2050 approximate mean-element model; centered finite differences of that same model provide initial velocities, then the state is shifted to its center of mass. This is a deterministic educational approximation, not a Horizons ephemeris. The physical timestep remains fixed at six hours and named UI speed presets change only the number of physics steps per rendered frame. A deterministic seeded `Compute Experiment` remains available with `--scenario synthetic`.
 
 Controls:
 
-- ImGui panel: scenario, play/pause/reset, named speed, backend/thread count, selected-body data, conservation drift, trails, labels, and visual radius.
+- The themed ImGui panel separates primary simulation/compute/health controls from collapsible technical details. Numerical health compares live drift against the unchanged `5e-6` energy and `5e-10` angular-momentum bounds.
+- `Overview`, `Inner System`, `Earth`, `Jupiter`, and `Saturn` provide deterministic demo framing without distorting physical positions.
+- Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Space`: pause/resume; `R`: exact scenario reset; `Esc`: exit.
 - `1`: Sequential; `2`: OpenMP using `--threads N` when OpenMP was built.
 - Click a body to select it; focus selected, focus Sun/body 0, or return to overview from the panel.
 - Left-drag, `A`/`D`, or arrow keys: orbit; mouse wheel or `W`/`S`: dolly; `C`: overview camera.
 
-CUDA is intentionally unavailable in the Stage 6B viewer and is rejected with an actionable error. Auto remains disabled until Stage 5 produces a valid calibration. Viewer FPS/frame time is explicitly display-only and is not controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for provenance, architecture, options, and limitations.
+CUDA is intentionally unavailable in the Stage 6C viewer and is rejected with an actionable error. Auto remains disabled until Stage 5 produces a valid calibration. Viewer FPS/frame time is explicitly display-only and is not controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for provenance, architecture, options, and limitations.
 
 Run (Visual Studio multi-config path shown):
 
@@ -126,7 +128,7 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/conservation_study.md`: independent timestep-duration conservation characterization.
 - `docs/stage5_protocol.md`: frozen same-machine matrix, split, metrics, and gates.
 - `docs/stage5_rtx4050_runbook.md`: Windows RTX 4050 pilot-gated execution procedure.
-- `docs/visualization.md`: Stage 6B viewer provenance, architecture, dependency pins, controls, and validation boundary.
+- `docs/visualization.md`: Stage 6C viewer provenance, presentation policy, controls, and validation boundary.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
 - `scripts/run_stage5.py`: Stage 5 preflight, dry-run, pilot, and full orchestrator.

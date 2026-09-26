@@ -1,18 +1,18 @@
-# Stage 6B Solar System visualization
+# Stage 6C final presentation pass
 
 ## Scope and status
 
-Stage 6B turns the optional Stage 6A OpenGL shell into an explorable desktop
-application. It adds an approximate Solar System scenario, an ImGui control and
-diagnostics panel, physical-space orbital trails, body labels, click selection,
-smooth focus/overview navigation, and explicit visual-size controls. The physics
-library remains independent of graphics and UI dependencies.
+Stage 6C is the final major visual/UX pass over the scientifically functional
+Stage 6B application. It adds a deliberate dark-scientific theme and information
+hierarchy, deterministic camera compositions, reference orbit context, fading
+history trails, screen-space label decluttering, procedural planet materials,
+Saturn rings, a deterministic starfield, and an explicit selection marker. The
+physics library remains independent of graphics and UI dependencies.
 
-Release CPU-only, OpenMP, and visualization builds pass their complete CTest
-suites. Real OpenGL 3.3 contexts were smoke-launched on the development machine
-for Solar/Sequential, Solar/OpenMP, and Synthetic/Sequential modes. Automated
-tests cannot judge the native window's composition and interaction feel, so the
-status is **IMPLEMENTED / USER VISUAL VALIDATION PENDING**.
+Stage 6B was manually inspected and its findings drove this pass. Stage 6C's
+automated and real-context validation is recorded below, but automation cannot
+judge final composition and interaction feel. Status therefore remains
+**IMPLEMENTED / USER VISUAL VALIDATION PENDING**.
 
 ## Solar scenario provenance and limits
 
@@ -53,7 +53,7 @@ When visualization is enabled, CMake FetchContent obtains exact commits:
 The GLAD 2.0.6 loader was reproducibly generated from commit
 `658f48e72aee3c6582e80b05ac0f8787a64fe6bb` for OpenGL 3.3 core and
 `GL_KHR_debug`, then committed in `third_party/glad`. This keeps clean builds
-independent of Python/Jinja2 and avoids copied runtime DLLs. Initial GLFW/GLM
+independent of Python/Jinja2 and avoids copied runtime DLLs. Initial dependency
 fetching requires Git/network access; subsequent configuration can reuse the
 FetchContent checkout/cache.
 
@@ -88,25 +88,87 @@ time. Trails are sampled every simulated day and retained in a bounded deque.
 The synthetic fixture uses its established deterministic generator and a
 10-second timestep.
 
-Positions, trails, and labels share one fixed render transform derived from the
-initial state. Body radii are display-only: the default Solar multiplier is 80,
-with a minimum render radius of 0.035. Changing the multiplier never mutates
-mass, position, velocity, or force calculations. The Sun is emissive; planet
-shading is a simple Sun-centered diffuse cue.
+Positions, trails, orbit guides, labels, rings, and markers share one fixed
+linear render transform derived from the initial state. Body radii are
+display-only: the default Solar multiplier is 80, with a minimum render radius
+of 0.035 and small per-body identity factors. Changing these values never
+mutates mass, position, velocity, or force calculations. No nonlinear position
+distortion is used.
+
+## Stage 6C presentation policy
+
+### UI and numerical health
+
+The 1080p-oriented panel uses scaled default ImGui fonts (no external font or
+runtime asset), increased spacing, restrained teal/gold accents, clear sections,
+and concise primary values. Position/velocity tuples, maximum drift, fixed
+timestep, steps per render, trail capacity, provenance, and synthetic seed live
+under `Advanced / Technical Details`.
+
+The primary health view compares current relative energy drift with `5e-6` and
+angular-momentum-vector drift with `5e-10`. Values at or below the unchanged
+bounds show `PASS`; exceeded/non-finite values show an obvious warning. Maximum
+values remain visible in advanced details. Viewer FPS is labeled display-only
+and **NOT BENCHMARK EVIDENCE**.
+
+### Camera and scale
+
+Five deterministic Solar compositions coexist with manual orbit/dolly:
+
+- `Overview`: complete outer system at the established linear scale;
+- `Inner System`: Sun through Mars readable in one frame;
+- `Earth`, `Jupiter`, and `Saturn`: tracked body-centered presentation views.
+
+`C` returns to Overview. Presets change only camera target, orientation, and
+distance. Focus tracking follows a moving body; manual controls remain active
+afterward. This camera-first policy addresses the Solar System's physical
+dynamic range without altering coordinates.
+
+### Orbit context and trails
+
+Subtle reference guides are sampled over one approximate revolution from the documented JPL
+mean-element model used for initialization. They are static presentation
+geometry in the initial barycentric frame, not scripted trajectories. Actual
+body positions always come from N-body integration. Separately, bounded
+simulation-history trails use physical samples, body-associated colors, and an
+old-to-new alpha fade. Reset and scenario switching clear/reseed history.
+
+### Labels, selection, and scene identity
+
+Solar labels are projected, prioritized (selected body first, then Sun), tried
+at several offsets, rejected when they overlap, and connected with a subtle
+leader when displaced. Labels outside/behind the view remain suppressed. The
+selected body also receives a camera-facing gold marker. `Compute Experiment`
+uses a selected-only label policy by default, avoiding 32-body text clutter.
+
+The renderer remains asset-free and lightweight:
+
+- Sun: enlarged warm emissive procedural surface;
+- Mercury: restrained grey mottling;
+- Venus: warm cream cloud-band variation;
+- Earth: ocean blue with procedural green land and subtle cloud suggestion;
+- Mars: red/orange identity;
+- Jupiter: enlarged warm banding;
+- Saturn: pale banding plus a tilted translucent striped ring mesh;
+- Uranus: pale cyan; Neptune: deeper blue.
+
+A fixed-seed 720-point camera-consistent star sphere replaces empty pure black.
+Stars, materials, rings, guides, markers, radii, and labels are rendering only.
+They require no texture pack, network, or runtime file discovery.
 
 ## Controls and diagnostics
 
-The renderer reuses one sphere mesh for all bodies and one dynamic line buffer
-for all trails. The ImGui panel provides scenario switching, play/pause/reset,
-named speed presets, Sequential/OpenMP choice and thread count, selected-body
-physical data, focus actions, conservation drift, trails/labels, trail length,
-and visual radius. Switching or resetting reconstructs state and dependent
-histories consistently.
+The renderer reuses one sphere mesh, one Saturn ring mesh, one static star
+buffer, and one dynamic line buffer. The panel provides scenario switching,
+play/pause/reset, human-oriented fixed-batch speed presets, explicit backend
+availability, selected-body physical data, camera presets/focus, numerical
+health, guides/trails/labels, and visual radius. Switching or resetting
+reconstructs state and dependent histories consistently.
 
 - Click near a visible body to select it; labels outside or behind the view are
   suppressed.
-- Use panel buttons to focus the selected body, focus Sun/body 0, or return to
-  overview. Focus tracking follows a moving body smoothly.
+- Use `Focus Selected` for any body or the five deterministic Solar camera
+  presets for repeatable live-demo and screenshot composition.
 - Left-drag, `A`/`D`, or arrow keys orbit; mouse wheel or `W`/`S` dollies.
 - `Space` pauses/resumes, `R` resets exactly, `C` returns to overview, and
   `Esc` exits. ImGui capture prevents camera shortcuts while editing the UI.
@@ -119,14 +181,56 @@ protocols remain the only performance evidence.
 
 ## Validation boundary and deferred work
 
-Headless tests cover exact Solar construction, finiteness, center-of-mass
-removal, one-Mercury-orbit conservation, scenario switching/reset, diagnostics
-reset semantics, bounded trails, render immutability, camera focus/framing, and
-manual backend behavior. Release CTest passed 2/2 CPU-only, 3/3 OpenMP, and 4/4
-visualization configurations.
+Headless tests cover exact Solar construction, finite sampled reference paths,
+center-of-mass removal, one-Mercury-orbit conservation, scenario switching/reset,
+diagnostics reset semantics, bounded trails, render immutability, deterministic
+camera framing, numerical-health boundary mapping, label collision avoidance,
+selected-label priority, scenario-specific label policy, and manual backend
+behavior. Release CTest results are recorded in the Stage 6C ledger entry.
 
-Pending user visual checks are readability at overview and focused scales,
-label overlap, trail appearance, selection feel, resize behavior, and live
-Sequential/OpenMP switching. CUDA viewer integration, Auto selection, large-N
-point/instanced rendering, textures/effects, presentation capture, and
-ephemeris-grade Horizons input are outside Stage 6B.
+The fresh Stage 6C matrix passed CPU-only `2/2`, OpenMP `3/3`, and
+visualization/OpenMP `4/4`. Solar/Sequential, Solar/OpenMP-4, and Compute
+Experiment/Sequential each initialized a real AMD OpenGL 3.3 core context and
+entered the application loop; the CUDA request exited `1` with its intended
+diagnostic. This proves runtime initialization, not subjective visual quality.
+
+Pending user visual checks are theme/readability at 1920x1080 and laptop sizes,
+all five preset compositions, inner-label separation, trail/guide distinction,
+planet material identity, Saturn ring depth/tilt, starfield restraint, selection
+marker, resize behavior, and live Sequential/OpenMP switching. CUDA viewer
+integration, Auto selection, high-resolution texture assets, advanced atmosphere/
+post-processing, large-N point/instanced rendering, final RTX capture, and
+ephemeris-grade Horizons input are intentionally deferred beyond Stage 6C.
+
+## Final user visual-validation checklist
+
+Launch at 1920x1080 where available:
+
+```powershell
+./build-stage6c-visual/nbody_visualizer.exe --scenario solar --backend sequential --width 1920 --height 1080
+```
+
+1. Confirm the panel is readable, intentionally styled, unclipped, and does not
+   dominate the scene; expand/collapse `Advanced / Technical Details`.
+2. Exercise `Overview`, `Inner System`, `Earth`, `Jupiter`, and `Saturn`; verify
+   deterministic useful framing, body tracking, then manual orbit/dolly.
+3. In Inner System, confirm labels no longer form a text pile, selected label is
+   retained, displaced labels have subtle leaders, and hidden bodies stay hidden.
+4. Verify Sun emissive identity, Earth ocean/land/cloud cue, Mars color, Jupiter
+   bands, Saturn bands and tilted translucent rings, Uranus cyan, Neptune blue,
+   and restrained Mercury/Venus differentiation.
+5. Toggle reference orbit guides and simulation-history trails independently;
+   verify guides exist immediately and history grows/fades with simulated time.
+6. Select several bodies by click and combo; verify the gold marker and label,
+   then use `Focus Selected`.
+7. Confirm energy/angular values, unchanged bounds, green PASS state, maximum
+   values in advanced details, and conspicuous non-benchmark FPS labeling.
+8. Switch Sequential/OpenMP and thread count; verify active state is obvious,
+   CUDA/Auto remain intentionally disabled, and motion/reset stay coherent.
+9. Switch to `Compute Experiment`; verify N/seed/workload language, selected-only
+   labeling, useful overview, numerical health, and no astronomical claim.
+10. Exercise `Space`, `R`, `C`, resize to a laptop-like window, and return to
+    Solar mode; confirm ImGui capture prevents accidental camera input.
+11. Confirm the starfield is subtle/static, trails do not overwhelm the scene,
+    Saturn ring depth looks reasonable, and no visual effect resembles an
+    unsupported physics claim.

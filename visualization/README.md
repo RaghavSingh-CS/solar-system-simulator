@@ -1,3 +1,7 @@
-# Visualization placeholder
+# Optional desktop visualization
 
-The planned native viewer uses optional GLFW/core OpenGL and consumes simulation snapshots. Rendering will remain outside benchmark timings. It has not been implemented or validated.
+This directory contains the GLFW/OpenGL 3.3 + Dear ImGui application. It
+consumes immutable simulation snapshots and never contributes renderer timing
+to benchmark evidence. Build, launch, controls, provenance, presentation-only
+orbit guides, and validation boundaries are documented in
+`../docs/visualization.md`.

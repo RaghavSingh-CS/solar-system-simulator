@@ -17,7 +17,8 @@ Last updated: 2026-09-26
 | Stage 5B RTX 4050 execution | Not started | Requires pilot, inspection/approval, then controlled full matrix |
 | MPI backend | Optional/not started | Stretch goal only |
 | Stage 6A OpenGL application foundation | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Optional viewer builds/tests; Sequential and OpenMP real-context smoke launches passed |
-| Stage 6B Solar System application | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Approximate J2000 scenario, ImGui/trails/selection/diagnostics, full build matrix, and real-context smoke launches passed |
+| Stage 6B Solar System application | Complete | Approximate J2000 scenario and scientific UI passed build/runtime validation and user visual inspection |
+| Stage 6C final presentation pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Themed UI, camera presets, orbit context, decluttered labels, planet identity/rings/starfield, and headless presentation tests |
 
 ## Decisions and rationale
 
@@ -38,7 +39,7 @@ Last updated: 2026-09-26
 - Colab CUDA results remain a separate environment and cannot be combined with Stage 3 Windows CPU timings to infer a workstation crossover.
 - Stage 5 selector calibration uses only same-machine `selector_steady_state` measurements from the frozen RTX 4050 full run.
 - Stage 5 calibration and held-out N values are fixed before data collection; held-out results cannot influence policy boundaries.
-- Stage 6B remains optional and one-way dependent on the simulation core; display timing is never benchmark evidence and no Auto backend selector exists.
+- Stage 6C remains optional and one-way dependent on the simulation core; presentation geometry cannot affect physics, display timing is never benchmark evidence, and no Auto backend selector exists.
 
 ## Assumptions and unresolved questions
 
@@ -533,6 +534,65 @@ and live backend switching still require a user pass. Stage 6B status is
 file was modified; its frozen source remains
 `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
 
+The user subsequently completed the Stage 6B visual pass. Its findings (inner
+system compression, label collisions, default ImGui appearance, weak planet
+identity, sparse initial context, synthetic clutter, and demo camera effort)
+became the bounded Stage 6C requirements below.
+
+## Stage 6C: final visual, UX, and presentation pass
+
+### Implemented presentation system
+
+- The primary ImGui panel now uses DPI-aware default-font scaling, deliberate
+  spacing/rounding, restrained teal/gold colors, clear hierarchy, and a wider
+  1080p-oriented layout. Raw vectors, maxima, fixed-step batching, trail
+  capacity, seed, and provenance moved under collapsible technical details.
+- Backend state explicitly presents Sequential/OpenMP as selectable, CUDA as
+  not integrated, and Auto as awaiting Stage 5 calibration. OpenMP thread count
+  appears only when OpenMP is active. No selector or fabricated CUDA path exists.
+- Numerical health shows live energy drift against `5e-6` and angular-momentum-
+  vector drift against `5e-10`, with PASS/WARNING mapping. Maximum values remain
+  available in advanced details; bounds and diagnostic definitions are unchanged.
+- Overview, Inner System, Earth, Jupiter, and Saturn camera presets provide
+  deterministic linear-scale compositions. Body tracking and manual orbit/dolly
+  coexist; `C` remains the obvious overview reset.
+- Static orbit guides are sampled from the same JPL mean-element model and are
+  clearly separate from fading, bounded, simulation-derived history trails.
+  Actual positions always come from Velocity Verlet N-body integration.
+- Screen-space label placement prioritizes selected body and Sun, tries bounded
+  offsets, rejects overlaps, uses leaders for displaced labels, and suppresses
+  off-camera bodies. Compute Experiment uses selected-only labels.
+- Lightweight procedural materials give each major body recognizable identity.
+  Saturn has a tilted translucent striped ring mesh; the Sun remains warm and
+  emissive. A fixed-seed 720-point star sphere and a gold selected-body marker
+  improve orientation without runtime assets or post-processing.
+- Synthetic mode is named `Compute Experiment` and identifies its deterministic
+  N/seed workload without implying astronomical or benchmark meaning. Viewer
+  FPS remains explicitly labeled NOT BENCHMARK EVIDENCE.
+
+All positions remain linearly scaled; the existing render-only body-radius
+exaggeration and small per-body identity factors are documented and isolated.
+Rings, materials, guides, stars, labels, and selection markers never enter the
+simulation state or backend timings.
+
+### Stage 6C validation
+
+- Fresh Release CPU-only, OpenMP, and visualization/OpenMP configurations
+  passed CTest `2/2`, `3/3`, and `4/4`, respectively.
+- Headless coverage now includes finite reference-guide samples, exact camera
+  preset targeting, selected-label priority/collision rejection, synthetic
+  label policy, health mapping at/exceeding the frozen bounds, and render-only
+  material metadata.
+- Solar/Sequential, Solar/OpenMP-4, and Compute Experiment/Sequential created
+  real AMD OpenGL 3.3 contexts with all Stage 6C shaders/meshes initialized and
+  remained in the event loop until deliberate interruption. CUDA exited with
+  the intended Stage 6C unavailable diagnostic.
+
+No reliable automated pixel-level inspection was used, so final appearance and
+interaction remain **IMPLEMENTED / USER VISUAL VALIDATION PENDING**. Stage 3/4,
+conservation, and Stage 5 protocol/evidence files remain untouched; the frozen
+Stage 5 source is still `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
+
 ## Known limitations
 
 - No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
@@ -540,7 +600,7 @@ file was modified; its frozen source remains
   barycenter simplification.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI remains a placeholder and viewer CUDA integration is deferred.
-- Stage 6B native-window appearance and interaction need user visual validation; large-N instancing/points, richer presentation effects, and real ephemerides are deferred.
+- Stage 6C native-window appearance and interaction need final user visual validation; large-N instancing/points, high-resolution textures, advanced atmosphere/post-processing, RTX presentation capture, and real ephemerides are deferred.
 - Stage 5A tooling is locally CPU/OpenMP-validated, but its Windows MSVC/CUDA integration remains unexecuted until the RTX 4050 pilot.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
@@ -551,7 +611,7 @@ file was modified; its frozen source remains
 1. On the RTX 4050 host, check out the exact frozen Stage 5A preparation revision and follow `docs/stage5_rtx4050_runbook.md`.
 2. Run preflight, validation, and the pilot; stop for independent verification and human inspection.
 3. Only after explicit pilot approval, collect and verify the frozen full calibration/held-out matrix.
-4. Run the concise Stage 6B native-window visual checklist in `docs/visualization.md`; keep any follow-up presentation polish separate from the frozen Stage 5B collection.
+4. Run the final Stage 6C native-window visual checklist in `docs/visualization.md`; major presentation scope closes after this gate.
 5. Do not derive the selector or optimize backends during Stage 5B collection.
 
 ## Commit references
@@ -572,3 +632,4 @@ file was modified; its frozen source remains
 - `4916b3c` — Stage 5A frozen protocol, runner, verifier, environment capture, and RTX 4050 runbook; exact RTX source revision `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
 - `cfac22b` — optional Stage 6A OpenGL application, reusable render model, interaction controller, and headless visualization tests.
 - `7be7104` — Stage 6B approximate Solar System scenario, ImGui application, trails, selection/focus, conservation diagnostics, and validation tests.
+- `50a0473` — Stage 6C final presentation system: themed UI, deterministic camera framing, orbit guides, label decluttering, procedural bodies/rings/starfield, and headless presentation tests.

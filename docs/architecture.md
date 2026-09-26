@@ -61,12 +61,13 @@ The dependency direction is one-way:
 SimulationState + ForceBackend
           -> SimulationController (fixed physical dt, scenario/reset/manual backend)
           +-> diagnostics + bounded physical-space trails
-          -> read-only RenderBody snapshot (position scale and visual radius only)
-          -> BodyRenderer (OpenGL 3.3 reusable sphere mesh and trail buffer)
+          +-> documented mean-element reference guides (presentation only)
+          -> read-only RenderBody snapshot (linear position scale/material/radius only)
+          -> BodyRenderer (sphere/ring/star meshes and dynamic line buffer)
           -> ImGui controls/labels (read state; issue controller/view commands)
 ```
 
-`SimulationController` calls the existing `velocity_verlet_step` and backend implementations; no gravitational calculation exists in renderer code. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii never feed back into physics. The camera, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
+`SimulationController` calls the existing `velocity_verlet_step` and backend implementations; no gravitational calculation exists in renderer code. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii/materials/rings never feed back into physics. Static orbit guides are sampled from the same documented JPL mean-element model but never drive body motion. Camera presets, label decluttering, health mapping, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
 
 ## CUDA build split
 
