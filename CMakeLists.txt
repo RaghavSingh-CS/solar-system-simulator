@@ -64,6 +64,12 @@ target_compile_definitions(nbody_benchmark PRIVATE
     NBODY_BUILD_CONFIGURATION="$<CONFIG>"
 )
 
+add_executable(nbody_conservation_probe src/conservation_probe.cpp)
+target_link_libraries(nbody_conservation_probe PRIVATE nbody_core)
+target_compile_definitions(nbody_conservation_probe PRIVATE
+    NBODY_BUILD_CONFIGURATION="$<CONFIG>"
+)
+
 if(NBODY_ENABLE_OPENMP)
     find_package(OpenMP QUIET COMPONENTS CXX)
     if(NOT OpenMP_CXX_FOUND)
