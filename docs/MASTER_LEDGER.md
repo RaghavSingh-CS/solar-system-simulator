@@ -16,7 +16,7 @@ Last updated: 2026-09-26
 | Stage 5A same-machine preparation | **PREPARED** | Frozen v1.0 protocol, runner, verifier, environment capture, and RTX 4050 runbook |
 | Stage 5B RTX 4050 execution | Not started | Requires pilot, inspection/approval, then controlled full matrix |
 | MPI backend | Optional/not started | Stretch goal only |
-| OpenGL visualization | Not started | Optional dependency plan only |
+| Stage 6A OpenGL application foundation | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Optional viewer builds/tests; Sequential and OpenMP real-context smoke launches passed |
 
 ## Decisions and rationale
 
@@ -37,6 +37,7 @@ Last updated: 2026-09-26
 - Colab CUDA results remain a separate environment and cannot be combined with Stage 3 Windows CPU timings to infer a workstation crossover.
 - Stage 5 selector calibration uses only same-machine `selector_steady_state` measurements from the frozen RTX 4050 full run.
 - Stage 5 calibration and held-out N values are fixed before data collection; held-out results cannot influence policy boundaries.
+- Stage 6A remains optional and one-way dependent on the simulation core; display timing is never benchmark evidence and no Auto backend selector exists.
 
 ## Assumptions and unresolved questions
 
@@ -401,11 +402,84 @@ procedure is in `docs/stage5_rtx4050_runbook.md`.
 
 No Stage 5 performance matrix was run on the development machine.
 
+## Stage 6A: interactive OpenGL application foundation
+
+### Objective and architecture
+
+Stage 6A implements the minimal optional 3D desktop layer while leaving the
+scientific and benchmark paths headless by default. The dependency flow is:
+
+```text
+existing SimulationState + ForceBackend + Velocity Verlet
+    -> SimulationController
+    -> read-only render snapshot
+    -> OpenGL renderer
+```
+
+The controller owns the exact reset state, paused/running state, explicit
+physical timestep, fixed steps-per-rendered-frame count, and manual backend.
+It calls the existing integrator and Sequential/OpenMP `ForceBackend`; renderer
+code contains no force or integration implementation. The loop polls input,
+advances fixed steps, prepares a render-only snapshot, draws, and presents.
+Wall-clock frame delta is never substituted for physical `dt`.
+
+### Dependencies and implemented features
+
+- `NBODY_BUILD_VISUALIZATION` is `OFF` by default. Headless configuration does
+  not fetch or compile GLFW, GLM, GLAD, or OpenGL application code.
+- Visualization configuration FetchContent-fetches exact GLFW 3.4 commit
+  `a74efa0d5628b74adc0426af4c5710e287fa7c2c` and GLM 1.0.1 commit
+  `0af55ccecd98d4e5a8d1fad7de25ba429d60e863`.
+- A reproducibly generated GLAD 2.0.6 OpenGL 3.3 loader from commit
+  `658f48e72aee3c6582e80b05ac0f8787a64fe6bb` is committed in-tree, avoiding
+  a build-time Python/Jinja2 requirement and runtime DLL copying.
+- The real OpenGL 3.3 renderer has embedded shaders, a single reusable smooth
+  sphere mesh, perspective projection, depth testing, back-face culling,
+  simple lighting/colors, dark background, and framebuffer resize handling.
+- The orbit camera supports mouse/keyboard rotation, dolly, reset, pitch and
+  distance clamps, and aspect-correct projection.
+- Pause/resume, exact-state reset, exit, Sequential (`1`), and OpenMP (`2`)
+  controls are implemented. The requested OpenMP thread count is explicit.
+  The title/log identifies backend, thread count, run state, simulated time,
+  and steps per frame.
+- The default seed-24301 32-body scenario is explicitly labeled a deterministic
+  synthetic fixture, not the Solar System. The existing analytic two-body
+  fixture is also selectable.
+- Physics remains double-precision SI state. Position scaling, mass-derived
+  display radius, and palette are render-only and never modify physical state.
+- CUDA selection fails before window creation with an actionable Stage 6A
+  unavailable diagnostic. No Auto selector or silent fallback exists.
+
+### Validation on the Windows development machine
+
+- Fresh GCC 15.1.0 Release headless CPU configure/build succeeded; CTest `1/1`
+  passed.
+- Fresh GCC 15.1.0/libgomp Release headless OpenMP configure/build succeeded;
+  CTest `2/2` passed.
+- Release visualization+OpenMP configure/build succeeded. CTest `3/3` passed,
+  adding controller/backend, render-space immutability, and camera tests.
+- Sequential and OpenMP-4 viewer launches each created a real AMD Radeon OpenGL
+  `3.3.0 Core Profile Context 24.9.1.240813`, initialized shaders/renderer, and
+  remained in the application loop until deliberately interrupted.
+- `--backend cuda` exited `1` with the expected explicit unavailable message;
+  it did not crash or silently select another backend.
+
+The automation environment could not reliably inspect or drive the native
+window. Therefore body appearance/motion, pause/resume/reset keys, camera,
+resize behavior, and live `1`/`2` switching require one user visual pass. Stage
+6A status is **IMPLEMENTED / USER VISUAL VALIDATION PENDING**, not falsely
+claimed fully visually validated. See `docs/visualization.md`.
+
+The frozen Stage 5 experimental revision remains unchanged at
+`4916b3c43298fa3f3bd15cb4af1698b5074abed3`; no Stage 3, Stage 4, conservation,
+or Stage 5 protocol/evidence artifact was modified for Stage 6A.
+
 ## Known limitations
 
 - No verified planetary initial-condition dataset yet.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
-- CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI and the viewer remain placeholders.
+- CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI remains a placeholder and viewer CUDA integration is deferred.
+- Stage 6A native-window appearance and interaction need user visual validation; large-N instancing/points, trails, selection, polished UI, and real ephemerides are deferred.
 - Stage 5A tooling is locally CPU/OpenMP-validated, but its Windows MSVC/CUDA integration remains unexecuted until the RTX 4050 pilot.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
@@ -416,7 +490,8 @@ No Stage 5 performance matrix was run on the development machine.
 1. On the RTX 4050 host, check out the exact frozen Stage 5A preparation revision and follow `docs/stage5_rtx4050_runbook.md`.
 2. Run preflight, validation, and the pilot; stop for independent verification and human inspection.
 3. Only after explicit pilot approval, collect and verify the frozen full calibration/held-out matrix.
-4. Do not derive the selector, add OpenGL, or optimize backends during Stage 5B collection.
+4. Run the concise Stage 6A native-window visual checklist; keep any follow-up presentation polish separate from the frozen Stage 5B collection.
+5. Do not derive the selector or optimize backends during Stage 5B collection.
 
 ## Commit references
 
@@ -434,3 +509,4 @@ No Stage 5 performance matrix was run on the development machine.
 - `194bf04` — Stage 4 completion analysis, scientific boundary, and research-ledger update.
 - `6d9a162` — standalone sequential conservation-study harness and fixed 30-configuration protocol.
 - `4916b3c` — Stage 5A frozen protocol, runner, verifier, environment capture, and RTX 4050 runbook; exact RTX source revision `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
+- `cfac22b` — optional Stage 6A OpenGL application, reusable render model, interaction controller, and headless visualization tests.

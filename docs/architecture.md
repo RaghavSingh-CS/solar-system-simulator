@@ -32,7 +32,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 - `backends/openmp`: optional outer-loop-parallel OpenMP backend.
 - `backends/cuda`: optional direct-force CUDA kernels and device-resident integrator.
 - `backends/mpi`: optional stretch implementation.
-- `visualization`: independent viewer; it may link the simulation library but simulation code never depends on OpenGL.
+- `visualization`: optional application controller, camera, render-space conversion, and OpenGL renderer; it links the simulation library but simulation code never depends on OpenGL.
 - `tests`: physics invariants and regression tests.
 
 ## Shared representation and determinism
@@ -51,9 +51,20 @@ OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the refer
 
 `make_seeded_synthetic_system` uses `std::mt19937_64` raw output with an explicit 53-bit integer-to-double mapping, avoiding implementation-defined standard-library distributions. It generates generic SI-valued bodies, then removes center-of-mass position and velocity. It is a repeatable scaling/validation input, not a physical Solar System model.
 
-## Visualization dependency decision
+## Visualization architecture and dependencies
 
-Use GLFW plus core OpenGL, with GLAD (or another generated loader) vendored or fetched only in a pinned optional build. GLFW is small, cross-platform, and CMake-friendly on Windows. Visualization is `OFF` by default until dependencies are pinned; the headless library/tests have no graphics dependency. ImGui is not required for the MVP.
+`NBODY_BUILD_VISUALIZATION=OFF` remains the default. When enabled, CMake fetches exact revisions of GLFW 3.4 and GLM 1.0.1. A reproducibly generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, avoiding a build-time Python/Jinja2 dependency and runtime loader DLL. The Stage 6A shaders are embedded. ImGui and other UI frameworks are not used.
+
+The dependency direction is one-way:
+
+```text
+SimulationState + ForceBackend
+          -> SimulationController (fixed physical dt, pause/reset/manual backend)
+          -> read-only RenderBody snapshot (position scale and visual radius only)
+          -> BodyRenderer (OpenGL 3.3 reusable sphere mesh)
+```
+
+`SimulationController` calls the existing `velocity_verlet_step` and backend implementations; no gravitational calculation exists in renderer code. The application processes events, advances a configurable integer number of fixed simulation steps, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. The camera and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
 
 ## CUDA build split
 

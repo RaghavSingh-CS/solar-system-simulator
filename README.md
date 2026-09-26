@@ -18,8 +18,9 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
 - Reproducible sequential conservation-study harness with retained timestep-duration evidence.
 - Prepared Stage 5 same-machine runner and independent evidence verifier; no Stage 5 timings collected yet.
+- Optional GLFW/OpenGL 3.3 interactive viewer with a reusable sphere mesh, orbit camera, fixed-step controller, and manual Sequential/OpenMP selection.
 
-Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are not implemented or validated.
+Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI and realistic JPL Horizons initial conditions are not implemented. The Stage 6A viewer is implemented, but final native-window visual inspection remains pending.
 
 An independent 30-configuration sequential conservation characterization is
 documented in `docs/conservation_study.md`, with evidence under
@@ -45,6 +46,29 @@ cmake -S . -B build-openmp -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_ENABLE_OP
 cmake --build build-openmp
 ctest --test-dir build-openmp --output-on-failure
 ```
+
+### Optional interactive viewer
+
+The viewer is off by default, so headless builds do not fetch or require graphics dependencies. Configure a Release viewer with OpenMP support:
+
+```powershell
+cmake -S . -B build-visual -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_BUILD_VISUALIZATION=ON -DNBODY_ENABLE_OPENMP=ON -DNBODY_ENABLE_CUDA=OFF
+cmake --build build-visual
+ctest --test-dir build-visual --output-on-failure
+./build-visual/nbody_visualizer.exe --backend sequential
+```
+
+The first visualization configure requires network access to fetch exact pinned revisions of GLFW 3.4 and GLM 1.0.1. The generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, so Python, Jinja2, copied DLLs, and runtime asset discovery are not required. The small shaders are embedded in the executable.
+
+The default demo is a deterministic 32-body synthetic fixture, explicitly not a Solar System ephemeris. The physical integrator always uses the explicit `--dt` and advances `--steps-per-frame` fixed steps for each rendered frame; wall-clock frame duration never becomes the physics timestep. Rendering continues while paused.
+
+Controls:
+
+- `Space`: pause/resume; `R`: exact scenario reset; `Esc`: exit.
+- `1`: Sequential; `2`: OpenMP using `--threads N` when OpenMP was built.
+- Left-drag, `A`/`D`, or arrow keys: orbit; mouse wheel or `W`/`S`: dolly; `C`: reset camera.
+
+CUDA is intentionally unavailable in the Stage 6A viewer and is rejected with an actionable error. There is no Auto selector. The window title reports scenario provenance, active backend, run/pause state, simulated time, and steps per rendered frame; none of these values is controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for architecture, options, and limitations.
 
 Run (Visual Studio multi-config path shown):
 
@@ -100,12 +124,13 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/conservation_study.md`: independent timestep-duration conservation characterization.
 - `docs/stage5_protocol.md`: frozen same-machine matrix, split, metrics, and gates.
 - `docs/stage5_rtx4050_runbook.md`: Windows RTX 4050 pilot-gated execution procedure.
+- `docs/visualization.md`: Stage 6A viewer architecture, dependency pins, controls, and validation boundary.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
 - `scripts/run_stage5.py`: Stage 5 preflight, dry-run, pilot, and full orchestrator.
 - `scripts/verify_stage5_evidence.py`: independent Stage 5 evidence auditor.
 - `backends`: implemented optional OpenMP/CUDA backends and the future MPI placeholder.
-- `visualization`: future independent desktop viewer.
+- `visualization`: optional desktop application/controller, camera, and OpenGL renderer.
 
 ## Scientific boundary
 
