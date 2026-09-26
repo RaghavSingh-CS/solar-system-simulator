@@ -1,0 +1,10 @@
+{
+  "approved": true,
+  "protocol_version": "stage5-v1.0",
+  "source_commit": "STAGE5_FROZEN_SOURCE_COMMIT",
+  "environment_id": "REPLACE_WITH_PILOT_ENVIRONMENT_ID",
+  "openmp_threads": [1, 2, 4, 8],
+  "reviewer": "REPLACE_WITH_REVIEWER",
+  "reviewed_utc": "REPLACE_WITH_ISO_8601_UTC_TIMESTAMP",
+  "notes": "Confirm device identity, toolchain, tests, matrix completeness, conservation, timing relationships, repeatability, and acceptable estimated full-run duration. Replace this text with the review outcome."
+}

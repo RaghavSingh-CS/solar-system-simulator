@@ -13,9 +13,10 @@ Last updated: 2026-09-26
 | Controlled CPU benchmarking | Complete | 660 raw samples; randomized 64–1024-body sequential/OpenMP matrix |
 | CUDA backend | Complete | Tesla T4 build/tests plus verified 15-row pilot and 154-row controlled matrix |
 | Independent conservation characterization | Complete | 30 sequential timestep-duration configurations; all passed frozen bounds |
+| Stage 5A same-machine preparation | **PREPARED** | Frozen v1.0 protocol, runner, verifier, environment capture, and RTX 4050 runbook |
+| Stage 5B RTX 4050 execution | Not started | Requires pilot, inspection/approval, then controlled full matrix |
 | MPI backend | Optional/not started | Stretch goal only |
 | OpenGL visualization | Not started | Optional dependency plan only |
-| Final experiment | Not started | Requires all candidate backends on same RTX 4050 machine |
 
 ## Decisions and rationale
 
@@ -34,6 +35,8 @@ Last updated: 2026-09-26
 - Windows/libgomp affinity is explicitly classified as uncontrolled after the runtime rejected the requested placement policy.
 - Stage 4 real-GPU evidence is environment-scoped to a Colab Tesla T4; the local Windows machine still cannot compile or execute CUDA.
 - Colab CUDA results remain a separate environment and cannot be combined with Stage 3 Windows CPU timings to infer a workstation crossover.
+- Stage 5 selector calibration uses only same-machine `selector_steady_state` measurements from the frozen RTX 4050 full run.
+- Stage 5 calibration and held-out N values are fixed before data collection; held-out results cannot influence policy boundaries.
 
 ## Assumptions and unresolved questions
 
@@ -41,6 +44,7 @@ Last updated: 2026-09-26
 - Faculty acceptance criteria for “realistic” horizon and tolerated position error need confirmation before final study.
 - Stage 4 fixed CUDA at double precision; all predeclared comparison/conservation thresholds passed on the Tesla T4 without revision.
 - OpenMP is validated with GCC 15.1.0/libgomp; availability and numerical behavior under the final MSVC toolchain remain untested.
+- The exact RTX 4050 host CPU topology is unknown; Stage 5 freezes a topology-based thread-selection rule and requires one explicit list to remain unchanged from pilot through full execution.
 
 ## Research evidence
 
@@ -290,21 +294,129 @@ bounds remain useful hard validity gates but are not discriminating within
 these scenarios. Broader physical cases and horizons are required before any
 threshold-policy change.
 
+## Stage 5A: same-machine experiment preparation
+
+### Objective and status
+
+Stage 5 asks whether a calibrated policy can select the fastest valid
+sequential, OpenMP, or CUDA backend on one workstation. Same-machine evidence
+is necessary because Stage 3 measured Windows CPU/OpenMP while Stage 4 measured
+CUDA on a Colab Tesla T4; ratios across those machines are invalid.
+
+Stage 5A is **PREPARED, NOT COMPLETE**. It contains no RTX 4050 timing result,
+crossover, policy boundary, speedup, or selector. Stage 5B must execute the
+pilot and controlled full matrix on the intended Windows RTX 4050 machine.
+The candidate frozen source revision is:
+
+```text
+STAGE5_FROZEN_SOURCE_COMMIT
+```
+
+The follow-up provenance commit records that preparation revision without
+claiming a commit can contain its own hash.
+
+### Predeclared protocol
+
+Protocol `stage5-v1.0` uses the existing deterministic synthetic scenario,
+seed 24301, binary64, direct Newtonian force model, Velocity Verlet, `dt=10 s`,
+and 100 steps for the full run. It retains 11 measured blocks and one untimed
+same-process warm-up immediately before every measured invocation.
+
+- Calibration N: 64, 128, 192, 256, 512, 1024, 2048, 4096.
+- Held-out/interstitial N: 96, 160, 384, 768, 1536, 3072.
+- Pilot-only N: 64, 512, 4096 with 10 steps and three blocks.
+- Every block contains sequential, OpenMP-1, each other explicitly approved
+  OpenMP team size, and CUDA.
+- Each complete block is shuffled by xorshift64*/Fisher-Yates with default
+  order seed 20260926.
+
+The held-out values cannot inform later policy thresholds. Any pilot-driven
+matrix refinement requires an explicit protocol revision and a new frozen
+source commit before the full run; pilot rows are never pooled into the final
+dataset.
+
+OpenMP counts are chosen only after topology capture. For total physical cores
+P and total logical processors L across all CPU packages, the explicit list
+contains 1, powers of two below P, P, and L, deduplicated and capped at L.
+Requested and effective teams must match, and the identical list is required
+for pilot and full.
+
+### Timing, accuracy, and fairness
+
+Legacy timing meanings remain unchanged: CPU `integration_compute`, CUDA
+`device_compute`, and CUDA `transfer_inclusive`. A new primary
+`selector_steady_state` metric measures CPU initial-state copy plus integration
+against CUDA's existing backend wall interval: host packing, H2D, device
+integration, D2H, synchronization, output materialization, and validation.
+Reusable CUDA context/allocation setup remains separately reported. Scenario
+generation, process startup, warm-up, diagnostics, checksum, serialization,
+and runner I/O are excluded for all backends.
+
+The CPU benchmark extension only widens an additional timer around the
+existing state copy; it does not change the original timer or numerical work.
+No force, integrator, CUDA, OpenMP, precision, or workload implementation was
+optimized or altered.
+
+Every configuration must pass existing cross-backend CTests and the unchanged
+final-state conservation gates: relative energy drift `<=5e-6` and normalized
+angular-momentum-vector drift `<=5e-10`. Failed or non-finite rows are
+inadmissible and never averaged. Repeat checksums must match within each
+configuration; sequential/OpenMP checksums must also agree at each N.
+
+### Prepared tooling and pilot gate
+
+`scripts/run_stage5.py` supports `--preflight`, `--dry-run pilot|full`,
+`--pilot`, and `--full`, plus explicit output, seed, order seed, OpenMP list,
+device identity, executables, CTest log, environment ID, and source commit. It
+captures Git, Windows, CPU/topology, RAM, GPU, driver, CUDA, compiler, CMake,
+Ninja, flags, OpenMP environment, optional NVIDIA telemetry, and executable
+hashes. Raw evidence is tidy long-form; summaries include median, mean, sample
+standard deviation, CV, min/max, IQR, and deterministic bootstrap median 95%
+intervals.
+
+`scripts/verify_stage5_evidence.py` independently reconstructs the randomized
+schedule, checks the frozen split and workload, exact repetitions, row/metric
+uniqueness, finite positive timings, CUDA timing ordering, correctness and
+conservation, requested/effective teams, repeatability, source/environment
+provenance, CTest success, summary recomputation, and manifest hashes.
+
+Full mode requires both a passing pilot verification JSON and a human approval
+JSON matching source revision, environment, protocol, and OpenMP list. The
+runner never automatically continues from pilot to full. The complete Windows
+procedure is in `docs/stage5_rtx4050_runbook.md`.
+
+### Local validation
+
+- GCC 15.1.0 CPU-only Release configure/build succeeded; CTest `1/1` passed.
+- GCC 15.1.0/libgomp Release configure/build succeeded; CTest `2/2` passed.
+- Sequential and OpenMP smoke rows exposed both unchanged integration timing
+  and the new, wider selector timing; physics checksums matched.
+- Three Python unit/synthetic-evidence tests passed, including full independent
+  verifier execution on a generated pilot dataset.
+- Pilot and full dry-run schedules were generated deterministically without
+  invoking benchmark binaries.
+- CUDA-enabled configuration failed locally with the intended targeted
+  `no usable CUDA compiler` diagnostic. No CUDA build or execution is claimed;
+  real validation remains mandatory on the RTX 4050.
+
+No Stage 5 performance matrix was run on the development machine.
+
 ## Known limitations
 
 - No verified planetary initial-condition dataset yet.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI and the viewer remain placeholders.
+- Stage 5A tooling is locally CPU/OpenMP-validated, but its Windows MSVC/CUDA integration remains unexecuted until the RTX 4050 pilot.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
 - Eleven samples per configuration characterize this run but remain too few for strong distributional or cross-machine claims.
 
 ## Next actions
 
-1. Freeze a same-machine sequential/OpenMP/CUDA protocol for the intended NVIDIA-capable workstation.
-2. Collect calibration and held-out measurements for all three backends on that one machine under the accuracy gate.
-3. Only after that evidence is accepted, evaluate selector policies against fixed baselines and an offline fastest-valid oracle.
-4. Do not add OpenGL, heterogeneous scheduling, or an automatic selector before the same-machine evidence stage is explicitly authorized.
+1. On the RTX 4050 host, check out the exact frozen Stage 5A preparation revision and follow `docs/stage5_rtx4050_runbook.md`.
+2. Run preflight, validation, and the pilot; stop for independent verification and human inspection.
+3. Only after explicit pilot approval, collect and verify the frozen full calibration/held-out matrix.
+4. Do not derive the selector, add OpenGL, or optimize backends during Stage 5B collection.
 
 ## Commit references
 
@@ -321,3 +433,4 @@ threshold-policy change.
 - `3481272` — permanent Colab line-ending, dependency-preflight, and dual-mode provenance repairs.
 - `194bf04` — Stage 4 completion analysis, scientific boundary, and research-ledger update.
 - `6d9a162` — standalone sequential conservation-study harness and fixed 30-configuration protocol.
+- `STAGE5_FROZEN_SOURCE_COMMIT` — Stage 5A frozen protocol, runner, verifier, environment capture, and RTX 4050 runbook.

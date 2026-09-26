@@ -39,6 +39,7 @@ struct Options {
 
 struct RunResult {
     double elapsed_s{0.0};
+    double selector_steady_state_s{0.0};
     nbody::SimulationState final_state;
 };
 
@@ -94,6 +95,7 @@ RunResult run_once(
     const nbody::ForceBackend& backend,
     std::size_t steps,
     double dt_s) {
+    const auto selector_start = std::chrono::steady_clock::now();
     nbody::SimulationState state = initial_state;
     const auto start = std::chrono::steady_clock::now();
     for (std::size_t step = 0; step < steps; ++step) {
@@ -102,6 +104,7 @@ RunResult run_once(
     const auto stop = std::chrono::steady_clock::now();
     return {
         std::chrono::duration<double>(stop - start).count(),
+        std::chrono::duration<double>(stop - selector_start).count(),
         std::move(state),
     };
 }
@@ -190,14 +193,18 @@ int main(int argc, char** argv) {
         }
 
         std::vector<double> timings;
+        std::vector<double> selector_timings;
         timings.reserve(options.repetitions);
+        selector_timings.reserve(options.repetitions);
         nbody::SimulationState final_state;
         for (std::size_t repetition = 0; repetition < options.repetitions; ++repetition) {
             RunResult result = run_once(initial_state, *backend, options.steps, options.dt_s);
             timings.push_back(result.elapsed_s);
+            selector_timings.push_back(result.selector_steady_state_s);
             final_state = std::move(result.final_state);
         }
         std::sort(timings.begin(), timings.end());
+        std::sort(selector_timings.begin(), selector_timings.end());
 
         const auto final_diagnostics = nbody::compute_diagnostics(final_state);
         const double energy_drift = relative_change(
@@ -222,7 +229,7 @@ int main(int argc, char** argv) {
                      "relative_angular_momentum_drift,final_momentum_norm_kg_m_s,"
                      "final_center_of_mass_norm_m,checksum,compiler,build_configuration,"
                      "hardware_threads,host,processor,openmp_specification_date,omp_dynamic,"
-                     "omp_proc_bind,omp_places,gomp_cpu_affinity\n"
+                     "omp_proc_bind,omp_places,gomp_cpu_affinity,selector_steady_state_s\n"
                   << backend->name() << ','
                   << (options.backend == "openmp" ? options.threads : 1) << ','
                   << effective_threads << ','
@@ -245,7 +252,8 @@ int main(int argc, char** argv) {
                   << csv_quote(environment_value("OMP_DYNAMIC", "unset")) << ','
                   << csv_quote(environment_value("OMP_PROC_BIND", "unset")) << ','
                   << csv_quote(environment_value("OMP_PLACES", "unset")) << ','
-                  << csv_quote(environment_value("GOMP_CPU_AFFINITY", "unset")) << '\n';
+                  << csv_quote(environment_value("GOMP_CPU_AFFINITY", "unset")) << ','
+                  << quantile(selector_timings, 0.5) << '\n';
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << '\n';

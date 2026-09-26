@@ -17,12 +17,18 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Computation-only benchmark plus a controlled, block-randomized CPU experiment runner with raw and summary CSV output.
 - Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
 - Reproducible sequential conservation-study harness with retained timestep-duration evidence.
+- Prepared Stage 5 same-machine runner and independent evidence verifier; no Stage 5 timings collected yet.
 
 Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are not implemented or validated.
 
 An independent 30-configuration sequential conservation characterization is
 documented in `docs/conservation_study.md`, with evidence under
 `data/experiments/conservation/`. It is not a backend benchmark or Stage 5.
+
+Stage 5A preparation is complete at the candidate frozen revision recorded in
+`docs/MASTER_LEDGER.md`. The RTX 4050 pilot and full same-machine experiment
+remain unexecuted; follow `docs/stage5_rtx4050_runbook.md` and stop for review
+after the pilot.
 
 ## Build and test
 
@@ -92,8 +98,12 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/validation_plan.md`: correctness criteria.
 - `docs/benchmark_protocol.md`: same-machine experimental method.
 - `docs/conservation_study.md`: independent timestep-duration conservation characterization.
+- `docs/stage5_protocol.md`: frozen same-machine matrix, split, metrics, and gates.
+- `docs/stage5_rtx4050_runbook.md`: Windows RTX 4050 pilot-gated execution procedure.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
+- `scripts/run_stage5.py`: Stage 5 preflight, dry-run, pilot, and full orchestrator.
+- `scripts/verify_stage5_evidence.py`: independent Stage 5 evidence auditor.
 - `backends`: implemented optional OpenMP/CUDA backends and the future MPI placeholder.
 - `visualization`: future independent desktop viewer.
 

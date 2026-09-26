@@ -108,3 +108,28 @@ The accepted execution used source snapshot `ae6117b` on a Colab Tesla T4. The 1
 Full-run compute CV was 0.132–0.545%. Median transfer-inclusive overhead was 0.021–0.074 ms (0.0034–0.0939%), negligible for this 100-step GPU-resident timing definition but not a general statement about transfer costs. The 64→4096 grid increased median compute time 61.34× for a 64× increase in N; therefore the measured grid did not expose quadratic elapsed-time growth even though the direct interaction count is O(N²). Fixed launch costs and changing device utilization remain possible explanations, not measured causal conclusions.
 
 No same-VM CPU control was collected. Stage 3 Windows CPU data and Stage 4 Colab CUDA data remain separate evidence sets and cannot establish a CPU/GPU crossover or calibrate a selector.
+
+## Stage 5 same-machine protocol
+
+The frozen Stage 5 protocol is maintained in `docs/stage5_protocol.md`. Stage
+5A prepares the Windows runner, independent verifier, environment capture, and
+RTX 4050 runbook without collecting performance evidence. Stage 5B will use
+one frozen source revision and one Windows RTX 4050 environment for sequential,
+OpenMP, and CUDA measurements.
+
+The full matrix retains the 14 Stage 3/4 body counts. Calibration sizes are
+64, 128, 192, 256, 512, 1024, 2048, and 4096; held-out interstitial sizes are
+96, 160, 384, 768, 1536, and 3072. The split is fixed before measurement and
+the held-out rows may not influence policy boundaries.
+
+Stage 5 preserves the CPU integration-only, CUDA device-compute, and CUDA
+transfer-inclusive metrics. It adds `selector_steady_state`, measuring CPU
+state copy plus integration and the existing CUDA backend wall interval from
+host packing through a materialized host result. CUDA reusable allocation and
+context setup remain separately reported. This metric is the predeclared basis
+for later selector ranking; it is not cold-start application time.
+
+The pilot and full run are separate commands and directories. Full execution
+requires a passing independent pilot-verification report and an explicit human
+approval record. See `docs/stage5_rtx4050_runbook.md`; do not bypass its pilot
+inspection stop.
