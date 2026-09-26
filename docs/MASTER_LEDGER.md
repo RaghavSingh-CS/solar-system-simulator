@@ -17,6 +17,7 @@ Last updated: 2026-09-26
 | Stage 5B RTX 4050 execution | Not started | Requires pilot, inspection/approval, then controlled full matrix |
 | MPI backend | Optional/not started | Stretch goal only |
 | Stage 6A OpenGL application foundation | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Optional viewer builds/tests; Sequential and OpenMP real-context smoke launches passed |
+| Stage 6B Solar System application | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Approximate J2000 scenario, ImGui/trails/selection/diagnostics, full build matrix, and real-context smoke launches passed |
 
 ## Decisions and rationale
 
@@ -26,7 +27,7 @@ Last updated: 2026-09-26
 - Velocity Verlet is the minimal symplectic reference; long-horizon planetary claims require later integrator evaluation.
 - CPU-only CMake is the default; CUDA, graphics, and MPI are opt-in.
 - GLFW/core OpenGL is the intended viewer stack, isolated from simulation and benchmarks.
-- Real Solar System state is pending a fully recorded JPL Horizons extraction; no ephemeris values are invented.
+- Stage 6B's Solar scenario is an explicitly approximate JPL mean-element demonstration; ephemeris-grade state remains pending a fully recorded Horizons extraction.
 - `ForceBackend` is the shared acceleration contract; the sequential overload remains the reference/default.
 - OpenMP parallelizes destination bodies with static scheduling and thread-private accumulation.
 - OpenMP is opt-in so builds without an OpenMP runtime remain functional.
@@ -37,7 +38,7 @@ Last updated: 2026-09-26
 - Colab CUDA results remain a separate environment and cannot be combined with Stage 3 Windows CPU timings to infer a workstation crossover.
 - Stage 5 selector calibration uses only same-machine `selector_steady_state` measurements from the frozen RTX 4050 full run.
 - Stage 5 calibration and held-out N values are fixed before data collection; held-out results cannot influence policy boundaries.
-- Stage 6A remains optional and one-way dependent on the simulation core; display timing is never benchmark evidence and no Auto backend selector exists.
+- Stage 6B remains optional and one-way dependent on the simulation core; display timing is never benchmark evidence and no Auto backend selector exists.
 
 ## Assumptions and unresolved questions
 
@@ -474,12 +475,72 @@ The frozen Stage 5 experimental revision remains unchanged at
 `4916b3c43298fa3f3bd15cb4af1698b5074abed3`; no Stage 3, Stage 4, conservation,
 or Stage 5 protocol/evidence artifact was modified for Stage 6A.
 
+## Stage 6B: Solar System application
+
+### Scenario and scientific boundary
+
+- The default viewer scenario now contains Sun, Mercury, Venus, Earth, Mars,
+  Jupiter, Saturn, Uranus, and Neptune in stable order at J2000.0, Julian date
+  2451545.0 TDB.
+- Planet positions implement JPL Solar System Dynamics Table 1 mean elements
+  and its published Kepler/ecliptic-coordinate procedure, valid for 1800--2050.
+  Initial velocities are centered derivatives of that same model at plus/minus
+  one hour. NASA NSSDCA factsheets supply masses and volumetric mean radii.
+- Earth deliberately uses the Earth--Moon-barycenter orbit with Earth mass and
+  no Moon. The heliocentric construction is shifted to center-of-mass position
+  and velocity before integration.
+- This is an approximate educational demonstration, not Horizons or an
+  observational ephemeris. Long-horizon Solar System accuracy is not claimed.
+
+### Application and separation
+
+- Dear ImGui 1.92.9b is pinned to exact commit
+  `f1cc2ae15e53a861a874c3034aae6798fde194ab` and integrated through its official
+  GLFW/OpenGL3 backends. Headless builds remain independent of UI code.
+- The dashboard exposes scenario, pause/reset, named speed, Sequential/OpenMP
+  and thread count, selected-body data, focus controls, conservation drift,
+  labels, bounded trails, and render-only radius scaling. CUDA and Auto remain
+  visibly unavailable without silent fallback.
+- The Solar timestep is fixed at six hours; speed presets use 1/4/16/64 fixed
+  steps per rendered frame. Wall-clock frame time never enters integration.
+- Trails are sampled in physical coordinates every simulated day, retained in
+  bounded storage, and transformed only for rendering. Body radii and minimum
+  visible size are also render-only. Scenario switch/reset reconstruct state,
+  conservation baselines, trails, selection, and render transform together.
+- Click selection, labels, moving-body focus, Sun focus, and overview navigation
+  are implemented. ImGui input capture gates camera and shortcut handling.
+- Current and maximum drift use the established diagnostics definitions:
+  `abs(E-E0)/max(abs(E),abs(E0),1)` and
+  `norm(L-L0)/max(norm(L0),1)`. FPS/frame time is labeled non-benchmark data.
+
+### Validation on the Windows development machine
+
+- Fresh GCC 15.1 Release CPU-only build: CTest `2/2` passed.
+- Fresh GCC 15.1/libgomp Release OpenMP build: CTest `3/3` passed.
+- Fresh Release visualization+OpenMP build: CTest `4/4` passed.
+- The Solar regression constructs all nine finite bodies, checks center-of-mass
+  removal and provenance-sensitive ranges, then integrates 352 six-hour steps
+  (about one Mercury orbit). Observed relative energy drift was
+  `6.46017e-09`; angular-momentum-vector drift was `1.61093e-16`, inside the
+  committed `1e-4` and `1e-10` guards.
+- Solar/Sequential, Solar/OpenMP-4, and Synthetic/Sequential each created a
+  real AMD OpenGL 3.3 core context and remained in the application loop until
+  deliberately interrupted. CUDA exited `1` with its intended diagnostic.
+
+Native-window readability, label overlap, trails, selection/focus feel, resize,
+and live backend switching still require a user pass. Stage 6B status is
+**IMPLEMENTED / USER VISUAL VALIDATION PENDING**. No Stage 5 protocol or evidence
+file was modified; its frozen source remains
+`4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
+
 ## Known limitations
 
-- No verified planetary initial-condition dataset yet.
+- No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
+  a bounded JPL mean-element approximation with the documented Earth--Moon
+  barycenter simplification.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI remains a placeholder and viewer CUDA integration is deferred.
-- Stage 6A native-window appearance and interaction need user visual validation; large-N instancing/points, trails, selection, polished UI, and real ephemerides are deferred.
+- Stage 6B native-window appearance and interaction need user visual validation; large-N instancing/points, richer presentation effects, and real ephemerides are deferred.
 - Stage 5A tooling is locally CPU/OpenMP-validated, but its Windows MSVC/CUDA integration remains unexecuted until the RTX 4050 pilot.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
@@ -490,7 +551,7 @@ or Stage 5 protocol/evidence artifact was modified for Stage 6A.
 1. On the RTX 4050 host, check out the exact frozen Stage 5A preparation revision and follow `docs/stage5_rtx4050_runbook.md`.
 2. Run preflight, validation, and the pilot; stop for independent verification and human inspection.
 3. Only after explicit pilot approval, collect and verify the frozen full calibration/held-out matrix.
-4. Run the concise Stage 6A native-window visual checklist; keep any follow-up presentation polish separate from the frozen Stage 5B collection.
+4. Run the concise Stage 6B native-window visual checklist in `docs/visualization.md`; keep any follow-up presentation polish separate from the frozen Stage 5B collection.
 5. Do not derive the selector or optimize backends during Stage 5B collection.
 
 ## Commit references
@@ -510,3 +571,4 @@ or Stage 5 protocol/evidence artifact was modified for Stage 6A.
 - `6d9a162` — standalone sequential conservation-study harness and fixed 30-configuration protocol.
 - `4916b3c` — Stage 5A frozen protocol, runner, verifier, environment capture, and RTX 4050 runbook; exact RTX source revision `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
 - `cfac22b` — optional Stage 6A OpenGL application, reusable render model, interaction controller, and headless visualization tests.
+- `7be7104` — Stage 6B approximate Solar System scenario, ImGui application, trails, selection/focus, conservation diagnostics, and validation tests.

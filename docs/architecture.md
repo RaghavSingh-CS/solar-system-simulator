@@ -53,18 +53,20 @@ OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the refer
 
 ## Visualization architecture and dependencies
 
-`NBODY_BUILD_VISUALIZATION=OFF` remains the default. When enabled, CMake fetches exact revisions of GLFW 3.4 and GLM 1.0.1. A reproducibly generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, avoiding a build-time Python/Jinja2 dependency and runtime loader DLL. The Stage 6A shaders are embedded. ImGui and other UI frameworks are not used.
+`NBODY_BUILD_VISUALIZATION=OFF` remains the default. When enabled, CMake fetches exact revisions of GLFW 3.4, GLM 1.0.1, and Dear ImGui 1.92.9b. A reproducibly generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, avoiding a build-time Python/Jinja2 dependency and runtime loader DLL. Shaders are embedded.
 
 The dependency direction is one-way:
 
 ```text
 SimulationState + ForceBackend
-          -> SimulationController (fixed physical dt, pause/reset/manual backend)
+          -> SimulationController (fixed physical dt, scenario/reset/manual backend)
+          +-> diagnostics + bounded physical-space trails
           -> read-only RenderBody snapshot (position scale and visual radius only)
-          -> BodyRenderer (OpenGL 3.3 reusable sphere mesh)
+          -> BodyRenderer (OpenGL 3.3 reusable sphere mesh and trail buffer)
+          -> ImGui controls/labels (read state; issue controller/view commands)
 ```
 
-`SimulationController` calls the existing `velocity_verlet_step` and backend implementations; no gravitational calculation exists in renderer code. The application processes events, advances a configurable integer number of fixed simulation steps, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. The camera and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
+`SimulationController` calls the existing `velocity_verlet_step` and backend implementations; no gravitational calculation exists in renderer code. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii never feed back into physics. The camera, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
 
 ## CUDA build split
 
@@ -76,4 +78,4 @@ SimulationState + ForceBackend
 
 ## Data provenance
 
-The realistic scenario will use JPL Horizons Cartesian vector tables. The committed source record must include query, epoch, TDB/TT choice, reference plane/frame, center, units, Horizons version, retrieval time, and raw response. Until that exists, only the labeled analytic binary is shipped.
+Stage 6B's approximate Solar demonstration uses JPL's published 1800--2050 mean orbital elements at J2000.0, derives velocities from the same model, and uses NASA factsheet masses/radii. It is explicitly not an ephemeris. A future ephemeris-grade scenario will use JPL Horizons Cartesian vector tables; its committed source record must include query, epoch, TDB/TT choice, reference plane/frame, center, units, Horizons version, retrieval time, and raw response.
