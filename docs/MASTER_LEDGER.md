@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-09-23
+Last updated: 2026-09-26
 
 ## Stage status
 
@@ -12,6 +12,7 @@ Last updated: 2026-09-23
 | OpenMP backend | Complete | GCC/libgomp Release build; 1/2/4-thread validation passed |
 | Controlled CPU benchmarking | Complete | 660 raw samples; randomized 64–1024-body sequential/OpenMP matrix |
 | CUDA backend | Complete | Tesla T4 build/tests plus verified 15-row pilot and 154-row controlled matrix |
+| Independent conservation characterization | Complete | 30 sequential timestep-duration configurations; all passed frozen bounds |
 | MPI backend | Optional/not started | Stretch goal only |
 | OpenGL visualization | Not started | Optional dependency plan only |
 | Final experiment | Not started | Requires all candidate backends on same RTX 4050 machine |
@@ -248,6 +249,47 @@ No CPU control was measured on the same Colab VM. Stage 3 Windows CPU times must
 
 The next methodological stage is a controlled **same-machine** sequential/OpenMP/CUDA experiment on the intended NVIDIA-capable workstation, with one frozen build/protocol/environment and accuracy gate. Only then may calibration/held-out selector work begin. Stage 5 is not started here.
 
+## Independent sequential conservation characterization
+
+This completed study is an independent numerical-method experiment after Stage
+4; it is not Stage 5 and provides no backend crossover or selector evidence.
+The research question was how the existing fixed-step Velocity Verlet method's
+energy and angular-momentum drifts change with timestep and simulated duration.
+
+The clean harness commit `6d9a162` ran only the deterministic sequential
+backend in binary64. Analytic circular two-body and seeded 32-body scenarios
+each crossed timestep multipliers `0.25, 0.5, 1, 2, 4` with duration
+multipliers `1, 10, 100`. Diagnostics were computed initially and after every
+step. Relative energy drift uses `abs(E-E0)/max(abs(E),abs(E0),1 J)`; relative
+angular drift uses the vector difference
+`norm(L-L0)/max(norm(L0),1 kg m^2/s)`. Existing bounds remained unchanged at
+`5e-6` and `5e-10`.
+
+All 30 rows passed. Worst energy drift was `3.8964650316226864e-10` in the
+analytic two-body case at timestep multiplier 4 and duration multiplier 100;
+worst angular drift was `1.215493287078012e-13` in the analytic case at
+timestep multiplier 0.25 and duration multiplier 100. These are respectively
+about 12,832 and 4,114 times below the frozen bounds. An exact repeated seeded
+configuration matched in every scientific field.
+
+The analytic coarse-timestep energy maxima remain nearly constant across the
+tested durations while final errors are commonly much smaller, consistent with
+bounded oscillation over this window. Its maximum energy drift grows about
+16-fold per timestep doubling from multipliers 1 through 4 in this specific
+circular setup. The longest seeded runs show about fourfold growth per
+timestep doubling from multipliers 1 through 4 and increasing drift with
+duration. Neither pattern is claimed as a formal order or proof of secular
+behavior. Angular drift is non-monotonic and near a likely roundoff floor, but
+the cause was not isolated.
+
+The complete protocol, table, interpretation, and limits are in
+`docs/conservation_study.md`; raw and derived evidence is under
+`data/experiments/conservation/`. Runtime is incidental and cannot be used for
+performance claims. The large observed accuracy margins mean the existing
+bounds remain useful hard validity gates but are not discriminating within
+these scenarios. Broader physical cases and horizons are required before any
+threshold-policy change.
+
 ## Known limitations
 
 - No verified planetary initial-condition dataset yet.
@@ -278,3 +320,4 @@ The next methodological stage is a controlled **same-machine** sequential/OpenMP
 - `1353b55` — verified Stage 4 pilot/full evidence, byte-preservation rules, and independent audit tooling.
 - `3481272` — permanent Colab line-ending, dependency-preflight, and dual-mode provenance repairs.
 - `194bf04` — Stage 4 completion analysis, scientific boundary, and research-ledger update.
+- `6d9a162` — standalone sequential conservation-study harness and fixed 30-configuration protocol.

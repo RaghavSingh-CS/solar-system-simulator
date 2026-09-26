@@ -16,8 +16,13 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Headless CSV output and dependency-free tests.
 - Computation-only benchmark plus a controlled, block-randomized CPU experiment runner with raw and summary CSV output.
 - Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
+- Reproducible sequential conservation-study harness with retained timestep-duration evidence.
 
 Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI, realistic JPL Horizons initial conditions, and GLFW/OpenGL visualization are not implemented or validated.
+
+An independent 30-configuration sequential conservation characterization is
+documented in `docs/conservation_study.md`, with evidence under
+`data/experiments/conservation/`. It is not a backend benchmark or Stage 5.
 
 ## Build and test
 
@@ -86,6 +91,7 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/architecture.md`: scientific and software design.
 - `docs/validation_plan.md`: correctness criteria.
 - `docs/benchmark_protocol.md`: same-machine experimental method.
+- `docs/conservation_study.md`: independent timestep-duration conservation characterization.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
 - `backends`: implemented optional OpenMP/CUDA backends and the future MPI placeholder.

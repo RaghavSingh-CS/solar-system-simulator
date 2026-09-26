@@ -1,0 +1,90 @@
+{
+  "scenarios": {
+    "analytic_two_body": {
+      "rows": 15,
+      "all_configurations_pass": true,
+      "maximum_energy_drift": 3.8964650316226864e-10,
+      "maximum_angular_drift": 1.215493287078012e-13,
+      "by_timestep": [
+        {
+          "dt_multiplier": 0.25,
+          "dt_s": 1520.046265504994,
+          "maximum_energy_drift_across_durations": 2.474506772769141e-13,
+          "maximum_angular_drift_across_durations": 1.215493287078012e-13,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 0.5,
+          "dt_s": 3040.092531009988,
+          "maximum_energy_drift_across_durations": 2.606221356659994e-13,
+          "maximum_angular_drift_across_durations": 8.540039456852251e-14,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 1.0,
+          "dt_s": 6080.185062019976,
+          "maximum_energy_drift_across_durations": 1.5412765570703427e-12,
+          "maximum_angular_drift_across_durations": 8.832506561538971e-14,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 2.0,
+          "dt_s": 12160.370124039951,
+          "maximum_energy_drift_across_durations": 2.4386199467975676e-11,
+          "maximum_angular_drift_across_durations": 2.1174618379318593e-14,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 4.0,
+          "dt_s": 24320.740248079903,
+          "maximum_energy_drift_across_durations": 3.8964650316226864e-10,
+          "maximum_angular_drift_across_durations": 1.7431039439328566e-14,
+          "all_configurations_pass": true
+        }
+      ]
+    },
+    "seeded_32_body": {
+      "rows": 15,
+      "all_configurations_pass": true,
+      "maximum_energy_drift": 9.275550454152302e-13,
+      "maximum_angular_drift": 1.931667677713518e-14,
+      "by_timestep": [
+        {
+          "dt_multiplier": 0.25,
+          "dt_s": 2.5,
+          "maximum_energy_drift_across_durations": 4.753368506670153e-15,
+          "maximum_angular_drift_across_durations": 1.931667677713518e-14,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 0.5,
+          "dt_s": 5.0,
+          "maximum_energy_drift_across_durations": 2.0309847255772567e-14,
+          "maximum_angular_drift_across_durations": 1.3129112011430735e-14,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 1.0,
+          "dt_s": 10.0,
+          "maximum_energy_drift_across_durations": 5.833679530913397e-14,
+          "maximum_angular_drift_across_durations": 1.0924038401391662e-14,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 2.0,
+          "dt_s": 20.0,
+          "maximum_energy_drift_across_durations": 2.3010624816380623e-13,
+          "maximum_angular_drift_across_durations": 1.330277809039719e-14,
+          "all_configurations_pass": true
+        },
+        {
+          "dt_multiplier": 4.0,
+          "dt_s": 40.0,
+          "maximum_energy_drift_across_durations": 9.275550454152302e-13,
+          "maximum_angular_drift_across_durations": 7.218187385625468e-15,
+          "all_configurations_pass": true
+        }
+      ]
+    }
+  }
+}
