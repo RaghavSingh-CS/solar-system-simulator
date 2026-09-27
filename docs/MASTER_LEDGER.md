@@ -23,6 +23,7 @@ Last updated: 2026-09-27
 | Stage 6D final feature stage | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-aware Solar sizing, fixed inner callouts, polished/resizable/help-complete UI, MPI/hybrid, safe 100,000-body display, and bounded pilot infrastructure |
 | Stage 6D.1 Sun readability correction | Superseded | Mercury-dependent clearance override caused visible Sun pulsation |
 | Stage 6D.2 stable Sun sizing | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-dependent 20--36 px Sun radius invariant to orbital phase |
+| Stage 6D.3 inner-orbit shape verification | Complete | Elements, 700-day integrated extrema, reference guides, trails, projection, and Sun invariant verified; no defect or visual change |
 
 ## Decisions and rationale
 
@@ -736,6 +737,44 @@ direction and local smoothness, bounds, unchanged physical centers, and no state
 mutation. At distant views, exaggerated Sun/Mercury glyphs may overlap. Existing
 depth rendering and stable callouts preserve association while physical centers
 and orbits remain exact. The focused visualization test passed `1/1`.
+
+## Stage 6D.3: inner-planet orbital-shape verification
+
+Verification found no physical or rendering defect and made no camera or
+presentation change. The initializer preserves the nonzero JPL J2000
+eccentricities through Kepler solution, 3D orientation, centered velocity
+differentiation, and the common barycentric shift. Initial Cartesian osculating
+eccentricities for Mercury/Venus/Earth/Mars were `0.205628851`, `0.006788612`,
+`0.016723353`, and `0.093428916` versus source values `0.20563593`,
+`0.00677672`, `0.01671123`, and `0.09339410`.
+
+A 700-day nine-body run measured extrema-derived eccentricities `0.205552626`,
+`0.006836837`, `0.016738451`, and `0.093499109`; full values and distances are
+recorded in `docs/visualization.md`. Mercury ranged from `4.600927371e10` to
+`6.981784139e10 m`, while the existing ten-year regression independently found
+`4.600842350e10 m`. The 4097-sample reference guides recover their source
+eccentricities within `1e-6` absolute. Daily trail samples preserve Mercury's
+radial variation through the common linear render transform and direct
+`GL_LINE_STRIP` upload. No guide drives physics and Sun-motion amplification is
+confined to the separate Sun trail.
+
+The intrinsic Keplerian axis ratios are close to unity—Mercury `0.978629`,
+Venus `0.999977`, Earth `0.999860`, Mars `0.995629`—so eccentricity is primarily
+visible as focus offset and perihelion/aphelion variation, not obvious oval
+flattening. The current Inner System projection produced Mercury covariance
+axis ratio `0.291186`, major/minor radii `55.1233/16.0512 px`, and a `7.00421 px`
+Sun-to-centroid offset. Its geometry is not circularized; subtle low-alpha guides
+and partial fading trails can obscure the focus relationship. No eccentricity
+exaggeration or ephemeris-grade claim was added. Stage 6D.2 still reports stable
+Sun radii of Overview `20 px`, Inner System `36 px`, and fixed-camera orbit test
+`27.9539 px`.
+
+Focused validation rebuilt and passed `nbody_solar_system_tests.exe` in both the
+CPU and visualization configurations and passed `nbody_visualization_tests.exe`.
+The real launch
+`nbody_visualizer.exe --scenario solar --backend openmp --threads 4 --width 1920 --height 1080`
+created an AMD Radeon OpenGL 3.3 Core context and selected OpenMP with four
+threads. This is a launch/context smoke result, not subjective visual approval.
 
 ## Known limitations
 

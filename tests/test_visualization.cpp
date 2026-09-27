@@ -298,6 +298,118 @@ void test_actual_sun_trail_and_barycentric_transform() {
             "Sun-motion amplification did not affect only displacement from barycenter");
 }
 
+void test_planet_trail_geometry_fidelity() {
+    const auto solar = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    auto state = solar.initial_state;
+    nbody::visualization::TrailHistory trails(state, 128, 86400.0);
+    for (int step = 0; step < 352; ++step) {
+        nbody::velocity_verlet_step(state, solar.dt_s);
+        trails.sample(state);
+    }
+    const auto& sun = trails.positions()[0];
+    const auto& mercury = trails.positions()[1];
+    require(sun.size() == mercury.size() && mercury.size() >= 88,
+            "Mercury trail did not retain one orbit at daily resolution");
+
+    nbody::visualization::RenderSpaceTransform transform(
+        solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
+    double physical_minimum = std::numeric_limits<double>::infinity();
+    double physical_maximum = 0.0;
+    float rendered_minimum = std::numeric_limits<float>::infinity();
+    float rendered_maximum = 0.0F;
+    for (std::size_t sample = 0; sample < mercury.size(); ++sample) {
+        const double physical_radius = nbody::norm(mercury[sample] - sun[sample]);
+        const float rendered_radius = glm::length(
+            transform.to_render_position(mercury[sample]) -
+            transform.to_render_position(sun[sample]));
+        const float expected_rendered =
+            static_cast<float>(physical_radius) * transform.position_scale();
+        require(std::abs(rendered_radius - expected_rendered) <=
+                    std::max(1.0e-6F, expected_rendered * 2.0e-5F),
+                "trail render preparation changed heliocentric radius");
+        physical_minimum = std::min(physical_minimum, physical_radius);
+        physical_maximum = std::max(physical_maximum, physical_radius);
+        rendered_minimum = std::min(rendered_minimum, rendered_radius);
+        rendered_maximum = std::max(rendered_maximum, rendered_radius);
+    }
+    require(physical_maximum / physical_minimum > 1.45 &&
+                std::abs(rendered_maximum / rendered_minimum -
+                         static_cast<float>(physical_maximum / physical_minimum)) < 1.0e-4F,
+            "trail storage/render conversion circularized Mercury's radial variation");
+}
+
+void test_inner_system_guide_projection() {
+    constexpr float scene_width = 1920.0F - 446.0F;
+    constexpr float viewport_height = 1080.0F;
+    const auto solar = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    nbody::visualization::RenderSpaceTransform transform(
+        solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
+    std::vector<nbody::visualization::RenderBody> snapshot;
+    transform.update_snapshot(solar.initial_state, snapshot);
+    nbody::visualization::OrbitCamera camera;
+    nbody::visualization::apply_camera_framing(
+        camera,
+        nbody::visualization::camera_framing(
+            nbody::visualization::CameraPreset::inner_system,
+            nbody::visualization::ScenarioKind::solar_system,
+            snapshot));
+    camera.set_aspect_ratio(scene_width / viewport_height);
+
+    const auto project = [&](const glm::vec3& point) {
+        const glm::vec4 clip = camera.projection_matrix() * camera.view_matrix() *
+            glm::vec4(point, 1.0F);
+        require(clip.w > 0.0F, "Inner System guide point projected behind camera");
+        const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+        return glm::vec2(
+            (ndc.x * 0.5F + 0.5F) * scene_width,
+            (-ndc.y * 0.5F + 0.5F) * viewport_height);
+    };
+
+    std::vector<glm::vec2> projected;
+    projected.reserve(solar.reference_paths_m[1].size());
+    glm::vec2 mean{0.0F};
+    for (const auto& point : solar.reference_paths_m[1]) {
+        const glm::vec2 screen = project(transform.to_render_position(point));
+        projected.push_back(screen);
+        mean += screen;
+    }
+    mean /= static_cast<float>(projected.size());
+    double covariance_xx = 0.0;
+    double covariance_xy = 0.0;
+    double covariance_yy = 0.0;
+    for (const auto& point : projected) {
+        const glm::vec2 delta = point - mean;
+        covariance_xx += static_cast<double>(delta.x) * delta.x;
+        covariance_xy += static_cast<double>(delta.x) * delta.y;
+        covariance_yy += static_cast<double>(delta.y) * delta.y;
+    }
+    covariance_xx /= projected.size();
+    covariance_xy /= projected.size();
+    covariance_yy /= projected.size();
+    const double trace = covariance_xx + covariance_yy;
+    const double discriminant = std::sqrt(
+        std::max(0.0, (covariance_xx - covariance_yy) *
+                          (covariance_xx - covariance_yy) +
+                          4.0 * covariance_xy * covariance_xy));
+    const double major_variance = 0.5 * (trace + discriminant);
+    const double minor_variance = 0.5 * (trace - discriminant);
+    const double apparent_axis_ratio = std::sqrt(minor_variance / major_variance);
+    const double apparent_major_radius = std::sqrt(2.0 * major_variance);
+    const double apparent_minor_radius = std::sqrt(2.0 * minor_variance);
+    const glm::vec2 sun_screen = project(snapshot[0].position);
+    const double focus_offset_pixels = glm::distance(sun_screen, mean);
+    require(apparent_axis_ratio > 0.0 && apparent_axis_ratio <= 1.0 &&
+                focus_offset_pixels > 1.0,
+            "Inner System projection lost Mercury guide shape/focus offset");
+    std::cout << "Inner System Mercury projection: covariance_axis_ratio="
+              << apparent_axis_ratio << " Sun_to_guide_centroid_px="
+              << focus_offset_pixels << " apparent_major_radius_px="
+              << apparent_major_radius << " apparent_minor_radius_px="
+              << apparent_minor_radius << '\n';
+}
+
 void test_camera_math() {
     nbody::visualization::OrbitCamera camera;
     camera.set_aspect_ratio(16.0F / 9.0F);
@@ -502,6 +614,8 @@ int main() {
         test_scenario_switch_and_diagnostics();
         test_trail_boundedness();
         test_actual_sun_trail_and_barycentric_transform();
+        test_planet_trail_geometry_fidelity();
+        test_inner_system_guide_projection();
         test_camera_math();
         test_presentation_helpers();
         test_compute_experiment_scaling_and_comparison();

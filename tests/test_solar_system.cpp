@@ -5,12 +5,37 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
 
 namespace {
+
+constexpr double astronomical_unit_m = 149597870700.0;
+
+struct InnerElement {
+    const char* name;
+    std::size_t body_index;
+    double semi_major_axis_au;
+    double eccentricity;
+    double inclination_deg;
+    double longitude_node_deg;
+    double longitude_perihelion_deg;
+    double mean_longitude_deg;
+};
+
+constexpr std::array<InnerElement, 4> inner_elements{{
+    {"Mercury", 1, 0.38709927, 0.20563593, 7.00497902,
+     48.33076593, 77.45779628, 252.25032350},
+    {"Venus", 2, 0.72333566, 0.00677672, 3.39467605,
+     76.67984255, 131.60246718, 181.97909950},
+    {"Earth", 3, 1.00000261, 0.01671123, -0.00001531,
+     0.0, 102.93768193, 100.46457166},
+    {"Mars", 4, 1.52371034, 0.09339410, 1.84969142,
+     49.55953891, -23.94362959, -4.55343205},
+}};
 
 void require(bool condition, const std::string& message) {
     if (!condition) {
@@ -20,6 +45,99 @@ void require(bool condition, const std::string& message) {
 
 bool finite_vector(const nbody::Vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+double osculating_eccentricity(
+    const nbody::Body& sun,
+    const nbody::Body& planet) {
+    const nbody::Vec3 position = planet.position_m - sun.position_m;
+    const nbody::Vec3 velocity = planet.velocity_m_s - sun.velocity_m_s;
+    const double mu = nbody::gravitational_constant * (sun.mass_kg + planet.mass_kg);
+    const nbody::Vec3 angular_momentum = nbody::cross(position, velocity);
+    const nbody::Vec3 eccentricity_vector =
+        nbody::cross(velocity, angular_momentum) / mu - position / nbody::norm(position);
+    return nbody::norm(eccentricity_vector);
+}
+
+void test_inner_orbital_shapes() {
+    const auto solar = nbody::make_approximate_solar_system();
+    const auto& initial = solar.initial_state;
+    constexpr double initial_e_tolerance = 5.0e-4;
+    std::array<double, 4> initial_state_eccentricity{};
+    for (std::size_t planet = 0; planet < inner_elements.size(); ++planet) {
+        const auto& element = inner_elements[planet];
+        require(element.eccentricity > 0.0,
+                std::string(element.name) + " source eccentricity was discarded");
+        const double state_e = osculating_eccentricity(
+            initial.bodies[0], initial.bodies[element.body_index]);
+        initial_state_eccentricity[planet] = state_e;
+        require(std::abs(state_e - element.eccentricity) <= initial_e_tolerance,
+                std::string(element.name) +
+                    " Cartesian initialization does not retain source eccentricity");
+    }
+
+    struct Extrema {
+        double minimum{std::numeric_limits<double>::infinity()};
+        double maximum{0.0};
+    };
+    std::array<Extrema, 4> integrated{};
+    auto evolved = initial;
+    constexpr std::size_t steps = 2800;  // 700 days; longer than one Mars orbit.
+    for (std::size_t step = 0; step <= steps; ++step) {
+        for (std::size_t planet = 0; planet < inner_elements.size(); ++planet) {
+            const std::size_t index = inner_elements[planet].body_index;
+            const double radius = nbody::norm(
+                evolved.bodies[index].position_m - evolved.bodies[0].position_m);
+            integrated[planet].minimum = std::min(integrated[planet].minimum, radius);
+            integrated[planet].maximum = std::max(integrated[planet].maximum, radius);
+        }
+        if (step < steps) {
+            nbody::velocity_verlet_step(evolved, nbody::solar_system_recommended_dt_s);
+        }
+    }
+
+    constexpr double integrated_e_tolerance = 5.0e-4;
+    const auto guides = nbody::make_approximate_solar_reference_orbits(4097);
+    const nbody::Vec3 guide_sun = initial.bodies[0].position_m;
+    std::cout << std::setprecision(15);
+    for (std::size_t planet = 0; planet < inner_elements.size(); ++planet) {
+        const auto& element = inner_elements[planet];
+        const auto& extrema = integrated[planet];
+        const double estimated_e =
+            (extrema.maximum - extrema.minimum) / (extrema.maximum + extrema.minimum);
+        require(extrema.maximum / extrema.minimum > 1.0 + 0.5 * element.eccentricity,
+                std::string(element.name) + " integrated orbit is implausibly circular");
+        require(std::abs(estimated_e - element.eccentricity) <= integrated_e_tolerance,
+                std::string(element.name) +
+                    " integrated radial extrema are inconsistent with initialization");
+
+        Extrema guide;
+        for (const auto& point : guides[element.body_index]) {
+            const double radius = nbody::norm(point - guide_sun);
+            guide.minimum = std::min(guide.minimum, radius);
+            guide.maximum = std::max(guide.maximum, radius);
+        }
+        const double expected_minimum =
+            element.semi_major_axis_au * (1.0 - element.eccentricity) * astronomical_unit_m;
+        const double expected_maximum =
+            element.semi_major_axis_au * (1.0 + element.eccentricity) * astronomical_unit_m;
+        require(std::abs(guide.minimum - expected_minimum) / expected_minimum < 1.0e-5 &&
+                    std::abs(guide.maximum - expected_maximum) / expected_maximum < 1.0e-5,
+                std::string(element.name) +
+                    " reference guide does not preserve element-model eccentricity");
+
+        std::cout << "orbit_shape," << element.name
+                  << ",integrated_min_m=" << extrema.minimum
+                  << ",integrated_max_m=" << extrema.maximum
+                  << ",integrated_min_au=" << extrema.minimum / astronomical_unit_m
+                  << ",integrated_max_au=" << extrema.maximum / astronomical_unit_m
+                  << ",ratio=" << extrema.maximum / extrema.minimum
+                  << ",e_est=" << estimated_e
+                  << ",e_source=" << element.eccentricity
+                  << ",e_initial_state=" << initial_state_eccentricity[planet]
+                  << ",guide_min_m=" << guide.minimum
+                  << ",guide_max_m=" << guide.maximum << '\n';
+    }
 }
 
 void test_mercury_sun_clearance() {
@@ -132,6 +250,7 @@ void test_solar_system_definition() {
 
 int main() {
     try {
+        test_inner_orbital_shapes();
         test_solar_system_definition();
         test_mercury_sun_clearance();
         std::cout << "all approximate Solar-System tests passed\n";

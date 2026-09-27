@@ -407,6 +407,65 @@ and bounded. Exaggerated Sun/Mercury glyphs may temporarily overlap at distant
 scales; correct centers, normal depth rendering, and the existing stable callout
 are less misleading than breathing or displaced orbits.
 
+### Stage 6D.3 inner-orbit shape verification
+
+No physics, guide, trail, or projection defect was found. The JPL approximate
+J2000 elements used by the initializer are:
+
+| Body | a (AU) | e | i (deg) | ascending node Ω (deg) | perihelion longitude ϖ (deg) | mean longitude L (deg) | derived mean anomaly M (deg) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Mercury | 0.38709927 | 0.20563593 | 7.00497902 | 48.33076593 | 77.45779628 | 252.25032350 | 174.79252722 |
+| Venus | 0.72333566 | 0.00677672 | 3.39467605 | 76.67984255 | 131.60246718 | 181.97909950 | 50.37663232 |
+| Earth/EMB approximation | 1.00000261 | 0.01671123 | -0.00001531 | 0 | 102.93768193 | 100.46457166 | 357.52688973 |
+| Mars | 1.52371034 | 0.09339410 | 1.84969142 | 49.55953891 | -23.94362959 | -4.55343205 | 19.39019754 |
+
+The implementation solves `E - e sin(E) = M`, constructs orbital-plane
+coordinates `a(cos(E)-e)` and `a sqrt(1-e^2) sin(E)`, applies perihelion/node/
+inclination rotations, derives velocity by a centered one-hour difference of
+the same fitted model, and finally subtracts one common center-of-mass position
+and velocity. Initial Cartesian osculating eccentricities were `0.205628851`,
+`0.006788612`, `0.016723353`, and `0.093428916`, respectively, confirming that
+the conversion retains the source shape.
+
+A deterministic 700-day (2800 six-hour step) nine-body integration measured:
+
+| Body | min r (m / AU) | max r (m / AU) | radial range (m / AU) | max/min | e from extrema | source e | absolute Δe |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Mercury | 4.600927371e10 / 0.307552999 | 6.981784139e10 / 0.466703443 | 2.380856768e10 / 0.159150445 | 1.517473234 | 0.205552626 | 0.205635930 | 8.33e-5 |
+| Venus | 1.074731247e11 / 0.718413465 | 1.089527934e11 / 0.728304440 | 1.479668765e9 / 0.009890975 | 1.013767803 | 0.006836837 | 0.006776720 | 6.01e-5 |
+| Earth | 1.470978866e11 / 0.983288638 | 1.521060978e11 / 1.016766462 | 5.008211195e9 / 0.033477824 | 1.034046792 | 0.016738451 | 0.016711230 | 2.72e-5 |
+| Mars | 2.066432935e11 / 1.381325099 | 2.492708609e11 / 1.666272786 | 4.262756733e10 / 0.284947688 | 1.206285753 | 0.093499109 | 0.093394100 | 1.05e-4 |
+
+The separate ten-year regression reproduced Mercury minimum separation as
+`4.600842350e10 m` (`0.307547315 AU`). A 4097-sample guide check measured:
+
+| Body | guide min (m / AU) | guide max (m / AU) | guide e from extrema |
+|---|---:|---:|---:|
+| Mercury | 4.600100898e10 / 0.307497752 | 6.981744364e10 / 0.466700785 | 0.205635925 |
+| Venus | 1.074761958e11 / 0.718433995 | 1.089427713e11 / 0.728237446 | 0.006776557 |
+| Earth | 1.470982908e11 / 0.983291340 | 1.520982031e11 / 1.016713690 | 0.016711133 |
+| Mars | 2.066549460e11 / 1.381402991 | 2.492326029e11 / 1.666017048 | 0.093395086 |
+
+`TrailHistory` stores the integrated barycentric Cartesian positions verbatim.
+Planet and Sun samples receive the same linear render transform before upload as
+`GL_LINE_STRIP` vertices; no normalization, fixed-radius reconstruction, guide
+substitution, or planet-trail amplification occurs. A daily one-Mercury-orbit
+regression preserves its greater-than-1.45 heliocentric radius ratio through
+render preparation. The optional amplification applies only to the separately
+constructed Sun-motion trail.
+
+The trajectories can nevertheless look nearly circular because eccentricity is
+not the visual axis flattening. The intrinsic `b/a = sqrt(1-e^2)` values are
+Mercury `0.978629`, Venus `0.999977`, Earth `0.999860`, and Mars `0.995629`.
+Mercury's shape is clearer from the Sun's focus offset and its 1.517 radial ratio
+than from a dramatically oval outline. In the existing 1920x1080 Inner System
+preset, the projected Mercury guide has covariance axis ratio `0.291186`,
+apparent major/minor radii `55.1233/16.0512 px`, and a `7.00421 px` Sun-to-guide-
+centroid offset. Thin low-alpha guides and partial fading history trails can make
+that focus relationship easy to miss. No camera change or eccentricity
+exaggeration was introduced; this remains an approximate mean-element demo, not
+an ephemeris-grade claim.
+
 ### Final user visual-validation checklist
 
 Launch a Solar view at 1920x1080 and a laptop-sized window, plus a 100,000-body
