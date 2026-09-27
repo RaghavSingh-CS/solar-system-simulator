@@ -1217,20 +1217,9 @@ int main(int argc, char** argv) {
             const ImVec2 display = ImGui::GetIO().DisplaySize;
             const float logical_scene_width = std::max(1.0F, display.x - input.scene_left);
             camera.set_aspect_ratio(logical_scene_width / std::max(display.y, 1.0F));
-            std::optional<float> sun_mercury_separation;
-            if (app.scenario.kind == ScenarioKind::solar_system && snapshot.size() > 1U) {
-                const auto sun_screen = project_to_screen(
-                    snapshot[0].position, camera, display, input.scene_left);
-                const auto mercury_screen = project_to_screen(
-                    snapshot[1].position, camera, display, input.scene_left);
-                if (sun_screen && mercury_screen) {
-                    sun_mercury_separation = glm::distance(*sun_screen, *mercury_screen);
-                }
-            }
             nbody::visualization::apply_screen_space_body_sizing(
                 snapshot, camera, display.y,
-                app.scenario.kind == ScenarioKind::solar_system,
-                sun_mercury_separation);
+                app.scenario.kind == ScenarioKind::solar_system);
 
             draw_labels(app, snapshot, camera, actions.panel_right);
             ImGui::Render();

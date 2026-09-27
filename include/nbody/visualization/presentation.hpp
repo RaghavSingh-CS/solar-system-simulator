@@ -101,7 +101,6 @@ inline constexpr float sun_minimum_apparent_radius_pixels = 20.0F;
 inline constexpr float sun_maximum_apparent_radius_pixels = 36.0F;
 inline constexpr float body_minimum_apparent_radius_pixels = 3.0F;
 inline constexpr float body_maximum_apparent_radius_pixels = 13.0F;
-inline constexpr float sun_mercury_clearance_pixels = 1.0F;
 
 float apparent_radius_pixels(
     float world_radius,
@@ -112,8 +111,7 @@ void apply_screen_space_body_sizing(
     std::vector<RenderBody>& bodies,
     const OrbitCamera& camera,
     float viewport_height_pixels,
-    bool solar_system,
-    std::optional<float> sun_mercury_screen_separation_pixels = std::nullopt);
+    bool solar_system);
 
 struct LabelCandidate {
     std::size_t body_index{0};

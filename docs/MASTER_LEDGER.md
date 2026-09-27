@@ -21,7 +21,8 @@ Last updated: 2026-09-27
 | Stage 6C final presentation pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Themed UI, camera presets, orbit context, decluttered labels, planet identity/rings/starfield, and headless presentation tests |
 | Stage 6C.1 corrective pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Mercury render clearance, stable labels, barycentric Sun motion, scalable variable-N compute mode, and isolated live CPU comparison |
 | Stage 6D final feature stage | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-aware Solar sizing, fixed inner callouts, polished/resizable/help-complete UI, MPI/hybrid, safe 100,000-body display, and bounded pilot infrastructure |
-| Stage 6D.1 Sun readability correction | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Preferred 20--36 px Sun radius with continuous Mercury-first clearance override |
+| Stage 6D.1 Sun readability correction | Superseded | Mercury-dependent clearance override caused visible Sun pulsation |
+| Stage 6D.2 stable Sun sizing | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-dependent 20--36 px Sun radius invariant to orbital phase |
 
 ## Decisions and rationale
 
@@ -711,6 +712,30 @@ px`. Tests also cover preferred lower/upper bounds, forced clearance override,
 unchanged centers, and continuity under a 0.01 camera-distance change. The
 focused visualization model test passed `1/1`; no physics, MPI, large-N,
 benchmarking, CUDA, Auto, Stage 5, UI, label, typography, or control code changed.
+
+## Stage 6D.2: remove orbital-phase-dependent Sun breathing
+
+Human validation identified that Stage 6D.1's continuous clearance rule still
+made the displayed Sun radius visibly pulsate as Mercury changed projected
+separation. Continuity alone was insufficient. Stage 6D.2 removes the
+Sun--Mercury separation from both the sizing API and render loop.
+
+The stable target is
+`clamp(r_render * H / (2 * D_camera * tan(22.5 degrees)), 20, 36)` pixels,
+where `r_render` contains only the explicit presentation radius setting, `H` is
+viewport height, and `D_camera` is the camera zoom distance. The fixed 45-degree
+projection supplies the half-angle. The target is converted to a world glyph
+radius using the Sun's actual camera depth, ensuring the rendered result equals
+the target without allowing position to select it. Thus only camera zoom/preset,
+viewport/projection, and explicit presentation sizing can influence Sun size.
+
+The replacement regression advances 352 six-hour steps (one Mercury orbit) at
+fixed camera and viewport. The unclamped Sun radius remained `27.9539 px` within
+`1e-4 px`; Overview was `20 px` and Inner System `36 px`. It also checks zoom
+direction and local smoothness, bounds, unchanged physical centers, and no state
+mutation. At distant views, exaggerated Sun/Mercury glyphs may overlap. Existing
+depth rendering and stable callouts preserve association while physical centers
+and orbits remain exact. The focused visualization test passed `1/1`.
 
 ## Known limitations
 

@@ -47,24 +47,6 @@ bool same_state(const nbody::SimulationState& left, const nbody::SimulationState
     return true;
 }
 
-float projected_separation_pixels(
-    const glm::vec3& first,
-    const glm::vec3& second,
-    const nbody::visualization::OrbitCamera& camera,
-    float viewport_width,
-    float viewport_height) {
-    const auto project = [&](const glm::vec3& position) {
-        const glm::vec4 clip = camera.projection_matrix() * camera.view_matrix() *
-            glm::vec4(position, 1.0F);
-        require(clip.w > 0.0F, "Solar preset projected a tested body behind the camera");
-        const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-        return glm::vec2(
-            (ndc.x * 0.5F + 0.5F) * viewport_width,
-            (-ndc.y * 0.5F + 0.5F) * viewport_height);
-    };
-    return glm::distance(project(first), project(second));
-}
-
 void test_controller() {
     const auto initial = nbody::make_seeded_synthetic_system(8, 24301);
     nbody::visualization::SimulationController controller(
@@ -130,100 +112,94 @@ void test_solar_screen_space_sizing() {
     nbody::visualization::RenderSpaceTransform transform(
         solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
 
-    const auto evaluate_preset = [&](nbody::visualization::CameraPreset preset,
-                                     float distance_adjustment = 0.0F) {
+    const auto evaluate = [&](const nbody::SimulationState& state,
+                              const nbody::visualization::OrbitCamera& camera) {
+        const auto state_before = state;
         std::vector<nbody::visualization::RenderBody> snapshot;
-        transform.update_snapshot(solar.initial_state, snapshot);
+        transform.update_snapshot(state, snapshot);
         const auto original_positions = snapshot;
-        nbody::visualization::OrbitCamera camera;
-        const auto framing = nbody::visualization::camera_framing(
-            preset, nbody::visualization::ScenarioKind::solar_system, snapshot);
-        nbody::visualization::apply_camera_framing(camera, framing);
-        camera.set_distance(camera.distance() + distance_adjustment);
-        camera.set_aspect_ratio(viewport_width / viewport_height);
-        const float separation = projected_separation_pixels(
-            snapshot[0].position, snapshot[1].position, camera,
-            viewport_width, viewport_height);
         nbody::visualization::apply_screen_space_body_sizing(
-            snapshot, camera, viewport_height, true, separation);
+            snapshot, camera, viewport_height, true);
+        require(same_state(state_before, state),
+                "presentation sizing mutated the physical simulation state");
         for (std::size_t index = 0; index < snapshot.size(); ++index) {
             require(snapshot[index].position == original_positions[index].position,
                     "screen-space sizing changed a physical body center");
         }
-        return std::array<float, 3>{
-            nbody::visualization::apparent_radius_pixels(
-                snapshot[0].radius,
-                glm::distance(snapshot[0].position, camera.position()), viewport_height),
-            nbody::visualization::apparent_radius_pixels(
-                snapshot[1].radius,
-                glm::distance(snapshot[1].position, camera.position()), viewport_height),
-            separation,
-        };
+        return nbody::visualization::apparent_radius_pixels(
+            snapshot[0].radius,
+            glm::distance(snapshot[0].position, camera.position()), viewport_height);
     };
 
-    const auto overview = evaluate_preset(nbody::visualization::CameraPreset::overview);
-    const auto inner = evaluate_preset(nbody::visualization::CameraPreset::inner_system);
-    for (const auto& result : {overview, inner}) {
-        require(result[0] <= nbody::visualization::sun_maximum_apparent_radius_pixels + 0.01F,
-                "Solar preset exceeded the Sun apparent-radius upper bound");
-        require(result[0] + result[1] +
-                    nbody::visualization::sun_mercury_clearance_pixels <= result[2] + 0.02F,
-                "Solar preset did not preserve projected Sun/Mercury clearance");
-    }
-    require(inner[0] >= nbody::visualization::sun_minimum_apparent_radius_pixels - 0.01F,
-            "Inner System preset did not preserve the readable Sun minimum");
-    if (overview[0] < nbody::visualization::sun_minimum_apparent_radius_pixels) {
-        require(overview[1] <= 0.26F &&
-                    overview[0] >= overview[2] -
-                        nbody::visualization::sun_mercury_clearance_pixels - 0.27F,
-                "Overview did not give the clearance-limited Sun the maximum available radius");
+    std::vector<nbody::visualization::RenderBody> reference_snapshot;
+    transform.update_snapshot(solar.initial_state, reference_snapshot);
+    nbody::visualization::OrbitCamera overview_camera;
+    nbody::visualization::apply_camera_framing(
+        overview_camera,
+        nbody::visualization::camera_framing(
+            nbody::visualization::CameraPreset::overview,
+            nbody::visualization::ScenarioKind::solar_system,
+            reference_snapshot));
+    overview_camera.set_aspect_ratio(viewport_width / viewport_height);
+    nbody::visualization::OrbitCamera inner_camera;
+    nbody::visualization::apply_camera_framing(
+        inner_camera,
+        nbody::visualization::camera_framing(
+            nbody::visualization::CameraPreset::inner_system,
+            nbody::visualization::ScenarioKind::solar_system,
+            reference_snapshot));
+    inner_camera.set_aspect_ratio(viewport_width / viewport_height);
+
+    const float overview_sun = evaluate(solar.initial_state, overview_camera);
+    const float inner_sun = evaluate(solar.initial_state, inner_camera);
+    require(overview_sun >= nbody::visualization::sun_minimum_apparent_radius_pixels - 0.01F &&
+                overview_sun <= nbody::visualization::sun_maximum_apparent_radius_pixels + 0.01F &&
+                inner_sun >= nbody::visualization::sun_minimum_apparent_radius_pixels - 0.01F &&
+                inner_sun <= nbody::visualization::sun_maximum_apparent_radius_pixels + 0.01F,
+            "Solar presets violated the Sun readability bounds");
+    require(inner_sun > overview_sun,
+            "Inner System zoom did not increase the Sun's stable apparent size");
+
+    nbody::visualization::OrbitCamera orbit_test_camera(35.0F, 28.0F, 7.0F);
+    orbit_test_camera.set_aspect_ratio(viewport_width / viewport_height);
+    auto evolved = solar.initial_state;
+    const float invariant_sun = evaluate(evolved, orbit_test_camera);
+    for (int step = 0; step < 352; ++step) {
+        nbody::velocity_verlet_step(evolved, solar.dt_s);
+        const float current_sun = evaluate(evolved, orbit_test_camera);
+        require(std::abs(current_sun - invariant_sun) <= 1.0e-4F,
+                "fixed-camera Sun apparent radius changed with orbital phase");
     }
 
-    std::vector<nbody::visualization::RenderBody> unconstrained;
-    transform.update_snapshot(solar.initial_state, unconstrained);
-    nbody::visualization::OrbitCamera overview_camera(35.0F, 28.0F, 22.0F);
-    overview_camera.set_aspect_ratio(viewport_width / viewport_height);
+    nbody::visualization::OrbitCamera slightly_farther(35.0F, 28.0F, 7.01F);
+    slightly_farther.set_aspect_ratio(viewport_width / viewport_height);
+    const float nearby_zoom_sun = evaluate(solar.initial_state, slightly_farther);
+    require(nearby_zoom_sun <= invariant_sun + 1.0e-4F &&
+                std::abs(nearby_zoom_sun - invariant_sun) < 0.1F,
+            "small Sun zoom response is discontinuous or has the wrong direction");
+    nbody::visualization::OrbitCamera farther_camera(35.0F, 28.0F, 10.0F);
+    farther_camera.set_aspect_ratio(viewport_width / viewport_height);
+    const float farther_sun = evaluate(solar.initial_state, farther_camera);
+    require(farther_sun < invariant_sun,
+            "meaningful zoom-out did not reduce the Sun's apparent radius");
+
+    std::vector<nbody::visualization::RenderBody> bounded_snapshot;
+    transform.update_snapshot(solar.initial_state, bounded_snapshot);
     nbody::visualization::apply_screen_space_body_sizing(
-        unconstrained, overview_camera, viewport_height, true);
-    const float unconstrained_sun = nbody::visualization::apparent_radius_pixels(
-        unconstrained[0].radius,
-        glm::distance(unconstrained[0].position, overview_camera.position()), viewport_height);
-    require(unconstrained_sun >= nbody::visualization::sun_minimum_apparent_radius_pixels - 0.01F &&
-                unconstrained_sun <= nbody::visualization::sun_maximum_apparent_radius_pixels + 0.01F,
-            "unconstrained Sun readability bounds were not applied");
-    for (std::size_t index = 1; index < unconstrained.size(); ++index) {
+        bounded_snapshot, overview_camera, viewport_height, true);
+    for (std::size_t index = 1; index < bounded_snapshot.size(); ++index) {
         const float pixels = nbody::visualization::apparent_radius_pixels(
-            unconstrained[index].radius,
-            glm::distance(unconstrained[index].position, overview_camera.position()),
+            bounded_snapshot[index].radius,
+            glm::distance(bounded_snapshot[index].position, overview_camera.position()),
             viewport_height);
         require(pixels >= nbody::visualization::body_minimum_apparent_radius_pixels - 0.01F &&
                     pixels <= nbody::visualization::body_maximum_apparent_radius_pixels + 0.01F,
                 "non-Sun apparent-radius bounds changed unexpectedly");
     }
 
-    const auto inner_near = evaluate_preset(
-        nbody::visualization::CameraPreset::inner_system, 0.01F);
-    require(std::abs(inner_near[0] - inner[0]) < 0.5F,
-            "small camera-distance change caused a discontinuous Sun size change");
-
-    std::vector<nbody::visualization::RenderBody> forced_clearance;
-    transform.update_snapshot(solar.initial_state, forced_clearance);
-    nbody::visualization::apply_screen_space_body_sizing(
-        forced_clearance, overview_camera, viewport_height, true, 12.0F);
-    const float forced_sun = nbody::visualization::apparent_radius_pixels(
-        forced_clearance[0].radius,
-        glm::distance(forced_clearance[0].position, overview_camera.position()), viewport_height);
-    const float forced_mercury = nbody::visualization::apparent_radius_pixels(
-        forced_clearance[1].radius,
-        glm::distance(forced_clearance[1].position, overview_camera.position()), viewport_height);
-    require(forced_sun < nbody::visualization::sun_minimum_apparent_radius_pixels &&
-                forced_sun + forced_mercury +
-                    nbody::visualization::sun_mercury_clearance_pixels <= 12.01F,
-            "Mercury clearance did not override the preferred Sun minimum");
-    std::cout << "Solar sizing at 1920x1080: overview Sun=" << overview[0]
-              << "px Mercury=" << overview[1] << "px separation=" << overview[2]
-              << "px; inner Sun=" << inner[0] << "px Mercury=" << inner[1]
-              << "px separation=" << inner[2] << "px\n";
+    std::cout << "Stable Solar sizing at 1920x1080: overview Sun=" << overview_sun
+              << "px; inner Sun=" << inner_sun
+              << "px; full-orbit fixed-camera Sun=" << invariant_sun << "px\n";
 }
 
 void test_scenario_switch_and_diagnostics() {

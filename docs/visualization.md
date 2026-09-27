@@ -91,12 +91,12 @@ The synthetic fixture uses its established deterministic generator and a
 Positions, trails, orbit guides, labels, rings, and markers share one fixed
 linear render transform derived from the initial state. Body centers remain at
 their linearly transformed physical coordinates. Display radii are presentation
-only: camera-aware screen-space bounds keep the Sun generally within 20--36 px
-and other bodies within 3--13 px, then reduce the projected Sun/Mercury pair if
-needed to preserve visible clearance in a compact overview. This may make the
-Sun smaller than its preferred minimum when separation is extremely tight, but
-the stable Sun callout preserves identity. No position distortion is used and
-no display value mutates mass, position, velocity, force, or diagnostics.
+only: the Sun uses a stable camera-dependent 20--36 px screen-space radius and
+other bodies use 3--13 px bounds. Planet positions never influence the Sun's
+displayed size. At distant scales, exaggerated Sun and Mercury glyphs may
+overlap; depth and the stable callout preserve association without moving either
+center. No position distortion is used and no display value mutates mass,
+position, velocity, force, or diagnostics.
 
 ## Stage 6C presentation policy
 
@@ -389,23 +389,23 @@ be launched and observed alive, but resize handles, presets, hover tooltips,
 selection, and visual composition cannot be clicked or judged programmatically.
 The final status is therefore **IMPLEMENTED / USER VISUAL VALIDATION PENDING**.
 
-### Stage 6D.1 Sun readability correction
+### Stage 6D.2 stable Sun sizing
 
-The preferred apparent Sun radius is now 20--36 pixels (40--72 pixel diameter)
-at 1080p-class views. These are presentation-only bounds; camera distance,
-physical positions/radii, forces, integration, diagnostics, trails, and guides
-are unchanged. If the desired Sun and Mercury discs plus a one-pixel gap do not
-fit their real projected center separation, Mercury is reduced continuously
-first to a 0.25-pixel sub-pixel marker. The Sun then receives all remaining
-space. If that still lies below 20 pixels, the clearance limit overrides the
-preferred minimum.
+Stage 6D.1 incorrectly capped the Sun from the instantaneous projected
+Sun--Mercury separation, so Mercury's orbit visibly changed the Sun radius.
+Stage 6D.2 removes all planet positions from the Sun sizing policy. Its target
+pixel radius is the Sun's render-only base radius projected using vertical
+viewport height, fixed 45-degree field of view, and `OrbitCamera::distance()`,
+then clamped to 20--36 pixels. The target is converted back at the Sun's actual
+camera depth solely so projection produces that invariant pixel radius.
 
-At the actual 1920x1080 presets with the default panel width, the focused test
-measured Overview center separation `6.04131 px`, giving Sun `4.79131 px` and
-Mercury `0.25 px`; this is the maximum Sun radius compatible with the required
-one-pixel clearance. Inner System measured separation `24.4958 px`, giving Sun
-`23.2458 px` and Mercury `0.25 px`. Clamp/min operations are continuous as the
-camera moves, so crossing a preferred bound changes slope but does not pop.
+At fixed camera, viewport, and body-size presentation settings, orbital phase
+therefore cannot change the Sun size. The focused 1920x1080 test reports
+Overview `20 px`, Inner System `36 px`, and `27.9539 px` unchanged across 352
+six-hour steps at an unclamped fixed camera distance. Zoom response is smooth
+and bounded. Exaggerated Sun/Mercury glyphs may temporarily overlap at distant
+scales; correct centers, normal depth rendering, and the existing stable callout
+are less misleading than breathing or displaced orbits.
 
 ### Final user visual-validation checklist
 

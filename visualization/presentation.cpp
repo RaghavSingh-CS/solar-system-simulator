@@ -153,8 +153,7 @@ void apply_screen_space_body_sizing(
     std::vector<RenderBody>& bodies,
     const OrbitCamera& camera,
     float viewport_height_pixels,
-    bool solar_system,
-    std::optional<float> sun_mercury_screen_separation_pixels) {
+    bool solar_system) {
     if (!(viewport_height_pixels > 0.0F) || !std::isfinite(viewport_height_pixels)) {
         throw std::invalid_argument("viewport height must be finite and positive");
     }
@@ -162,7 +161,14 @@ void apply_screen_space_body_sizing(
     std::vector<float> pixels(bodies.size());
     for (std::size_t index = 0; index < bodies.size(); ++index) {
         const float distance = std::max(glm::length(bodies[index].position - camera_position), 0.001F);
-        const float current = apparent_radius_pixels(bodies[index].radius, distance, viewport_height_pixels);
+        // The Sun's target apparent size is a presentation invariant. Use the
+        // camera's explicit zoom distance rather than any orbiting body position,
+        // then convert that target back at the Sun's actual depth below.
+        const float sizing_distance = solar_system && index == 0
+            ? camera.distance()
+            : distance;
+        const float current = apparent_radius_pixels(
+            bodies[index].radius, sizing_distance, viewport_height_pixels);
         const float minimum = solar_system && index == 0
             ? sun_minimum_apparent_radius_pixels
             : body_minimum_apparent_radius_pixels;
@@ -170,19 +176,6 @@ void apply_screen_space_body_sizing(
             ? sun_maximum_apparent_radius_pixels
             : body_maximum_apparent_radius_pixels;
         pixels[index] = std::clamp(current, minimum, maximum);
-    }
-    if (solar_system && bodies.size() > 1 && sun_mercury_screen_separation_pixels) {
-        const float available = std::max(
-            0.5F,
-            *sun_mercury_screen_separation_pixels - sun_mercury_clearance_pixels);
-        if (pixels[0] + pixels[1] > available) {
-            // Preserve the readable Sun target for as long as the real projected
-            // separation permits by continuously reducing Mercury first. Once
-            // Mercury reaches a sub-pixel marker, clearance becomes the Sun's
-            // upper bound. Min/clamp operations keep zoom response continuous.
-            pixels[1] = std::min(pixels[1], std::max(0.25F, available - pixels[0]));
-            pixels[0] = std::min(pixels[0], std::max(0.25F, available - pixels[1]));
-        }
     }
     for (std::size_t index = 0; index < bodies.size(); ++index) {
         const float distance = std::max(glm::length(bodies[index].position - camera_position), 0.001F);
