@@ -2,6 +2,7 @@
 
 #include "nbody/scenarios.hpp"
 #include "nbody/solar_system.hpp"
+#include "nbody/visualization/workload.hpp"
 
 #include <algorithm>
 #include <array>
@@ -40,12 +41,6 @@ constexpr std::array<float, 9> solar_visual_scales{{
     1.35F, 0.92F, 1.0F, 1.08F, 1.0F, 1.25F, 1.18F, 1.05F, 1.05F,
 }};
 
-// Keeps the exaggerated Sun legible without covering Mercury's rendered
-// perihelion. Other bodies use the uncapped physical-radius transform.
-constexpr std::array<float, 9> solar_maximum_render_radii{{
-    0.052F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
-}};
-
 constexpr std::array<glm::vec3, 8> synthetic_colors{{
     {0.95F, 0.75F, 0.30F}, {0.35F, 0.70F, 1.00F},
     {0.75F, 0.40F, 0.95F}, {0.35F, 0.90F, 0.62F},
@@ -70,10 +65,10 @@ ScenarioDefinition make_visual_scenario(
         result.initial_state = std::move(solar.initial_state);
         result.dt_s = solar_system_recommended_dt_s;
         result.speed_presets = {
-            {"Slow - 6 simulated hours / render", 1},
-            {"Normal - 1 simulated day / render", 4},
-            {"Fast - 4 simulated days / render", 16},
-            {"Very Fast - 16 simulated days / render", 64},
+            {"6 simulated hours per frame", 1},
+            {"1 simulated day per frame", 4},
+            {"4 simulated days per frame", 16},
+            {"16 simulated days per frame", 64},
         };
         result.default_speed_index = 1;
         result.trail_sample_interval_s = 86400.0;
@@ -88,7 +83,6 @@ ScenarioDefinition make_visual_scenario(
                 index == 0,
                 solar_materials[index],
                 solar_visual_scales[index],
-                solar_maximum_render_radii[index],
             });
         }
         return result;
@@ -98,15 +92,16 @@ ScenarioDefinition make_visual_scenario(
     result.provenance = "deterministic seed fixture; not the Solar System";
     result.initial_state = make_seeded_synthetic_system(synthetic_body_count, synthetic_seed);
     result.dt_s = 10.0;
-    const std::size_t balanced_steps = synthetic_body_count <= 64 ? 32 :
+    const std::size_t balanced_steps = synthetic_body_count > 1024 ? 1 :
+        synthetic_body_count <= 64 ? 32 :
         synthetic_body_count <= 128 ? 16 :
         synthetic_body_count <= 256 ? 8 :
         synthetic_body_count <= 512 ? 4 : 2;
     result.speed_presets = {
-        {"Slow - light compute batch", std::max<std::size_t>(1, balanced_steps / 4)},
-        {"Normal - balanced compute batch", balanced_steps},
-        {"Fast - heavy compute batch", balanced_steps * 4},
-        {"Very Fast - maximum compute batch", balanced_steps * 8},
+        {"Light compute batch", std::max<std::size_t>(1, balanced_steps / 4)},
+        {"Balanced compute batch", balanced_steps},
+        {"Heavy compute batch", synthetic_body_count > 1024 ? 1 : balanced_steps * 4},
+        {"Maximum compute batch", synthetic_body_count > 1024 ? 1 : balanced_steps * 8},
     };
     result.default_speed_index = 1;
     result.trail_sample_interval_s = 1000.0;
@@ -120,7 +115,6 @@ ScenarioDefinition make_visual_scenario(
             false,
             BodyMaterial::generic,
             1.0F,
-            0.0F,
         });
     }
     return result;

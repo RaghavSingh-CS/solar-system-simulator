@@ -46,6 +46,7 @@ public:
         double dt_s,
         std::size_t steps_per_frame);
     void advance_frame();
+    void advance_steps(std::size_t steps);
     void reset();
 
     static bool openmp_available() noexcept;

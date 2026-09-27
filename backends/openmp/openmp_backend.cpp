@@ -1,5 +1,7 @@
 #include "nbody/openmp_backend.hpp"
 
+#include "nbody/direct_force.hpp"
+
 #include <omp.h>
 
 #include <cmath>
@@ -21,14 +23,7 @@ int OpenMpForceBackend::thread_count() const noexcept { return thread_count_; }
 std::vector<Vec3> OpenMpForceBackend::compute_accelerations(
     const SimulationState& state,
     double gravitational_constant_value) const {
-    if (!(gravitational_constant_value > 0.0) || !std::isfinite(gravitational_constant_value)) {
-        throw std::invalid_argument("gravitational constant must be finite and positive");
-    }
-    for (const auto& body : state.bodies) {
-        if (!(body.mass_kg > 0.0) || !std::isfinite(body.mass_kg)) {
-            throw std::invalid_argument("body mass must be finite and positive");
-        }
-    }
+    validate_direct_force_inputs(state, gravitational_constant_value);
 
     std::vector<Vec3> accelerations(state.bodies.size());
     int invalid_position = 0;
@@ -38,21 +33,9 @@ std::vector<Vec3> OpenMpForceBackend::compute_accelerations(
     for (std::int64_t raw_i = 0; raw_i < body_count; ++raw_i) {
         const auto i = static_cast<std::size_t>(raw_i);
         Vec3 acceleration;
-        for (std::size_t j = 0; j < state.bodies.size(); ++j) {
-            if (i == j) {
-                continue;
-            }
-            const Vec3 displacement = state.bodies[j].position_m - state.bodies[i].position_m;
-            const double distance_squared = norm_squared(displacement);
-            if (!(distance_squared > 0.0) || !std::isfinite(distance_squared)) {
-                invalid_position = 1;
-                continue;
-            }
-            const double inverse_distance = 1.0 / std::sqrt(distance_squared);
-            const double inverse_distance_cubed =
-                inverse_distance * inverse_distance * inverse_distance;
-            acceleration += displacement *
-                (gravitational_constant_value * state.bodies[j].mass_kg * inverse_distance_cubed);
+        if (!try_compute_direct_acceleration(
+                state, i, gravitational_constant_value, acceleration)) {
+            invalid_position = 1;
         }
         accelerations[i] = acceleration;
     }

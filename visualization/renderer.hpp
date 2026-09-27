@@ -39,6 +39,8 @@ public:
         const OrbitCamera& camera,
         int framebuffer_width,
         int framebuffer_height,
+        int scene_viewport_x,
+        int scene_viewport_width,
         std::optional<std::size_t> selected_body = std::nullopt,
         std::optional<RenderMarker> barycenter_marker = std::nullopt) const;
 

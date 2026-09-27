@@ -1,9 +1,53 @@
 #include "nbody/simulation.hpp"
 
+#include "nbody/direct_force.hpp"
+
 #include <cmath>
 #include <stdexcept>
 
 namespace nbody {
+
+void validate_direct_force_inputs(
+    const SimulationState& state,
+    double gravitational_constant_value) {
+    if (!(gravitational_constant_value > 0.0) || !std::isfinite(gravitational_constant_value)) {
+        throw std::invalid_argument("gravitational constant must be finite and positive");
+    }
+    for (const auto& body : state.bodies) {
+        if (!(body.mass_kg > 0.0) || !std::isfinite(body.mass_kg)) {
+            throw std::invalid_argument("body mass must be finite and positive");
+        }
+    }
+}
+
+bool try_compute_direct_acceleration(
+    const SimulationState& state,
+    std::size_t target_index,
+    double gravitational_constant_value,
+    Vec3& acceleration) noexcept {
+    if (target_index >= state.bodies.size()) {
+        return false;
+    }
+    acceleration = {};
+    for (std::size_t source_index = 0; source_index < state.bodies.size(); ++source_index) {
+        if (target_index == source_index) {
+            continue;
+        }
+        const Vec3 displacement =
+            state.bodies[source_index].position_m - state.bodies[target_index].position_m;
+        const double distance_squared = norm_squared(displacement);
+        if (!(distance_squared > 0.0) || !std::isfinite(distance_squared)) {
+            return false;
+        }
+        const double inverse_distance = 1.0 / std::sqrt(distance_squared);
+        const double inverse_distance_cubed =
+            inverse_distance * inverse_distance * inverse_distance;
+        acceleration += displacement *
+            (gravitational_constant_value * state.bodies[source_index].mass_kg *
+             inverse_distance_cubed);
+    }
+    return true;
+}
 
 namespace {
 
@@ -28,29 +72,12 @@ const ForceBackend& sequential_force_backend() {
 std::vector<Vec3> compute_accelerations(
     const SimulationState& state,
     double gravitational_constant_value) {
-    if (!(gravitational_constant_value > 0.0) || !std::isfinite(gravitational_constant_value)) {
-        throw std::invalid_argument("gravitational constant must be finite and positive");
-    }
-
+    validate_direct_force_inputs(state, gravitational_constant_value);
     std::vector<Vec3> accelerations(state.bodies.size());
     for (std::size_t i = 0; i < state.bodies.size(); ++i) {
-        if (!(state.bodies[i].mass_kg > 0.0) || !std::isfinite(state.bodies[i].mass_kg)) {
-            throw std::invalid_argument("body mass must be finite and positive");
-        }
-        for (std::size_t j = 0; j < state.bodies.size(); ++j) {
-            if (i == j) {
-                continue;
-            }
-            const Vec3 displacement = state.bodies[j].position_m - state.bodies[i].position_m;
-            const double distance_squared = norm_squared(displacement);
-            if (!(distance_squared > 0.0) || !std::isfinite(distance_squared)) {
-                throw std::domain_error("coincident or invalid body positions");
-            }
-            const double inverse_distance = 1.0 / std::sqrt(distance_squared);
-            const double inverse_distance_cubed =
-                inverse_distance * inverse_distance * inverse_distance;
-            accelerations[i] += displacement *
-                (gravitational_constant_value * state.bodies[j].mass_kg * inverse_distance_cubed);
+        if (!try_compute_direct_acceleration(
+                state, i, gravitational_constant_value, accelerations[i])) {
+            throw std::domain_error("coincident or invalid body positions");
         }
     }
     return accelerations;

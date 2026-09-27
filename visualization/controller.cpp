@@ -88,7 +88,14 @@ void SimulationController::advance_frame() {
     if (paused_) {
         return;
     }
-    for (std::size_t step = 0; step < config_.steps_per_frame; ++step) {
+    advance_steps(config_.steps_per_frame);
+}
+
+void SimulationController::advance_steps(std::size_t steps) {
+    if (steps == 0) {
+        throw std::invalid_argument("manual advancement requires at least one step");
+    }
+    for (std::size_t step = 0; step < steps; ++step) {
         velocity_verlet_step(state_, config_.dt_s, *backend_);
     }
 }

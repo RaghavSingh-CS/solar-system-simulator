@@ -36,7 +36,6 @@ struct RenderBodyStyle {
     bool emissive{false};
     BodyMaterial material{BodyMaterial::generic};
     float visual_scale{1.0F};
-    float maximum_render_radius{0.0F};
 };
 
 class RenderSpaceTransform {

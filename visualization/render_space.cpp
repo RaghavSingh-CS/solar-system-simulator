@@ -31,10 +31,6 @@ RenderSpaceTransform::RenderSpaceTransform(
         if (!(style.visual_scale > 0.0F) || !std::isfinite(style.visual_scale)) {
             throw std::invalid_argument("render body visual scale must be finite and positive");
         }
-        if (style.maximum_render_radius < 0.0F ||
-            !std::isfinite(style.maximum_render_radius)) {
-            throw std::invalid_argument("maximum render radius must be finite and non-negative");
-        }
     }
     double maximum_distance = 0.0;
     double maximum_mass = 0.0;
@@ -70,9 +66,6 @@ void RenderSpaceTransform::update_snapshot(
         float radius = style.physical_radius_m > 0.0
             ? std::max(minimum_render_radius_, physical_radius) * style.visual_scale
             : synthetic_radius;
-        if (style.maximum_render_radius > 0.0F) {
-            radius = std::min(radius, style.maximum_render_radius);
-        }
         snapshot.push_back({
             to_render_position(body.position_m),
             radius,

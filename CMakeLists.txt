@@ -4,14 +4,8 @@ project(solar_system_simulator VERSION 0.1.0 LANGUAGES CXX)
 
 option(NBODY_ENABLE_OPENMP "Build the OpenMP force backend" OFF)
 option(NBODY_ENABLE_CUDA "Build the CUDA force backend" OFF)
-option(NBODY_ENABLE_MPI "Build the optional MPI backend (future stage)" OFF)
+option(NBODY_ENABLE_MPI "Build the optional MPI distributed-memory backend" OFF)
 option(NBODY_BUILD_VISUALIZATION "Build the optional GLFW/OpenGL viewer" OFF)
-
-foreach(feature IN ITEMS NBODY_ENABLE_MPI)
-    if(${feature})
-        message(FATAL_ERROR "${feature}=ON is not implemented in the foundation stage; leave it OFF")
-    endif()
-endforeach()
 
 add_library(nbody_core
     src/diagnostics.cpp
@@ -94,6 +88,29 @@ if(NBODY_ENABLE_OPENMP)
     endif()
 endif()
 
+if(NBODY_ENABLE_MPI)
+    find_package(MPI REQUIRED COMPONENTS CXX)
+    add_library(nbody_mpi backends/mpi/mpi_backend.cpp)
+    target_include_directories(nbody_mpi PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_features(nbody_mpi PUBLIC cxx_std_17)
+    target_link_libraries(nbody_mpi PUBLIC nbody_core MPI::MPI_CXX)
+    if(NBODY_ENABLE_OPENMP)
+        target_compile_definitions(nbody_mpi PRIVATE NBODY_MPI_HAS_OPENMP=1)
+        target_link_libraries(nbody_mpi PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+    if(MSVC)
+        target_compile_options(nbody_mpi PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(nbody_mpi PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_executable(nbody_mpi_benchmark src/mpi_benchmark.cpp)
+    target_link_libraries(nbody_mpi_benchmark PRIVATE nbody_mpi)
+    target_compile_definitions(nbody_mpi_benchmark PRIVATE
+        NBODY_BUILD_CONFIGURATION="$<CONFIG>"
+    )
+endif()
+
 if(NBODY_BUILD_VISUALIZATION)
     message(STATUS
         "Visualization enabled: fetching pinned GLFW, GLM, and Dear ImGui dependencies if absent; using vendored GLAD loader"
@@ -160,6 +177,7 @@ if(NBODY_BUILD_VISUALIZATION)
         visualization/render_space.cpp
         visualization/scenario.cpp
         visualization/trails.cpp
+        visualization/workload.cpp
     )
     target_include_directories(nbody_visualization_model PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_features(nbody_visualization_model PUBLIC cxx_std_17)
@@ -193,6 +211,14 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(
+            NAME nbody_stage6d_tools
+            COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_stage6d_tools.py
+        )
+    endif()
+
     add_executable(nbody_tests tests/test_two_body.cpp)
     target_link_libraries(nbody_tests PRIVATE nbody_core)
     add_test(NAME nbody_two_body COMMAND nbody_tests)
@@ -211,6 +237,28 @@ if(BUILD_TESTING)
         add_executable(nbody_cuda_tests tests/test_cuda.cpp)
         target_link_libraries(nbody_cuda_tests PRIVATE nbody_cuda)
         add_test(NAME nbody_cuda_validation COMMAND nbody_cuda_tests)
+    endif()
+
+    if(NBODY_ENABLE_MPI)
+        add_executable(nbody_mpi_tests tests/test_mpi.cpp)
+        target_link_libraries(nbody_mpi_tests PRIVATE nbody_mpi)
+        foreach(rank_count IN ITEMS 1 2 4)
+            add_test(
+                NAME nbody_mpi_${rank_count}_rank
+                COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${rank_count}
+                        ${MPIEXEC_PREFLAGS} $<TARGET_FILE:nbody_mpi_tests> ${MPIEXEC_POSTFLAGS}
+            )
+            set_tests_properties(nbody_mpi_${rank_count}_rank PROPERTIES PROCESSORS ${rank_count})
+        endforeach()
+        if(NBODY_ENABLE_OPENMP)
+            add_test(
+                NAME nbody_mpi_openmp_hybrid
+                COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+                        ${MPIEXEC_PREFLAGS} $<TARGET_FILE:nbody_mpi_tests>
+                        --threads 2 ${MPIEXEC_POSTFLAGS}
+            )
+            set_tests_properties(nbody_mpi_openmp_hybrid PROPERTIES PROCESSORS 4)
+        endif()
     endif()
 
     if(NBODY_BUILD_VISUALIZATION)

@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace nbody::visualization {
@@ -56,6 +57,58 @@ glm::vec3 amplify_from_barycenter(
     const glm::vec3& barycenter,
     float amplification);
 
+struct PanelWidthPolicy {
+    float minimum{380.0F};
+    float maximum{680.0F};
+    float width{438.0F};
+};
+
+PanelWidthPolicy panel_width_policy(float display_width, float requested_width);
+
+std::string format_measurement(double value, const char* unit, int significant_digits = 6);
+
+enum class HelpTopic {
+    scenario,
+    pause,
+    reset,
+    simulation_speed,
+    sequential_backend,
+    openmp_backend,
+    openmp_threads,
+    workload_size,
+    compare_cpu_backends,
+    body_selector,
+    focus_selected,
+    camera_presets,
+    history_trails,
+    reference_orbits,
+    labels,
+    barycenter,
+    sun_motion_amplification,
+    body_size,
+    energy_conservation,
+    angular_momentum_conservation,
+    numerical_status,
+    trail_history,
+    advanced_details,
+    manual_large_step,
+    count,
+};
+
+const char* help_text(HelpTopic topic) noexcept;
+
+float apparent_radius_pixels(
+    float world_radius,
+    float distance_to_camera,
+    float viewport_height_pixels);
+
+void apply_screen_space_body_sizing(
+    std::vector<RenderBody>& bodies,
+    const OrbitCamera& camera,
+    float viewport_height_pixels,
+    bool solar_system,
+    std::optional<float> sun_mercury_screen_separation_pixels = std::nullopt);
+
 struct LabelCandidate {
     std::size_t body_index{0};
     glm::vec2 anchor{0.0F};
@@ -78,6 +131,13 @@ std::vector<LabelPlacement> declutter_labels(
     glm::vec2 viewport_size,
     float left_inset = 0.0F,
     float margin = 6.0F,
-    const std::vector<LabelPlacement>& previous = {});
+    const std::vector<LabelPlacement>& previous = {},
+    const std::vector<LabelPlacement>& reserved = {});
+
+std::vector<LabelPlacement> stable_inner_system_callouts(
+    const std::vector<LabelCandidate>& candidates,
+    glm::vec2 viewport_size,
+    float left_inset,
+    float margin = 8.0F);
 
 }  // namespace nbody::visualization

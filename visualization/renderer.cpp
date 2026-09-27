@@ -601,12 +601,17 @@ void BodyRenderer::render(
     const OrbitCamera& camera,
     int framebuffer_width,
     int framebuffer_height,
+    int scene_viewport_x,
+    int scene_viewport_width,
     std::optional<std::size_t> selected_body,
     std::optional<RenderMarker> barycenter_marker) const {
     if (framebuffer_width <= 0 || framebuffer_height <= 0) {
         return;
     }
-    glViewport(0, 0, framebuffer_width, framebuffer_height);
+    scene_viewport_x = std::clamp(scene_viewport_x, 0, framebuffer_width - 1);
+    scene_viewport_width = std::clamp(
+        scene_viewport_width, 1, framebuffer_width - scene_viewport_x);
+    glViewport(scene_viewport_x, 0, scene_viewport_width, framebuffer_height);
     glClearColor(0.006F, 0.009F, 0.022F, 1.0F);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     const glm::mat4 view = camera.view_matrix();
@@ -698,10 +703,13 @@ void BodyRenderer::render(
     const bool use_point_bodies = bodies.size() > 64 &&
         std::all_of(bodies.begin(), bodies.end(), [](const auto& body) {
             return body.material == BodyMaterial::generic;
-        });
+    });
     if (use_point_bodies) {
-        std::vector<PointBodyVertex> points;
-        points.reserve(bodies.size());
+        static thread_local std::vector<PointBodyVertex> points;
+        points.clear();
+        if (points.capacity() < bodies.size()) {
+            points.reserve(bodies.size());
+        }
         for (const auto& body : bodies) {
             points.push_back({
                 body.position,

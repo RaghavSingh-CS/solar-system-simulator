@@ -8,6 +8,7 @@
 #include "nbody/visualization/render_space.hpp"
 #include "nbody/visualization/scenario.hpp"
 #include "nbody/visualization/trails.hpp"
+#include "nbody/visualization/workload.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/geometric.hpp>
@@ -64,6 +65,10 @@ void test_controller() {
     require(controller.state().time_s == 60.0, "resumed controller did not advance");
     controller.reset();
     require(same_state(initial, controller.state()), "reset did not reproduce the initial state");
+    controller.advance_steps(2);
+    require(controller.state().time_s == 20.0,
+            "manual fixed-step advancement did not ignore paused-frame batching safely");
+    controller.reset();
 
     if (nbody::visualization::SimulationController::openmp_available()) {
         controller.select_backend(nbody::visualization::BackendKind::openmp, 2);
@@ -120,15 +125,29 @@ void test_scenario_switch_and_diagnostics() {
         solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
     std::vector<nbody::visualization::RenderBody> solar_snapshot;
     solar_transform.update_snapshot(solar.initial_state, solar_snapshot);
-    require(std::abs(solar_snapshot[0].radius - 0.052F) < 1.0e-6F,
-            "Solar render-only Sun cap was not applied");
-    require(glm::distance(solar_snapshot[0].position, solar_snapshot[1].position) >
-                solar_snapshot[0].radius + solar_snapshot[1].radius,
-            "rendered Sun overlaps Mercury in the initial Solar composition");
-    constexpr double validated_ten_year_mercury_minimum_m = 4.60084e10;
-    require(validated_ten_year_mercury_minimum_m * solar_transform.position_scale() >
-                solar_snapshot[0].radius + solar_snapshot[1].radius,
-            "render-only Sun cap still covers Mercury at the validated physical minimum");
+    nbody::visualization::OrbitCamera overview(35.0F, 28.0F, 22.0F);
+    overview.set_aspect_ratio(16.0F / 9.0F);
+    nbody::visualization::apply_screen_space_body_sizing(
+        solar_snapshot, overview, 1080.0F, true, 18.0F);
+    const float sun_pixels = nbody::visualization::apparent_radius_pixels(
+        solar_snapshot[0].radius,
+        glm::distance(solar_snapshot[0].position, overview.position()), 1080.0F);
+    const float mercury_pixels = nbody::visualization::apparent_radius_pixels(
+        solar_snapshot[1].radius,
+        glm::distance(solar_snapshot[1].position, overview.position()), 1080.0F);
+    require(sun_pixels > 0.0F && sun_pixels + mercury_pixels + 1.4F <= 18.0F,
+            "camera-aware Solar sizing did not preserve projected Mercury clearance");
+    solar_transform.update_snapshot(solar.initial_state, solar_snapshot);
+    nbody::visualization::apply_screen_space_body_sizing(
+        solar_snapshot, overview, 1080.0F, true, 4.0F);
+    const float compact_sun_pixels = nbody::visualization::apparent_radius_pixels(
+        solar_snapshot[0].radius,
+        glm::distance(solar_snapshot[0].position, overview.position()), 1080.0F);
+    const float compact_mercury_pixels = nbody::visualization::apparent_radius_pixels(
+        solar_snapshot[1].radius,
+        glm::distance(solar_snapshot[1].position, overview.position()), 1080.0F);
+    require(compact_sun_pixels + compact_mercury_pixels + 0.9F <= 4.0F,
+            "camera-aware Solar sizing fails at compact overview separation");
 
     nbody::visualization::SimulationController controller(
         solar.initial_state,
@@ -245,6 +264,21 @@ void test_presentation_helpers() {
     require(!exceeded.energy_within_bound && !exceeded.angular_momentum_within_bound,
             "numerical-health warning mapping accepted invalid drift");
 
+    const auto narrow_panel = nbody::visualization::panel_width_policy(800.0F, 900.0F);
+    const auto wide_panel = nbody::visualization::panel_width_policy(1920.0F, 520.0F);
+    require(narrow_panel.width == narrow_panel.maximum && narrow_panel.minimum == 380.0F &&
+                wide_panel.width == 520.0F && wide_panel.maximum == 680.0F,
+            "responsive panel width policy escaped its declared constraints");
+    require(nbody::visualization::format_measurement(5.9722e24, "kg", 6).find("kg") !=
+                std::string::npos,
+            "measurement formatting omitted its complete unit");
+    for (std::size_t topic = 0;
+         topic < static_cast<std::size_t>(nbody::visualization::HelpTopic::count); ++topic) {
+        require(std::string(nbody::visualization::help_text(
+                    static_cast<nbody::visualization::HelpTopic>(topic))).size() > 20U,
+                "tooltip registry contains an incomplete entry");
+    }
+
     const auto solar = nbody::visualization::make_visual_scenario(
         nbody::visualization::ScenarioKind::solar_system);
     nbody::visualization::RenderSpaceTransform transform(
@@ -299,11 +333,46 @@ void test_presentation_helpers() {
                     placements[index].position - placements[index].anchor) < 1.0e-4F,
                 "label hysteresis did not retain the prior accepted anchor");
     }
+
+    std::vector<nbody::visualization::LabelCandidate> inner_candidates;
+    for (std::size_t index = 0; index < 5; ++index) {
+        inner_candidates.push_back({
+            index,
+            {620.0F + static_cast<float>(index), 350.0F},
+            {72.0F, 24.0F},
+            index == 2 ? 1000 : 900 - static_cast<int>(index),
+            index == 2,
+        });
+    }
+    const auto callouts = nbody::visualization::stable_inner_system_callouts(
+        inner_candidates, {1280.0F, 720.0F}, 420.0F);
+    require(callouts.size() == 5U && callouts[2].selected,
+            "stable inner callouts omitted a body or selected-body priority");
+    auto moved_inner = inner_candidates;
+    for (auto& candidate : moved_inner) {
+        candidate.anchor += glm::vec2(0.5F, -0.25F);
+    }
+    const auto moved_callouts = nbody::visualization::stable_inner_system_callouts(
+        moved_inner, {1280.0F, 720.0F}, 420.0F);
+    for (std::size_t index = 0; index < callouts.size(); ++index) {
+        require(callouts[index].body_index == moved_callouts[index].body_index &&
+                    callouts[index].position == moved_callouts[index].position &&
+                    moved_callouts[index].anchor == moved_inner[index].anchor,
+                "inner callout slot or body association changed under small motion");
+        require(callouts[index].position.x >= 428.0F && callouts[index].position.y >= 8.0F &&
+                    callouts[index].position.x + callouts[index].size.x <= 1272.0F &&
+                    callouts[index].position.y + callouts[index].size.y <= 712.0F,
+                "inner callout escaped viewport containment");
+        if (index > 0) {
+            require(callouts[index - 1].position.y + callouts[index - 1].size.y <=
+                        callouts[index].position.y,
+                    "stable inner callouts overlap");
+        }
+    }
 }
 
 void test_compute_experiment_scaling_and_comparison() {
-    constexpr std::array<std::size_t, 6> supported{{32, 64, 128, 256, 512, 1024}};
-    for (const std::size_t count : supported) {
+    for (const std::size_t count : nbody::visualization::compute_body_counts) {
         const auto first = nbody::visualization::make_visual_scenario(
             nbody::visualization::ScenarioKind::synthetic, count, 24301);
         const auto second = nbody::visualization::make_visual_scenario(
@@ -318,6 +387,15 @@ void test_compute_experiment_scaling_and_comparison() {
         require(snapshot.size() == count,
                 "large-N Compute Experiment render snapshot is incomplete");
     }
+
+    const auto ordinary = nbody::visualization::interactive_workload_policy(1024, false);
+    const auto guarded = nbody::visualization::interactive_workload_policy(4096, true);
+    const auto prohibited = nbody::visualization::interactive_workload_policy(100000, true);
+    require(ordinary.continuous_advancement && ordinary.live_cpu_comparison &&
+                !guarded.continuous_advancement && guarded.manual_single_step &&
+                !guarded.history_trails && !prohibited.manual_single_step &&
+                prohibited.warning_required,
+            "large-N interactive feasibility policy is unsafe or incomplete");
 
     const auto initial = nbody::visualization::make_visual_scenario(
         nbody::visualization::ScenarioKind::synthetic, 512, 24301);
