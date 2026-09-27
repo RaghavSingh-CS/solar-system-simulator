@@ -21,6 +21,7 @@ Last updated: 2026-09-27
 | Stage 6C final presentation pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Themed UI, camera presets, orbit context, decluttered labels, planet identity/rings/starfield, and headless presentation tests |
 | Stage 6C.1 corrective pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Mercury render clearance, stable labels, barycentric Sun motion, scalable variable-N compute mode, and isolated live CPU comparison |
 | Stage 6D final feature stage | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-aware Solar sizing, fixed inner callouts, polished/resizable/help-complete UI, MPI/hybrid, safe 100,000-body display, and bounded pilot infrastructure |
+| Stage 6D.1 Sun readability correction | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Preferred 20--36 px Sun radius with continuous Mercury-first clearance override |
 
 ## Decisions and rationale
 
@@ -692,6 +693,24 @@ loops until deliberate interruption. CUDA viewer selection exited `1` with the
 intended explicit unavailable diagnostic. Native-app automation is unavailable
 on this host, so visual composition, resize, hover, and interaction remain
 **USER VISUAL VALIDATION PENDING**.
+
+## Stage 6D.1: final Sun apparent-size correction
+
+The preferred presentation-only Sun radius is now 20--36 pixels (40--72 pixel
+diameter). Non-Sun bodies retain the existing 3--13 pixel policy. When the real
+projected Sun--Mercury center separation cannot contain both desired discs plus
+the existing one-pixel visual gap, Mercury shrinks continuously first to a
+0.25-pixel sub-pixel marker. The Sun receives the remaining radius; if that is
+below 20 pixels, clearance wins. Only render radii change.
+
+The targeted 1920x1080 regression measured Overview Sun `4.79131 px`, Mercury
+`0.25 px`, and center separation `6.04131 px`; Overview is therefore
+clearance-limited and the Sun occupies the maximum permissible radius. Inner
+System measured Sun `23.2458 px`, Mercury `0.25 px`, and separation `24.4958
+px`. Tests also cover preferred lower/upper bounds, forced clearance override,
+unchanged centers, and continuity under a 0.01 camera-distance change. The
+focused visualization model test passed `1/1`; no physics, MPI, large-N,
+benchmarking, CUDA, Auto, Stage 5, UI, label, typography, or control code changed.
 
 ## Known limitations
 

@@ -47,6 +47,24 @@ bool same_state(const nbody::SimulationState& left, const nbody::SimulationState
     return true;
 }
 
+float projected_separation_pixels(
+    const glm::vec3& first,
+    const glm::vec3& second,
+    const nbody::visualization::OrbitCamera& camera,
+    float viewport_width,
+    float viewport_height) {
+    const auto project = [&](const glm::vec3& position) {
+        const glm::vec4 clip = camera.projection_matrix() * camera.view_matrix() *
+            glm::vec4(position, 1.0F);
+        require(clip.w > 0.0F, "Solar preset projected a tested body behind the camera");
+        const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+        return glm::vec2(
+            (ndc.x * 0.5F + 0.5F) * viewport_width,
+            (-ndc.y * 0.5F + 0.5F) * viewport_height);
+    };
+    return glm::distance(project(first), project(second));
+}
+
 void test_controller() {
     const auto initial = nbody::make_seeded_synthetic_system(8, 24301);
     nbody::visualization::SimulationController controller(
@@ -104,6 +122,110 @@ void test_render_space_is_read_only() {
     require(same_state(original, state), "render-space conversion modified physics state");
 }
 
+void test_solar_screen_space_sizing() {
+    constexpr float viewport_width = 1920.0F - 446.0F;
+    constexpr float viewport_height = 1080.0F;
+    const auto solar = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    nbody::visualization::RenderSpaceTransform transform(
+        solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
+
+    const auto evaluate_preset = [&](nbody::visualization::CameraPreset preset,
+                                     float distance_adjustment = 0.0F) {
+        std::vector<nbody::visualization::RenderBody> snapshot;
+        transform.update_snapshot(solar.initial_state, snapshot);
+        const auto original_positions = snapshot;
+        nbody::visualization::OrbitCamera camera;
+        const auto framing = nbody::visualization::camera_framing(
+            preset, nbody::visualization::ScenarioKind::solar_system, snapshot);
+        nbody::visualization::apply_camera_framing(camera, framing);
+        camera.set_distance(camera.distance() + distance_adjustment);
+        camera.set_aspect_ratio(viewport_width / viewport_height);
+        const float separation = projected_separation_pixels(
+            snapshot[0].position, snapshot[1].position, camera,
+            viewport_width, viewport_height);
+        nbody::visualization::apply_screen_space_body_sizing(
+            snapshot, camera, viewport_height, true, separation);
+        for (std::size_t index = 0; index < snapshot.size(); ++index) {
+            require(snapshot[index].position == original_positions[index].position,
+                    "screen-space sizing changed a physical body center");
+        }
+        return std::array<float, 3>{
+            nbody::visualization::apparent_radius_pixels(
+                snapshot[0].radius,
+                glm::distance(snapshot[0].position, camera.position()), viewport_height),
+            nbody::visualization::apparent_radius_pixels(
+                snapshot[1].radius,
+                glm::distance(snapshot[1].position, camera.position()), viewport_height),
+            separation,
+        };
+    };
+
+    const auto overview = evaluate_preset(nbody::visualization::CameraPreset::overview);
+    const auto inner = evaluate_preset(nbody::visualization::CameraPreset::inner_system);
+    for (const auto& result : {overview, inner}) {
+        require(result[0] <= nbody::visualization::sun_maximum_apparent_radius_pixels + 0.01F,
+                "Solar preset exceeded the Sun apparent-radius upper bound");
+        require(result[0] + result[1] +
+                    nbody::visualization::sun_mercury_clearance_pixels <= result[2] + 0.02F,
+                "Solar preset did not preserve projected Sun/Mercury clearance");
+    }
+    require(inner[0] >= nbody::visualization::sun_minimum_apparent_radius_pixels - 0.01F,
+            "Inner System preset did not preserve the readable Sun minimum");
+    if (overview[0] < nbody::visualization::sun_minimum_apparent_radius_pixels) {
+        require(overview[1] <= 0.26F &&
+                    overview[0] >= overview[2] -
+                        nbody::visualization::sun_mercury_clearance_pixels - 0.27F,
+                "Overview did not give the clearance-limited Sun the maximum available radius");
+    }
+
+    std::vector<nbody::visualization::RenderBody> unconstrained;
+    transform.update_snapshot(solar.initial_state, unconstrained);
+    nbody::visualization::OrbitCamera overview_camera(35.0F, 28.0F, 22.0F);
+    overview_camera.set_aspect_ratio(viewport_width / viewport_height);
+    nbody::visualization::apply_screen_space_body_sizing(
+        unconstrained, overview_camera, viewport_height, true);
+    const float unconstrained_sun = nbody::visualization::apparent_radius_pixels(
+        unconstrained[0].radius,
+        glm::distance(unconstrained[0].position, overview_camera.position()), viewport_height);
+    require(unconstrained_sun >= nbody::visualization::sun_minimum_apparent_radius_pixels - 0.01F &&
+                unconstrained_sun <= nbody::visualization::sun_maximum_apparent_radius_pixels + 0.01F,
+            "unconstrained Sun readability bounds were not applied");
+    for (std::size_t index = 1; index < unconstrained.size(); ++index) {
+        const float pixels = nbody::visualization::apparent_radius_pixels(
+            unconstrained[index].radius,
+            glm::distance(unconstrained[index].position, overview_camera.position()),
+            viewport_height);
+        require(pixels >= nbody::visualization::body_minimum_apparent_radius_pixels - 0.01F &&
+                    pixels <= nbody::visualization::body_maximum_apparent_radius_pixels + 0.01F,
+                "non-Sun apparent-radius bounds changed unexpectedly");
+    }
+
+    const auto inner_near = evaluate_preset(
+        nbody::visualization::CameraPreset::inner_system, 0.01F);
+    require(std::abs(inner_near[0] - inner[0]) < 0.5F,
+            "small camera-distance change caused a discontinuous Sun size change");
+
+    std::vector<nbody::visualization::RenderBody> forced_clearance;
+    transform.update_snapshot(solar.initial_state, forced_clearance);
+    nbody::visualization::apply_screen_space_body_sizing(
+        forced_clearance, overview_camera, viewport_height, true, 12.0F);
+    const float forced_sun = nbody::visualization::apparent_radius_pixels(
+        forced_clearance[0].radius,
+        glm::distance(forced_clearance[0].position, overview_camera.position()), viewport_height);
+    const float forced_mercury = nbody::visualization::apparent_radius_pixels(
+        forced_clearance[1].radius,
+        glm::distance(forced_clearance[1].position, overview_camera.position()), viewport_height);
+    require(forced_sun < nbody::visualization::sun_minimum_apparent_radius_pixels &&
+                forced_sun + forced_mercury +
+                    nbody::visualization::sun_mercury_clearance_pixels <= 12.01F,
+            "Mercury clearance did not override the preferred Sun minimum");
+    std::cout << "Solar sizing at 1920x1080: overview Sun=" << overview[0]
+              << "px Mercury=" << overview[1] << "px separation=" << overview[2]
+              << "px; inner Sun=" << inner[0] << "px Mercury=" << inner[1]
+              << "px separation=" << inner[2] << "px\n";
+}
+
 void test_scenario_switch_and_diagnostics() {
     const auto solar = nbody::visualization::make_visual_scenario(
         nbody::visualization::ScenarioKind::solar_system);
@@ -120,34 +242,6 @@ void test_scenario_switch_and_diagnostics() {
     require(synthetic.label_policy == nbody::visualization::LabelPolicy::selected_only &&
                 synthetic.name == "Compute Experiment",
             "synthetic mode is not intentionally framed as a low-clutter compute experiment");
-
-    nbody::visualization::RenderSpaceTransform solar_transform(
-        solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
-    std::vector<nbody::visualization::RenderBody> solar_snapshot;
-    solar_transform.update_snapshot(solar.initial_state, solar_snapshot);
-    nbody::visualization::OrbitCamera overview(35.0F, 28.0F, 22.0F);
-    overview.set_aspect_ratio(16.0F / 9.0F);
-    nbody::visualization::apply_screen_space_body_sizing(
-        solar_snapshot, overview, 1080.0F, true, 18.0F);
-    const float sun_pixels = nbody::visualization::apparent_radius_pixels(
-        solar_snapshot[0].radius,
-        glm::distance(solar_snapshot[0].position, overview.position()), 1080.0F);
-    const float mercury_pixels = nbody::visualization::apparent_radius_pixels(
-        solar_snapshot[1].radius,
-        glm::distance(solar_snapshot[1].position, overview.position()), 1080.0F);
-    require(sun_pixels > 0.0F && sun_pixels + mercury_pixels + 1.4F <= 18.0F,
-            "camera-aware Solar sizing did not preserve projected Mercury clearance");
-    solar_transform.update_snapshot(solar.initial_state, solar_snapshot);
-    nbody::visualization::apply_screen_space_body_sizing(
-        solar_snapshot, overview, 1080.0F, true, 4.0F);
-    const float compact_sun_pixels = nbody::visualization::apparent_radius_pixels(
-        solar_snapshot[0].radius,
-        glm::distance(solar_snapshot[0].position, overview.position()), 1080.0F);
-    const float compact_mercury_pixels = nbody::visualization::apparent_radius_pixels(
-        solar_snapshot[1].radius,
-        glm::distance(solar_snapshot[1].position, overview.position()), 1080.0F);
-    require(compact_sun_pixels + compact_mercury_pixels + 0.9F <= 4.0F,
-            "camera-aware Solar sizing fails at compact overview separation");
 
     nbody::visualization::SimulationController controller(
         solar.initial_state,
@@ -428,6 +522,7 @@ int main() {
     try {
         test_controller();
         test_render_space_is_read_only();
+        test_solar_screen_space_sizing();
         test_scenario_switch_and_diagnostics();
         test_trail_boundedness();
         test_actual_sun_trail_and_barycentric_transform();

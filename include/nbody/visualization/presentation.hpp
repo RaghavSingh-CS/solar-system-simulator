@@ -97,6 +97,12 @@ enum class HelpTopic {
 
 const char* help_text(HelpTopic topic) noexcept;
 
+inline constexpr float sun_minimum_apparent_radius_pixels = 20.0F;
+inline constexpr float sun_maximum_apparent_radius_pixels = 36.0F;
+inline constexpr float body_minimum_apparent_radius_pixels = 3.0F;
+inline constexpr float body_maximum_apparent_radius_pixels = 13.0F;
+inline constexpr float sun_mercury_clearance_pixels = 1.0F;
+
 float apparent_radius_pixels(
     float world_radius,
     float distance_to_camera,

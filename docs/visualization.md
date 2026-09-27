@@ -91,7 +91,7 @@ The synthetic fixture uses its established deterministic generator and a
 Positions, trails, orbit guides, labels, rings, and markers share one fixed
 linear render transform derived from the initial state. Body centers remain at
 their linearly transformed physical coordinates. Display radii are presentation
-only: camera-aware screen-space bounds keep the Sun generally within 8--24 px
+only: camera-aware screen-space bounds keep the Sun generally within 20--36 px
 and other bodies within 3--13 px, then reduce the projected Sun/Mercury pair if
 needed to preserve visible clearance in a compact overview. This may make the
 Sun smaller than its preferred minimum when separation is extremely tight, but
@@ -388,6 +388,24 @@ Native-app automation was unavailable on the validation host. Real contexts can
 be launched and observed alive, but resize handles, presets, hover tooltips,
 selection, and visual composition cannot be clicked or judged programmatically.
 The final status is therefore **IMPLEMENTED / USER VISUAL VALIDATION PENDING**.
+
+### Stage 6D.1 Sun readability correction
+
+The preferred apparent Sun radius is now 20--36 pixels (40--72 pixel diameter)
+at 1080p-class views. These are presentation-only bounds; camera distance,
+physical positions/radii, forces, integration, diagnostics, trails, and guides
+are unchanged. If the desired Sun and Mercury discs plus a one-pixel gap do not
+fit their real projected center separation, Mercury is reduced continuously
+first to a 0.25-pixel sub-pixel marker. The Sun then receives all remaining
+space. If that still lies below 20 pixels, the clearance limit overrides the
+preferred minimum.
+
+At the actual 1920x1080 presets with the default panel width, the focused test
+measured Overview center separation `6.04131 px`, giving Sun `4.79131 px` and
+Mercury `0.25 px`; this is the maximum Sun radius compatible with the required
+one-pixel clearance. Inner System measured separation `24.4958 px`, giving Sun
+`23.2458 px` and Mercury `0.25 px`. Clamp/min operations are continuous as the
+camera moves, so crossing a preferred bound changes slope but does not pop.
 
 ### Final user visual-validation checklist
 

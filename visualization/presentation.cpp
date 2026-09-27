@@ -163,15 +163,26 @@ void apply_screen_space_body_sizing(
     for (std::size_t index = 0; index < bodies.size(); ++index) {
         const float distance = std::max(glm::length(bodies[index].position - camera_position), 0.001F);
         const float current = apparent_radius_pixels(bodies[index].radius, distance, viewport_height_pixels);
-        const float minimum = solar_system && index == 0 ? 8.0F : 3.0F;
-        const float maximum = solar_system && index == 0 ? 24.0F : 13.0F;
+        const float minimum = solar_system && index == 0
+            ? sun_minimum_apparent_radius_pixels
+            : body_minimum_apparent_radius_pixels;
+        const float maximum = solar_system && index == 0
+            ? sun_maximum_apparent_radius_pixels
+            : body_maximum_apparent_radius_pixels;
         pixels[index] = std::clamp(current, minimum, maximum);
     }
     if (solar_system && bodies.size() > 1 && sun_mercury_screen_separation_pixels) {
         const float available = std::max(
-            0.5F, *sun_mercury_screen_separation_pixels - 1.0F);
-        pixels[1] = std::min(pixels[1], std::max(0.25F, available * 0.25F));
-        pixels[0] = std::min(pixels[0], std::max(0.25F, available - pixels[1]));
+            0.5F,
+            *sun_mercury_screen_separation_pixels - sun_mercury_clearance_pixels);
+        if (pixels[0] + pixels[1] > available) {
+            // Preserve the readable Sun target for as long as the real projected
+            // separation permits by continuously reducing Mercury first. Once
+            // Mercury reaches a sub-pixel marker, clearance becomes the Sun's
+            // upper bound. Min/clamp operations keep zoom response continuous.
+            pixels[1] = std::min(pixels[1], std::max(0.25F, available - pixels[0]));
+            pixels[0] = std::min(pixels[0], std::max(0.25F, available - pixels[1]));
+        }
     }
     for (std::size_t index = 0; index < bodies.size(); ++index) {
         const float distance = std::max(glm::length(bodies[index].position - camera_position), 0.001F);
