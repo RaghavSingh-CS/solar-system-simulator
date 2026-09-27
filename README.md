@@ -18,9 +18,9 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
 - Reproducible sequential conservation-study harness with retained timestep-duration evidence.
 - Prepared Stage 5 same-machine runner and independent evidence verifier; no Stage 5 timings collected yet.
-- Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with Solar/Compute Experiment modes, deterministic camera presets, reference orbit guides, fading trails, decluttered labels, procedural planet identity, Saturn rings, starfield, live numerical-health bounds, and manual Sequential/OpenMP selection.
+- Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with Solar/Compute Experiment modes, deterministic camera presets, stable decluttered labels, reference/history/Sun-motion trails, barycenter marker, procedural planet identity, scalable large-N points, live numerical-health bounds, and an isolated CPU-backend comparison.
 
-Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI and ephemeris-grade JPL Horizons initial conditions are not implemented. Stage 6B was manually inspected; the Stage 6C final presentation pass is implemented with final user visual validation pending.
+Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI and ephemeris-grade JPL Horizons initial conditions are not implemented. Stage 6C was manually inspected; the tightly scoped Stage 6C.1 corrections are implemented with final user visual validation pending.
 
 An independent 30-configuration sequential conservation characterization is
 documented in `docs/conservation_study.md`, with evidence under
@@ -67,6 +67,9 @@ Controls:
 - The themed ImGui panel separates primary simulation/compute/health controls from collapsible technical details. Numerical health compares live drift against the unchanged `5e-6` energy and `5e-10` angular-momentum bounds.
 - `Overview`, `Inner System`, `Earth`, `Jupiter`, and `Saturn` provide deterministic demo framing without distorting physical positions.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
+- `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
+- Compute Experiment offers deterministic `N=32,64,128,256,512,1024`; workloads above 64 use one batched point-sprite draw instead of per-body sphere draws.
+- `Compare CPU Backends` times isolated identical Sequential/OpenMP state copies, checks established mixed correctness tolerances, and is explicitly a live diagnostic—not benchmark evidence.
 - `Space`: pause/resume; `R`: exact scenario reset; `Esc`: exit.
 - `1`: Sequential; `2`: OpenMP using `--threads N` when OpenMP was built.
 - Click a body to select it; focus selected, focus Sun/body 0, or return to overview from the panel.

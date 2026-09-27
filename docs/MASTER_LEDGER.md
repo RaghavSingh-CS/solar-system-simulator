@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 ## Stage status
 
@@ -19,6 +19,7 @@ Last updated: 2026-09-26
 | Stage 6A OpenGL application foundation | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Optional viewer builds/tests; Sequential and OpenMP real-context smoke launches passed |
 | Stage 6B Solar System application | Complete | Approximate J2000 scenario and scientific UI passed build/runtime validation and user visual inspection |
 | Stage 6C final presentation pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Themed UI, camera presets, orbit context, decluttered labels, planet identity/rings/starfield, and headless presentation tests |
+| Stage 6C.1 corrective pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Mercury render clearance, stable labels, barycentric Sun motion, scalable variable-N compute mode, and isolated live CPU comparison |
 
 ## Decisions and rationale
 
@@ -593,6 +594,42 @@ interaction remain **IMPLEMENTED / USER VISUAL VALIDATION PENDING**. Stage 3/4,
 conservation, and Stage 5 protocol/evidence files remain untouched; the frozen
 Stage 5 source is still `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
 
+## Stage 6C.1: corrective visual and compute-demonstration pass
+
+- Ten years of the actual integrated Solar scenario produced minimum Sun--
+  Mercury separation `4.60084e10 m` (`0.307547 AU`) versus physical contact
+  distance `6.9814e8 m`. There is no physical intersection. A fixed render-only
+  Sun-radius cap of `0.052` removes the exaggerated visual overlap at the
+  validated perihelion without changing physics.
+- Label layout retains a previous accepted body-relative screen offset while
+  its real text rectangle remains valid, then tries alternate anchors with a
+  seven-pixel gap. Selected body and Sun priorities, leaders, and low-priority
+  suppression remain. Representative dense layouts and tiny-motion hysteresis
+  are headless-tested.
+- Solar View now defaults `Barycenter & real Sun motion` on. A gold origin
+  marker is distinct from physical bodies; the warm fading Sun path consists of
+  actual integrated `TrailHistory` samples. Explicit visual displacement
+  amplification defaults to `10x` and can be returned to `1x`; it never changes
+  state or stored history. No fake helix or external translation was added.
+- Solar Compute explains that N=9 is unsuitable for meaningful speedup claims.
+  Compute Experiment supports deterministic N=`32,64,128,256,512,1024`, resets
+  dependent state on N change, uses selected-only labels, and switches from
+  spheres to one point-sprite draw above N=64.
+- The explicit live CPU comparison warms both paths, times the same isolated
+  initial state/dt/fixed step count, leaves the visible controller untouched,
+  and accepts results only after established mixed position/velocity tolerance
+  checks. Its raw milliseconds and honest ratio are labeled NOT BENCHMARK
+  EVIDENCE and invalidate on N/thread changes. CUDA and Auto remain absent.
+- A development-machine N=512/OpenMP-4 diagnostic example observed 32 steps,
+  Sequential `100.13 ms`, OpenMP `33.4279 ms`, ratio `2.99541x`, correctness
+  PASS. This single live observation is not controlled evidence and establishes
+  no selector threshold.
+
+Fresh Stage 6C.1 validation and runtime smoke results are recorded in
+`docs/visualization.md`. Subjective label/marker/trail and large-N UI appearance
+remain **IMPLEMENTED / USER VISUAL VALIDATION PENDING**. No protected evidence
+or Stage 5 protocol/preparation file changed.
+
 ## Known limitations
 
 - No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
@@ -600,7 +637,7 @@ Stage 5 source is still `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
   barycenter simplification.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI remains a placeholder and viewer CUDA integration is deferred.
-- Stage 6C native-window appearance and interaction need final user visual validation; large-N instancing/points, high-resolution textures, advanced atmosphere/post-processing, RTX presentation capture, and real ephemerides are deferred.
+- Stage 6C.1 native-window appearance and interaction need final user visual validation; instanced high-detail large-N meshes, high-resolution textures, advanced atmosphere/post-processing, RTX presentation capture, and real ephemerides are deferred.
 - Stage 5A tooling is locally CPU/OpenMP-validated, but its Windows MSVC/CUDA integration remains unexecuted until the RTX 4050 pilot.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
@@ -611,7 +648,7 @@ Stage 5 source is still `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
 1. On the RTX 4050 host, check out the exact frozen Stage 5A preparation revision and follow `docs/stage5_rtx4050_runbook.md`.
 2. Run preflight, validation, and the pilot; stop for independent verification and human inspection.
 3. Only after explicit pilot approval, collect and verify the frozen full calibration/held-out matrix.
-4. Run the final Stage 6C native-window visual checklist in `docs/visualization.md`; major presentation scope closes after this gate.
+4. Run the final Stage 6C.1 native-window visual checklist in `docs/visualization.md`; major presentation scope closes after this gate.
 5. Do not derive the selector or optimize backends during Stage 5B collection.
 
 ## Commit references
@@ -633,3 +670,4 @@ Stage 5 source is still `4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
 - `cfac22b` — optional Stage 6A OpenGL application, reusable render model, interaction controller, and headless visualization tests.
 - `7be7104` — Stage 6B approximate Solar System scenario, ImGui application, trails, selection/focus, conservation diagnostics, and validation tests.
 - `50a0473` — Stage 6C final presentation system: themed UI, deterministic camera framing, orbit guides, label decluttering, procedural bodies/rings/starfield, and headless presentation tests.
+- `96c36a6` — Stage 6C.1 render-clearance, stable-label, real Sun-motion, scalable Compute Experiment, live CPU comparison, and regression-test implementation.

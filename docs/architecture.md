@@ -63,11 +63,25 @@ SimulationState + ForceBackend
           +-> diagnostics + bounded physical-space trails
           +-> documented mean-element reference guides (presentation only)
           -> read-only RenderBody snapshot (linear position scale/material/radius only)
-          -> BodyRenderer (sphere/ring/star meshes and dynamic line buffer)
+          -> BodyRenderer (Solar meshes; batched large-N points; line overlays)
           -> ImGui controls/labels (read state; issue controller/view commands)
 ```
 
 `SimulationController` calls the existing `velocity_verlet_step` and backend implementations; no gravitational calculation exists in renderer code. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii/materials/rings never feed back into physics. Static orbit guides are sampled from the same documented JPL mean-element model but never drive body motion. Camera presets, label decluttering, health mapping, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
+
+Stage 6C.1 uses the existing bounded physical trail store for the Sun's actual
+barycentric trajectory and applies optional amplification only to its rendered
+displacement from the origin. A render-only Sun-radius cap prevents the
+exaggerated disc from covering Mercury at the validated perihelion; neither
+operation changes state. Accepted label offsets persist across frames while
+valid, providing temporal stability without a scene graph.
+
+Compute Experiment uses sphere draws through N=64 and one dynamic point-sprite
+draw above N=64. Its live CPU comparison is a separate model operation over two
+identical state copies; it does not use the visible controller state, renderer,
+or benchmark harness. The fixed N-based batch, warm-up boundary, timings, and
+mixed correctness tolerances are presentation diagnostics only and cannot feed
+Stage 5 calibration or Auto selection.
 
 ## CUDA build split
 

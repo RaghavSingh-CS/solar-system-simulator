@@ -156,6 +156,64 @@ A fixed-seed 720-point camera-consistent star sphere replaces empty pure black.
 Stars, materials, rings, guides, markers, radii, and labels are rendering only.
 They require no texture pack, network, or runtime file discovery.
 
+## Stage 6C.1 corrective pass
+
+### Mercury verification and render overlap
+
+The actual nine-body state was integrated for ten years at the recommended
+six-hour timestep. Minimum Sun--Mercury center separation was `4.60084e10 m`
+(`0.307547 AU`); the Sun-plus-Mercury physical contact distance is
+`6.9814e8 m`. Mercury therefore never physically intersects the Sun in this
+validation interval. The misleading pass-through was caused by exaggerated
+render radii. A stable render-only maximum Sun radius of `0.052` now remains
+smaller than the validated rendered perihelion clearance, while physical radii,
+positions, forces, integration, and diagnostics remain unchanged.
+
+### Stable labels
+
+Decluttering now accepts the prior frame's relative placement first. If its
+actual text rectangle remains inside the viewport and collision-free, that
+anchor is retained; only then are alternate anchors tried. A seven-pixel
+separation margin, priority order (selected, Sun, others), subtle leaders, and
+low-priority suppression handle dense inner-system layouts. This hysteresis
+removes anchor hopping caused by tiny frame-to-frame projected motion. The
+selected label is processed first and is never suppressed by another label.
+
+### Barycentric motion
+
+`Barycenter & real Sun motion` defaults on in Solar mode. It draws a gold
+diamond at the barycentric origin and a distinct fading trail built from the
+Sun's actual integrated physical positions stored by `TrailHistory`. Because
+the displacement is small beside planetary orbits, the trail has an explicit
+`Sun-motion visual amplification` control (`10x` default, `1x` physical render
+scale). Amplification is applied only after physical-to-render conversion, never
+to state, stored trails, diagnostics, or forces. No helical/time-axis motion or
+external frame translation was added.
+
+### Parallel-computing demonstration
+
+Solar mode states that its physical `N=9` scene is a functional backend-
+equivalence demonstration, not a meaningful speedup workload. `Compute
+Experiment` now reconstructs deterministic workloads at `N=32, 64, 128, 256,
+512, 1024`. Changes reset state, time, diagnostics, trails, selection, and any
+live comparison result.
+
+Synthetic workloads above 64 bodies use one dynamic OpenGL point-sprite draw,
+with selected-only labeling and the existing selection marker. Solar rendering
+keeps its sphere/material/ring quality. This prevents hundreds of sphere draw
+calls from obscuring the compute demonstration.
+
+`Compare CPU Backends` runs only on explicit request. It performs one untimed
+initialization step per backend, then times identical isolated initial-state
+copies, the same fixed `dt`, and a predeclared N-based step count bounded to
+8--256 steps. It reports raw Sequential/OpenMP milliseconds and the honest
+Sequential/OpenMP ratio, including ratios below one. The visible simulation is
+not advanced. Final states must be finite and pass the established mixed CPU
+tolerances (`1e-6 m` absolute or `1e-13` scaled position; `1e-9 m/s` absolute
+or `1e-13` scaled velocity) before a ratio is shown as valid. Results invalidate
+when N or comparison thread count changes. The panel labels every result
+**LIVE DIAGNOSTIC -- NOT BENCHMARK EVIDENCE**.
+
 ## Controls and diagnostics
 
 The renderer reuses one sphere mesh, one Saturn ring mesh, one static star
@@ -186,28 +244,36 @@ center-of-mass removal, one-Mercury-orbit conservation, scenario switching/reset
 diagnostics reset semantics, bounded trails, render immutability, deterministic
 camera framing, numerical-health boundary mapping, label collision avoidance,
 selected-label priority, scenario-specific label policy, and manual backend
-behavior. Release CTest results are recorded in the Stage 6C ledger entry.
+behavior. Release CTest results are recorded in the Stage 6C.1 ledger entry.
 
-The fresh Stage 6C matrix passed CPU-only `2/2`, OpenMP `3/3`, and
-visualization/OpenMP `4/4`. Solar/Sequential, Solar/OpenMP-4, and Compute
-Experiment/Sequential each initialized a real AMD OpenGL 3.3 core context and
-entered the application loop; the CUDA request exited `1` with its intended
-diagnostic. This proves runtime initialization, not subjective visual quality.
+The fresh Stage 6C.1 matrix passed CPU-only `2/2`, OpenMP `3/3`, and
+visualization/OpenMP `4/4`. Solar/Sequential, Solar/OpenMP-4, Compute
+Experiment/Sequential at N=32 and N=256, and Compute Experiment/OpenMP-4 at
+N=512 and N=1024 each initialized a real AMD Radeon OpenGL 3.3 core context and
+entered the application loop. The CUDA request exited `1` with its intended
+unavailable diagnostic. This proves runtime initialization, not subjective
+visual quality or interaction behavior.
+
+The fresh N=512/OpenMP-4 live diagnostic used 32 fixed steps and observed
+Sequential `100.13 ms`, OpenMP `33.4279 ms`, ratio `2.99541x`, correctness PASS.
+This is **NOT BENCHMARK EVIDENCE**; it is one uncontrolled presentation-layer
+observation and establishes no crossover or Auto-selection threshold.
 
 Pending user visual checks are theme/readability at 1920x1080 and laptop sizes,
 all five preset compositions, inner-label separation, trail/guide distinction,
 planet material identity, Saturn ring depth/tilt, starfield restraint, selection
-marker, resize behavior, and live Sequential/OpenMP switching. CUDA viewer
+marker, barycenter/Sun-trail appearance, resize behavior, N switching, the live
+comparison interaction, and live Sequential/OpenMP switching. CUDA viewer
 integration, Auto selection, high-resolution texture assets, advanced atmosphere/
-post-processing, large-N point/instanced rendering, final RTX capture, and
-ephemeris-grade Horizons input are intentionally deferred beyond Stage 6C.
+post-processing, instanced high-detail large-N meshes, final RTX capture, and
+ephemeris-grade Horizons input are intentionally deferred beyond Stage 6C.1.
 
 ## Final user visual-validation checklist
 
 Launch at 1920x1080 where available:
 
 ```powershell
-./build-stage6c-visual/nbody_visualizer.exe --scenario solar --backend sequential --width 1920 --height 1080
+./build-stage6c1-visual/nbody_visualizer.exe --scenario solar --backend sequential --width 1920 --height 1080
 ```
 
 1. Confirm the panel is readable, intentionally styled, unclipped, and does not
@@ -221,16 +287,32 @@ Launch at 1920x1080 where available:
    and restrained Mercury/Venus differentiation.
 5. Toggle reference orbit guides and simulation-history trails independently;
    verify guides exist immediately and history grows/fades with simulated time.
-6. Select several bodies by click and combo; verify the gold marker and label,
+6. In `Inner System`, watch Mercury through perihelion and confirm the capped
+   render-only Sun disc never misleadingly covers it.
+7. Toggle `Barycenter & real Sun motion`; verify the gold barycenter diamond and
+   warm fading Sun path, compare `1x` with the explicit default `10x` visual
+   amplification, and confirm there is no artificial helix.
+8. Select several bodies by click and combo; verify the gold marker and label,
    then use `Focus Selected`.
-7. Confirm energy/angular values, unchanged bounds, green PASS state, maximum
+9. Confirm energy/angular values, unchanged bounds, green PASS state, maximum
    values in advanced details, and conspicuous non-benchmark FPS labeling.
-8. Switch Sequential/OpenMP and thread count; verify active state is obvious,
+10. Switch Sequential/OpenMP and thread count; verify active state is obvious,
    CUDA/Auto remain intentionally disabled, and motion/reset stay coherent.
-9. Switch to `Compute Experiment`; verify N/seed/workload language, selected-only
-   labeling, useful overview, numerical health, and no astronomical claim.
-10. Exercise `Space`, `R`, `C`, resize to a laptop-like window, and return to
+11. Switch to `Compute Experiment`; select N=32, 256, 512, and 1024 and verify
+   each workload resets coherently, stays responsive, uses selected-only labels,
+   and makes no astronomical claim.
+12. At N=512, set four comparison threads and click `COMPARE CPU BACKENDS`;
+   verify both raw times, the honest ratio, correctness PASS, and the prominent
+   `LIVE DIAGNOSTIC - NOT BENCHMARK EVIDENCE` label. Change N and thread count
+   separately and confirm the stale result disappears each time.
+13. Exercise `Space`, `R`, `C`, resize to a laptop-like window, and return to
     Solar mode; confirm ImGui capture prevents accidental camera input.
-11. Confirm the starfield is subtle/static, trails do not overwhelm the scene,
+14. Confirm the starfield is subtle/static, trails do not overwhelm the scene,
     Saturn ring depth looks reasonable, and no visual effect resembles an
     unsupported physics claim.
+
+For the N=512 Compute Experiment check:
+
+```powershell
+./build-stage6c1-visual/nbody_visualizer.exe --scenario synthetic --backend openmp --threads 4 --bodies 512 --seed 24301 --width 1920 --height 1080
+```
