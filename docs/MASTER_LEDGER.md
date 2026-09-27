@@ -15,11 +15,12 @@ Last updated: 2026-09-27
 | Independent conservation characterization | Complete | 30 sequential timestep-duration configurations; all passed frozen bounds |
 | Stage 5A same-machine preparation | **PREPARED** | Frozen v1.0 protocol, runner, verifier, environment capture, and RTX 4050 runbook |
 | Stage 5B RTX 4050 execution | Not started | Requires pilot, inspection/approval, then controlled full matrix |
-| MPI backend | Optional/not started | Stretch goal only |
+| MPI and hybrid backend | Complete | Replicated-state 1/2/4-rank correctness plus 2-rank x 2-thread hybrid validation |
 | Stage 6A OpenGL application foundation | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Optional viewer builds/tests; Sequential and OpenMP real-context smoke launches passed |
 | Stage 6B Solar System application | Complete | Approximate J2000 scenario and scientific UI passed build/runtime validation and user visual inspection |
 | Stage 6C final presentation pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Themed UI, camera presets, orbit context, decluttered labels, planet identity/rings/starfield, and headless presentation tests |
 | Stage 6C.1 corrective pass | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Mercury render clearance, stable labels, barycentric Sun motion, scalable variable-N compute mode, and isolated live CPU comparison |
+| Stage 6D final feature stage | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-aware Solar sizing, fixed inner callouts, polished/resizable/help-complete UI, MPI/hybrid, safe 100,000-body display, and bounded pilot infrastructure |
 
 ## Decisions and rationale
 
@@ -27,7 +28,7 @@ Last updated: 2026-09-27
 - Primary RQ uses an accuracy gate plus same-machine calibrated selection.
 - SI units and barycentric inertial Cartesian coordinates prevent hidden conversion conventions.
 - Velocity Verlet is the minimal symplectic reference; long-horizon planetary claims require later integrator evaluation.
-- CPU-only CMake is the default; CUDA, graphics, and MPI are opt-in.
+- CPU-only CMake is the default; CUDA, graphics, and MPI are implemented but opt-in.
 - GLFW/core OpenGL is the intended viewer stack, isolated from simulation and benchmarks.
 - Stage 6B's Solar scenario is an explicitly approximate JPL mean-element demonstration; ephemeris-grade state remains pending a fully recorded Horizons extraction.
 - `ForceBackend` is the shared acceleration contract; the sequential overload remains the reference/default.
@@ -41,6 +42,8 @@ Last updated: 2026-09-27
 - Stage 5 selector calibration uses only same-machine `selector_steady_state` measurements from the frozen RTX 4050 full run.
 - Stage 5 calibration and held-out N values are fixed before data collection; held-out results cannot influence policy boundaries.
 - Stage 6C remains optional and one-way dependent on the simulation core; presentation geometry cannot affect physics, display timing is never benchmark evidence, and no Auto backend selector exists.
+- Stage 6D MPI uses replicated global state, deterministic contiguous force-target partitions, and full acceleration exchange. Hybrid OpenMP is confined to local target work under `MPI_THREAD_FUNNELED`.
+- Stage 6D large-N display support does not change the exact O(N^2) algorithm: continuous viewer computation ends above N=1024, manual direct-force steps end above N=8192, and larger workloads are display-only.
 
 ## Assumptions and unresolved questions
 
@@ -630,14 +633,74 @@ Fresh Stage 6C.1 validation and runtime smoke results are recorded in
 remain **IMPLEMENTED / USER VISUAL VALIDATION PENDING**. No protected evidence
 or Stage 5 protocol/preparation file changed.
 
+## Stage 6D: final feature stage
+
+Stage 6D completes the requested feature scope without changing the frozen
+Stage 5 source/evidence revision
+`4916b3c43298fa3f3bd15cb4af1698b5074abed3`.
+
+- A shared direct-force kernel now serves Sequential, OpenMP, and MPI while
+  preserving ascending source order, double precision, collision rejection,
+  and existing numerical contracts.
+- Optional MPI uses replicated global state, deterministic contiguous target
+  partitions with lower-rank remainder ownership, local direct-force work, and
+  `MPI_Allgatherv` to rebuild complete accelerations. All ranks perform the same
+  Velocity Verlet updates. Hybrid mode uses OpenMP only in the local target loop
+  and calls MPI under `MPI_THREAD_FUNNELED` outside parallel regions.
+- MPI validation covers 1/2/4 ranks, non-divisible N=11, repeatability,
+  Sequential agreement, finite values, frozen conservation gates, and 2 ranks x
+  2 threads. The benchmark reports max-rank wall time and separates local
+  compute from communication.
+- `scripts/run_large_n_pilot.py` defines prospective protocol
+  `stage6d-large-n-v1.0`: fixed geometric sizes, fixed work, four backend
+  families, prospective per-configuration time budgets, complete timeout/error
+  retention, raw logs, correctness/conservation/checksum, and environment plus
+  topology provenance. It is infrastructure, not committed performance evidence.
+- Compute Experiment now supports structured N through 100,000. Continuous
+  advancement, trails, live conservation, and comparison are limited to 1024;
+  explicit one-step direct-force work is bounded through 8192; larger workloads
+  are display-only. The batched point path, selected-only inspection, and O(1)
+  selector avoid per-body UI/trail structures.
+- Solar display radii are camera-aware and screen-bounded. A projected
+  Sun/Mercury clearance rule changes radii only, never centers. Sun through Mars
+  use fixed screen slots and leaders; outer labels remain dynamically
+  decluttered. The selected state is retained.
+- The resizable panel is clamped to 380--680 px and 55% of display width. The
+  camera and projection use only the complementary scene viewport. System-font
+  fallback, wrapped property tables, complete units, professional section names,
+  and tested hover help cover the primary interface. CUDA/Auto development diary
+  text is not displayed and MPI remains a separate executable.
+
+### Stage 6D local diagnostics and validation boundary
+
+The Microsoft MPI 10.1.12498.52 N=512 diagnostic used 10 steps, dt=10 s, one
+warm-up, three repetitions, seed 24301. Median elapsed seconds were MPI 1x1
+`0.0489955`, MPI 2x1 `0.0236225`, MPI 4x1 `0.0229480`, and hybrid 2x2
+`0.0184575`; all shared checksum `-382567846011.50037`, energy drift
+`1.557002540516534e-14`, and angular drift `1.4733993293434963e-15`. These are
+**SINGLE-MACHINE LOCAL DIAGNOSTICS -- NOT CONTROLLED BENCHMARK EVIDENCE**.
+Same-session Sequential `0.0397994 s` and OpenMP-4 `0.0145921 s` observations
+likewise do not establish a crossover or multi-machine scaling claim.
+
+Fresh GCC 15.1 Release CTest matrices passed CPU-only `3/3`, OpenMP `4/4`,
+visualization/OpenMP `5/5`, and MPI+OpenMP `8/8`. The MPI matrix includes ranks
+1/2/4 and hybrid ranks 2 x threads 2. Builds used portable CMake 4.4.3, Ninja
+1.13.2, GCC/libgomp OpenMP specification date 201511 (4.5), and Microsoft MPI
+10.1.12498.52. Solar Sequential/OpenMP-4 and synthetic N=32/256/512/1024/2048/
+100000 created real AMD Radeon OpenGL 3.3 contexts and remained in their event
+loops until deliberate interruption. CUDA viewer selection exited `1` with the
+intended explicit unavailable diagnostic. Native-app automation is unavailable
+on this host, so visual composition, resize, hover, and interaction remain
+**USER VISUAL VALIDATION PENDING**.
+
 ## Known limitations
 
 - No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
   a bounded JPL mean-element approximation with the documented Earth--Moon
   barycenter simplification.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
-- CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; MPI remains a placeholder and viewer CUDA integration is deferred.
-- Stage 6C.1 native-window appearance and interaction need final user visual validation; instanced high-detail large-N meshes, high-resolution textures, advanced atmosphere/post-processing, RTX presentation capture, and real ephemerides are deferred.
+- CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; viewer CUDA integration is deferred. MPI is implemented and locally validated, but no controlled multi-machine evidence exists.
+- Stage 6D native-window appearance and interaction need final user visual validation; approximate O(N^2) algorithms, distributed state, one-rank-per-GPU execution, instanced high-detail meshes, high-resolution textures, advanced atmosphere/post-processing, RTX presentation capture, and real ephemerides are deferred.
 - Stage 5A tooling is locally CPU/OpenMP-validated, but its Windows MSVC/CUDA integration remains unexecuted until the RTX 4050 pilot.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
@@ -648,7 +711,7 @@ or Stage 5 protocol/preparation file changed.
 1. On the RTX 4050 host, check out the exact frozen Stage 5A preparation revision and follow `docs/stage5_rtx4050_runbook.md`.
 2. Run preflight, validation, and the pilot; stop for independent verification and human inspection.
 3. Only after explicit pilot approval, collect and verify the frozen full calibration/held-out matrix.
-4. Run the final Stage 6C.1 native-window visual checklist in `docs/visualization.md`; major presentation scope closes after this gate.
+4. Run the final Stage 6D native-window visual checklist in `docs/visualization.md`; the feature freeze closes after this gate.
 5. Do not derive the selector or optimize backends during Stage 5B collection.
 
 ## Commit references
@@ -671,3 +734,4 @@ or Stage 5 protocol/preparation file changed.
 - `7be7104` — Stage 6B approximate Solar System scenario, ImGui application, trails, selection/focus, conservation diagnostics, and validation tests.
 - `50a0473` — Stage 6C final presentation system: themed UI, deterministic camera framing, orbit guides, label decluttering, procedural bodies/rings/starfield, and headless presentation tests.
 - `96c36a6` — Stage 6C.1 render-clearance, stable-label, real Sun-motion, scalable Compute Experiment, live CPU comparison, and regression-test implementation.
+- `b432abe` — Stage 6D MPI/hybrid backend, large-N safety/protocol infrastructure, camera-aware Solar sizing, stable inner callouts, and final UI implementation.

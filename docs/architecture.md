@@ -5,7 +5,7 @@
 - Newtonian point masses in an inertial barycentric Cartesian frame.
 - SI base units: kilograms, metres, seconds. Output records units explicitly in its header.
 - Pair acceleration: `a_i = G * sum(j != i) m_j (r_j-r_i) / |r_j-r_i|^3`.
-- The sequential reference uses no gravitational softening; coincident bodies are rejected. Synthetic large-N backends may later expose softening as an explicit experiment parameter, never silently.
+- The direct-force implementations use no gravitational softening; coincident bodies are rejected. The viewer's largest workloads remain presentation/inspection cases rather than implying an approximate solver.
 - `G = 6.67430e-11 m^3 kg^-1 s^-2`, the 2022 CODATA recommended value (unchanged numerically from 2018), sourced from [NIST](https://physics.nist.gov/constants).
 
 ## Integrator decision
@@ -22,7 +22,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  +-- sequential (reference)
                         |                  +-- OpenMP (implemented)
                         |                  +-- CUDA (validated on Tesla T4)
-                        |                  +-- MPI (optional)
+                        |                  +-- MPI / MPI+OpenMP (implemented, optional)
                         +-> diagnostics -> CSV/headless benchmark
                         +-> immutable snapshots -> OpenGL viewer
 ```
@@ -31,7 +31,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 - `src`: sequential backend, integrator, scenarios, diagnostics, CSV runner.
 - `backends/openmp`: optional outer-loop-parallel OpenMP backend.
 - `backends/cuda`: optional direct-force CUDA kernels and device-resident integrator.
-- `backends/mpi`: optional stretch implementation.
+- `backends/mpi`: optional replicated-state MPI implementation with an OpenMP local-work mode.
 - `visualization`: optional application controller, camera, render-space conversion, and OpenGL renderer; it links the simulation library but simulation code never depends on OpenGL.
 - `tests`: physics invariants and regression tests.
 
@@ -44,6 +44,8 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 The interface is `ForceBackend::compute_accelerations(state, G)`. `sequential_force_backend()` wraps the original reference function. `OpenMpForceBackend(thread_count)` uses `schedule(static)` over destination bodies; each loop iteration owns its local accumulator and one output element, so there are no concurrent accumulator writes. Every destination body still visits source bodies in ascending index order. Invalid masses are rejected before the parallel region; coincident/invalid positions are flagged within the region and reported afterward.
 
 `CudaForceBackend` implements the same interface with one CUDA thread per destination body and ascending source traversal. `CudaVelocityVerlet` adds a reusable device-resident execution path: old acceleration, position update, new acceleration, and velocity update remain on the GPU for every step. This avoids presenting a force-only kernel as complete integration timing while retaining the shared force contract for correctness tests.
+
+`MpiForceBackend` also implements the shared interface. Every rank holds the same complete state; a deterministic contiguous partition assigns destination bodies, with any remainder assigned to lower ranks. Each rank computes only its local acceleration slice, then `MPI_Allgatherv` reconstructs the complete acceleration vector on every rank. An `MPI_Allreduce` propagates invalid-input status before that exchange. Consequently both force evaluations in Velocity Verlet see globally consistent positions and every rank applies identical drift/kick updates. Memory is O(N) per rank, local force work is O(N^2/P), and each force evaluation communicates O(N) acceleration data. The optional hybrid mode applies `schedule(static)` OpenMP parallelism only inside the local target loop; MPI calls occur outside parallel regions under `MPI_THREAD_FUNNELED`. A future one-rank-per-GPU design is only a conceptual extension, not an implemented or measured path.
 
 OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the reference, headless runner, and sequential benchmark without finding or linking OpenMP. When explicitly enabled, CMake requires `OpenMP::OpenMP_CXX` and emits a targeted configuration error if unavailable.
 
@@ -69,19 +71,30 @@ SimulationState + ForceBackend
 
 `SimulationController` calls the existing `velocity_verlet_step` and backend implementations; no gravitational calculation exists in renderer code. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii/materials/rings never feed back into physics. Static orbit guides are sampled from the same documented JPL mean-element model but never drive body motion. Camera presets, label decluttering, health mapping, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
 
-Stage 6C.1 uses the existing bounded physical trail store for the Sun's actual
+The viewer uses the existing bounded physical trail store for the Sun's actual
 barycentric trajectory and applies optional amplification only to its rendered
-displacement from the origin. A render-only Sun-radius cap prevents the
-exaggerated disc from covering Mercury at the validated perihelion; neither
-operation changes state. Accepted label offsets persist across frames while
-valid, providing temporal stability without a scene graph.
+displacement from the origin. Stage 6D replaces the fixed Sun-radius cap with
+camera-aware screen-space sizing: apparent radii are smoothly bounded and the
+projected Sun/Mercury pair is reduced as needed to preserve visible center
+separation. Body centers and physical state never move. Fixed screen slots and
+leader lines provide stable Sun-through-Mars callouts while outer labels retain
+dynamic decluttering.
 
-Compute Experiment uses sphere draws through N=64 and one dynamic point-sprite
-draw above N=64. Its live CPU comparison is a separate model operation over two
-identical state copies; it does not use the visible controller state, renderer,
-or benchmark harness. The fixed N-based batch, warm-up boundary, timings, and
-mixed correctness tolerances are presentation diagnostics only and cannot feed
-Stage 5 calibration or Auto selection.
+Compute Experiment uses sphere draws through N=64 and one reusable dynamic
+point-sprite draw above N=64. Supported sizes extend through 100,000, but the
+direct O(N^2) solver is deliberately bounded: continuous advancement and live
+conservation/trails stop above 1024, manual one-step execution is limited to
+OpenMP through 8192 (and Sequential/OpenMP at 2048), and larger cases are
+display/inspection-only. Synthetic labeling is selected-body-only and no
+per-body UI list is built. Its live CPU comparison is a separate model operation
+over two identical state copies; it cannot feed Stage 5 calibration or Auto
+selection.
+
+The ImGui panel owns 380--680 pixels, capped at 55% of the current display. The
+camera aspect, projection, picking, and labels use the complementary scene
+viewport, so 3D content is never composed beneath the panel. A system sans-serif
+font is used when available, with Dear ImGui's built-in font as a portable
+fallback; no runtime font download is required.
 
 ## CUDA build split
 

@@ -1,6 +1,6 @@
 # Workload-Aware Parallel N-Body Simulation
 
-A research-oriented C++17 project for comparing sequential, OpenMP, and CUDA direct N-body backends under explicit numerical-accuracy constraints. The repository contains deterministic sequential and OpenMP backends plus an optional CUDA backend validated on an NVIDIA Tesla T4.
+A research-oriented C++17 project for comparing sequential, OpenMP, CUDA, and MPI direct N-body execution under explicit numerical-accuracy constraints. The repository contains deterministic sequential and OpenMP backends, an optional CUDA backend validated on an NVIDIA Tesla T4, and an optional replicated-state MPI backend with a clean MPI+OpenMP hybrid mode.
 
 The literature review found that CPU/GPU crossover and adaptive heterogeneous mapping are established topics. Accordingly, this project does **not** claim a new scheduling algorithm. Its proposed study asks whether a small, calibrated selector can find the fastest backend on one target machine while rejecting configurations that violate predeclared conservation bounds. See [novelty assessment](docs/research/novelty_assessment.md).
 
@@ -18,9 +18,10 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
 - Reproducible sequential conservation-study harness with retained timestep-duration evidence.
 - Prepared Stage 5 same-machine runner and independent evidence verifier; no Stage 5 timings collected yet.
-- Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with Solar/Compute Experiment modes, deterministic camera presets, stable decluttered labels, reference/history/Sun-motion trails, barycenter marker, procedural planet identity, scalable large-N points, live numerical-health bounds, and an isolated CPU-backend comparison.
+- Optional replicated-state MPI backend with deterministic target partitioning, global acceleration exchange, and MPI+OpenMP local force computation.
+- Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with Solar/Compute Experiment modes, deterministic camera presets, stable inner-system callouts, camera-aware body sizing, reference/history/Sun-motion trails, barycenter marker, procedural planet identity, batched large-N points through 100,000 bodies, live numerical-health bounds, and an isolated CPU-backend comparison.
 
-Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. MPI and ephemeris-grade JPL Horizons initial conditions are not implemented. Stage 6C was manually inspected; the tightly scoped Stage 6C.1 corrections are implemented with final user visual validation pending.
+Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. Stage 6D completes the MPI, large-N infrastructure, and final presentation feature scope; native-window appearance and interaction still require the final user visual pass. Ephemeris-grade JPL Horizons initial conditions remain outside this stage.
 
 An independent 30-configuration sequential conservation characterization is
 documented in `docs/conservation_study.md`, with evidence under
@@ -68,14 +69,14 @@ Controls:
 - `Overview`, `Inner System`, `Earth`, `Jupiter`, and `Saturn` provide deterministic demo framing without distorting physical positions.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
-- Compute Experiment offers deterministic `N=32,64,128,256,512,1024`; workloads above 64 use one batched point-sprite draw instead of per-body sphere draws.
+- Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.
 - `Compare CPU Backends` times isolated identical Sequential/OpenMP state copies, checks established mixed correctness tolerances, and is explicitly a live diagnostic—not benchmark evidence.
 - `Space`: pause/resume; `R`: exact scenario reset; `Esc`: exit.
 - `1`: Sequential; `2`: OpenMP using `--threads N` when OpenMP was built.
 - Click a body to select it; focus selected, focus Sun/body 0, or return to overview from the panel.
 - Left-drag, `A`/`D`, or arrow keys: orbit; mouse wheel or `W`/`S`: dolly; `C`: overview camera.
 
-CUDA is intentionally unavailable in the Stage 6C viewer and is rejected with an actionable error. Auto remains disabled until Stage 5 produces a valid calibration. Viewer FPS/frame time is explicitly display-only and is not controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for provenance, architecture, options, and limitations.
+The panel is resizable from 380 px to the smaller of 680 px or 55% of the window, and the 3D scene viewport always occupies the remaining width. Hover help documents every primary control. CUDA and MPI are intentionally not exposed in the viewer; CUDA requests are rejected with an actionable error, while MPI is exercised by its separate benchmark executable. Auto remains absent until Stage 5 produces a valid calibration. Viewer FPS/frame time is display-only and is not controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for provenance, architecture, options, and limitations.
 
 Run (Visual Studio multi-config path shown):
 
@@ -115,6 +116,19 @@ ctest --test-dir build-cuda --output-on-failure
 
 Use `docs/colab_cuda_workflow.md` for the controlled pilot and full benchmark. Do not compare Colab CUDA timings directly with the Stage 3 Windows CPU dataset.
 
+### Optional MPI and large-N pilot
+
+Build MPI separately; Microsoft MPI and an MPI-capable compiler wrapper are required on Windows:
+
+```powershell
+cmake -S . -B build-mpi -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_ENABLE_MPI=ON -DNBODY_ENABLE_OPENMP=ON
+cmake --build build-mpi
+ctest --test-dir build-mpi --output-on-failure
+mpiexec -n 4 ./build-mpi/nbody_mpi_benchmark.exe --bodies 512 --steps 50 --dt 10 --threads 1 --warmups 1 --repetitions 5 --seed 24301
+```
+
+`nbody_mpi_benchmark` reports the maximum rank wall time plus local compute and collective-communication components. The replicated-state design uses O(N) memory per rank, O(N^2/P) local force work, and two O(N) acceleration exchanges per Velocity Verlet step. See [MPI and large-N notes](docs/mpi_and_large_n.md) before interpreting timings or running the budgeted pilot orchestrator.
+
 Verify the committed CUDA evidence independently:
 
 ```bash
@@ -131,12 +145,13 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/conservation_study.md`: independent timestep-duration conservation characterization.
 - `docs/stage5_protocol.md`: frozen same-machine matrix, split, metrics, and gates.
 - `docs/stage5_rtx4050_runbook.md`: Windows RTX 4050 pilot-gated execution procedure.
-- `docs/visualization.md`: Stage 6C viewer provenance, presentation policy, controls, and validation boundary.
+- `docs/visualization.md`: final viewer provenance, presentation policy, controls, and validation boundary.
+- `docs/mpi_and_large_n.md`: MPI/hybrid architecture, workload safety policy, and bounded pilot protocol.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
 - `scripts/run_stage5.py`: Stage 5 preflight, dry-run, pilot, and full orchestrator.
 - `scripts/verify_stage5_evidence.py`: independent Stage 5 evidence auditor.
-- `backends`: implemented optional OpenMP/CUDA backends and the future MPI placeholder.
+- `backends`: implemented optional OpenMP, CUDA, and MPI backends.
 - `visualization`: optional desktop application/controller, camera, and OpenGL renderer.
 
 ## Scientific boundary

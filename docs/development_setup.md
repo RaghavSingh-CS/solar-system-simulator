@@ -10,7 +10,23 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-CUDA and graphics are not required for the default build. `NBODY_ENABLE_OPENMP` and `NBODY_ENABLE_CUDA` are implemented and remain off by default. `NBODY_ENABLE_MPI` and `NBODY_BUILD_VISUALIZATION` remain unsupported and off. CUDA-enabled configuration requires a real NVIDIA toolkit and is documented in `docs/colab_cuda_workflow.md`.
+CUDA, MPI, and graphics are not required for the default build. `NBODY_ENABLE_OPENMP`, `NBODY_ENABLE_CUDA`, `NBODY_ENABLE_MPI`, and `NBODY_BUILD_VISUALIZATION` are implemented and remain off by default. CUDA-enabled configuration requires a real NVIDIA toolkit and is documented in `docs/colab_cuda_workflow.md`. MPI requires an MPI C++ implementation; the validated Windows configuration uses Microsoft MPI through the MSYS2 UCRT64 `mpicxx` wrapper.
+
+## Optional MPI build
+
+Install Microsoft MPI's runtime and SDK, then configure through an MPI-aware compiler wrapper:
+
+```powershell
+& '.\.tools\cmake-4.4.3-windows-x86_64\bin\cmake.exe' -S . -B build-mpi -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/mpicxx.exe `
+  -DCMAKE_MAKE_PROGRAM=C:/msys64/ucrt64/bin/ninja.exe `
+  -DNBODY_ENABLE_MPI=ON -DNBODY_ENABLE_OPENMP=ON
+& '.\.tools\cmake-4.4.3-windows-x86_64\bin\cmake.exe' --build build-mpi
+ctest --test-dir build-mpi --output-on-failure
+```
+
+The test matrix launches one, two, and four MPI ranks plus a two-rank/two-thread hybrid case. Keep ranks multiplied by OpenMP threads within the available logical CPU count for local diagnostics. See `docs/mpi_and_large_n.md` for topology and evidence rules.
 
 ## Current environment note
 

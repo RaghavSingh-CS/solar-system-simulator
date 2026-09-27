@@ -1,17 +1,16 @@
-# Stage 6C final presentation pass
+# Final visualization system (Stage 6D)
 
 ## Scope and status
 
-Stage 6C is the final major visual/UX pass over the scientifically functional
-Stage 6B application. It adds a deliberate dark-scientific theme and information
-hierarchy, deterministic camera compositions, reference orbit context, fading
-history trails, screen-space label decluttering, procedural planet materials,
-Saturn rings, a deterministic starfield, and an explicit selection marker. The
-physics library remains independent of graphics and UI dependencies.
+Stage 6D completes the feature scope of the scientifically functional desktop
+application. It retains the Stage 6C presentation system and adds camera-aware
+Solar body sizing, fixed inner-system callouts, a resizable polished panel with
+complete hover help, and safely bounded synthetic displays through 100,000
+bodies. The physics library remains independent of graphics and UI dependencies.
 
-Stage 6B was manually inspected and its findings drove this pass. Stage 6C's
-automated and real-context validation is recorded below, but automation cannot
-judge final composition and interaction feel. Status therefore remains
+Earlier stages were manually inspected and their findings drove these passes.
+Stage 6D automated and real-context validation is recorded below, but automation
+cannot judge final composition and interaction feel. Status therefore remains
 **IMPLEMENTED / USER VISUAL VALIDATION PENDING**.
 
 ## Solar scenario provenance and limits
@@ -71,8 +70,9 @@ ctest --test-dir build-visual --output-on-failure
 Options are `--scenario solar|synthetic`, `--backend sequential|openmp|cuda`,
 `--threads N`, `--bodies N`, `--seed N`, `--width N`, and `--height N`. Body
 count and seed apply to the synthetic scenario. CUDA is accepted only to issue
-a clear unavailable diagnostic; it never silently falls back. Auto is shown
-disabled because Stage 5 calibration is not complete.
+a clear unavailable diagnostic; it never silently falls back. MPI is exercised
+by its separate benchmark executable and Auto is not exposed because Stage 5
+calibration is not complete.
 
 ## Loop and separation
 
@@ -89,11 +89,14 @@ The synthetic fixture uses its established deterministic generator and a
 10-second timestep.
 
 Positions, trails, orbit guides, labels, rings, and markers share one fixed
-linear render transform derived from the initial state. Body radii are
-display-only: the default Solar multiplier is 80, with a minimum render radius
-of 0.035 and small per-body identity factors. Changing these values never
-mutates mass, position, velocity, or force calculations. No nonlinear position
-distortion is used.
+linear render transform derived from the initial state. Body centers remain at
+their linearly transformed physical coordinates. Display radii are presentation
+only: camera-aware screen-space bounds keep the Sun generally within 8--24 px
+and other bodies within 3--13 px, then reduce the projected Sun/Mercury pair if
+needed to preserve visible clearance in a compact overview. This may make the
+Sun smaller than its preferred minimum when separation is extremely tight, but
+the stable Sun callout preserves identity. No position distortion is used and
+no display value mutates mass, position, velocity, force, or diagnostics.
 
 ## Stage 6C presentation policy
 
@@ -316,3 +319,100 @@ For the N=512 Compute Experiment check:
 ```powershell
 ./build-stage6c1-visual/nbody_visualizer.exe --scenario synthetic --backend openmp --threads 4 --bodies 512 --seed 24301 --width 1920 --height 1080
 ```
+
+## Stage 6D completion pass
+
+### Solar readability and stable association
+
+The renderer derives apparent size from the active camera and scene viewport,
+then applies bounded display radii without changing a body's projected center.
+The Sun/Mercury clearance constraint is evaluated in screen space and works in
+both the 18-pixel inner-system regression and a deliberately compressed 4-pixel
+overview regression. Sun, Mercury, Venus, Earth, and Mars use deterministic
+screen slots with thin leader lines to their live projected anchors. The slots
+remain stable under small body movement, stay inside the scene viewport, retain
+the selected state, and never overlap each other. Outer bodies continue to use
+priority-based dynamic decluttering.
+
+### Panel, typography, and help
+
+The panel is resizable during the session. Its width is clamped to 380--680 px
+and never exceeds 55% of the current display; camera aspect, projection,
+picking, and labels always use the remaining scene rectangle. Property tables
+wrap long values and show full physical units with fixed or scientific notation
+chosen by magnitude. Sections use user-facing names: `Simulation`, `Compute
+Backend`, `Body Inspector`, `Numerical Accuracy`, and `Visualization & View`.
+A platform system sans-serif font is preferred (Segoe UI/Arial, DejaVu Sans, or
+SFNS); Dear ImGui's built-in font is the no-asset fallback. Every primary
+control has delayed hover help. CUDA, Auto-selection development history, and
+stage diary wording are not displayed as inactive pseudo-features.
+
+### Large-N viewer safety policy
+
+Supported structured sizes are `32, 64, 128, 256, 512, 1024, 2048, 4096,
+8192, 16384, 32768, 65536, 100000`. The viewer enforces these boundaries:
+
+| N | Viewer behavior |
+|---:|---|
+| 32--1024 | Continuous advancement, bounded trails, conservation diagnostics, and live Sequential/OpenMP comparison are available. |
+| 2048 | Starts paused; one explicit manual direct-force step is available with Sequential or OpenMP. |
+| 4096--8192 | Starts paused; one explicit manual step requires OpenMP. |
+| 16384--100000 | Display and selection inspection only; the viewer never invokes the O(N^2) solver. |
+
+Above 1024 the application does not allocate per-body trail deques or execute
+O(N^2) live conservation diagnostics. Above 64 the renderer reuses one point
+buffer and one `GL_POINTS` draw. Synthetic labels and inspection remain
+selected-body-only, and the selector stores an integer index rather than a
+100,000-entry name list. These limits provide practical 100,000-body display;
+they do not claim a scalable force algorithm. Barnes--Hut, FMM, and GPU
+instancing are not implemented.
+
+### Stage 6D automated and runtime validation
+
+- Fresh GCC 15.1 Release CPU-only, OpenMP, visualization/OpenMP, and
+  MPI+OpenMP configurations passed CTest `3/3`, `4/4`, `5/5`, and `8/8`.
+- Headless presentation tests cover camera-aware Sun/Mercury clearance, stable
+  five-body callouts, selected retention, viewport containment, panel width,
+  unit formatting, every tooltip, controller manual stepping, all supported
+  sizes, deterministic 100,000-body construction, complete render snapshots,
+  and safety-policy boundaries.
+- Solar/Sequential, Solar/OpenMP-4, synthetic Sequential N=32 and N=256,
+  synthetic OpenMP-4 N=512, N=1024, and N=2048, and synthetic display-only
+  N=100,000 each created an AMD Radeon OpenGL 3.3 core context, initialized the
+  application, and remained in the event loop until deliberate interruption.
+  This proves runtime construction and batched rendering initialization, not
+  subjective appearance or force performance. A CUDA request exited `1` with
+  the intended explicit unavailable diagnostic and no silent fallback.
+
+Native-app automation was unavailable on the validation host. Real contexts can
+be launched and observed alive, but resize handles, presets, hover tooltips,
+selection, and visual composition cannot be clicked or judged programmatically.
+The final status is therefore **IMPLEMENTED / USER VISUAL VALIDATION PENDING**.
+
+### Final user visual-validation checklist
+
+Launch a Solar view at 1920x1080 and a laptop-sized window, plus a 100,000-body
+display-only view:
+
+```powershell
+./build-stage6d-visual/nbody_visualizer.exe --scenario solar --backend openmp --threads 4 --width 1920 --height 1080
+./build-stage6d-visual/nbody_visualizer.exe --scenario synthetic --backend sequential --bodies 100000 --seed 24301 --width 1280 --height 800
+```
+
+1. Resize the window and panel; verify readable wrapping and that the scene never
+   appears underneath the panel.
+2. Exercise all five Solar presets and manual orbit/dolly. Confirm Sun through
+   Mars have stable, non-overlapping callouts with clear leaders in Inner System
+   and compressed Overview compositions.
+3. Watch Mercury near the Sun while zooming. Confirm centers/orbits never move,
+   the discs remain distinct, and the Sun label preserves identity when its disc
+   is reduced for clearance.
+4. Hover every primary control and confirm concise help appears; inspect full
+   units and long numeric values at both window sizes.
+5. Confirm selection/focus, trails, guides, barycenter, 1x/10x real Sun motion,
+   conservation status, reset, pause, and live Sequential/OpenMP switching.
+6. Visit N=1024, 2048, 8192, and 100000. Confirm warnings and paused/manual or
+   display-only behavior match the table, selected-only inspection remains
+   responsive, and no large workload silently begins direct-force integration.
+7. Confirm the 100,000-body point cloud and restrained starfield are legible and
+   that no UI text presents FPS or live comparison as benchmark evidence.
