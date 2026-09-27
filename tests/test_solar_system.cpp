@@ -6,6 +6,7 @@
 #include <cmath>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -19,6 +20,31 @@ void require(bool condition, const std::string& message) {
 
 bool finite_vector(const nbody::Vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+void test_mercury_sun_clearance() {
+    const auto solar = nbody::make_approximate_solar_system();
+    auto state = solar.initial_state;
+    constexpr std::size_t ten_year_steps =
+        static_cast<std::size_t>(10.0 * 365.25 * 86400.0 /
+                                 nbody::solar_system_recommended_dt_s);
+    double minimum_separation_m = std::numeric_limits<double>::infinity();
+    for (std::size_t step = 0; step <= ten_year_steps; ++step) {
+        minimum_separation_m = std::min(
+            minimum_separation_m,
+            nbody::norm(state.bodies[1].position_m - state.bodies[0].position_m));
+        if (step < ten_year_steps) {
+            nbody::velocity_verlet_step(state, nbody::solar_system_recommended_dt_s);
+        }
+    }
+    const double physical_contact_distance_m =
+        solar.metadata[0].mean_radius_m + solar.metadata[1].mean_radius_m;
+    require(minimum_separation_m > physical_contact_distance_m,
+            "Mercury physically intersects the Sun during the ten-year validation interval");
+    std::cout << "ten-year Mercury minimum Sun separation=" << minimum_separation_m
+              << " m (" << minimum_separation_m / 149597870700.0
+              << " AU), physical contact distance=" << physical_contact_distance_m
+              << " m\n";
 }
 
 void test_solar_system_definition() {
@@ -107,6 +133,7 @@ void test_solar_system_definition() {
 int main() {
     try {
         test_solar_system_definition();
+        test_mercury_sun_clearance();
         std::cout << "all approximate Solar-System tests passed\n";
         return 0;
     } catch (const std::exception& error) {

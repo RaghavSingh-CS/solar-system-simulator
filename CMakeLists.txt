@@ -154,6 +154,7 @@ if(NBODY_BUILD_VISUALIZATION)
     add_library(nbody_visualization_model
         visualization/camera.cpp
         visualization/conservation.cpp
+        visualization/compute_comparison.cpp
         visualization/controller.cpp
         visualization/presentation.cpp
         visualization/render_space.cpp

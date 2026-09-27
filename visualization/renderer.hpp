@@ -18,6 +18,12 @@ struct RenderTrail {
     bool fade_with_age{true};
 };
 
+struct RenderMarker {
+    glm::vec3 position{0.0F};
+    glm::vec3 color{1.0F};
+    float radius{0.06F};
+};
+
 class BodyRenderer {
 public:
     BodyRenderer();
@@ -33,7 +39,8 @@ public:
         const OrbitCamera& camera,
         int framebuffer_width,
         int framebuffer_height,
-        std::optional<std::size_t> selected_body = std::nullopt) const;
+        std::optional<std::size_t> selected_body = std::nullopt,
+        std::optional<RenderMarker> barycenter_marker = std::nullopt) const;
 
 private:
     void release() noexcept;
@@ -51,6 +58,9 @@ private:
     unsigned int star_program_{0};
     unsigned int star_vertex_array_{0};
     unsigned int star_vertex_buffer_{0};
+    unsigned int point_program_{0};
+    unsigned int point_vertex_array_{0};
+    unsigned int point_vertex_buffer_{0};
     int index_count_{0};
     int ring_vertex_count_{0};
     int star_count_{0};
@@ -72,6 +82,8 @@ private:
     int ring_projection_location_{-1};
     int star_view_location_{-1};
     int star_projection_location_{-1};
+    int point_view_location_{-1};
+    int point_projection_location_{-1};
 };
 
 }  // namespace nbody::visualization

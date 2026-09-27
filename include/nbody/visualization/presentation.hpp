@@ -51,6 +51,11 @@ CameraFraming camera_framing(
 
 void apply_camera_framing(OrbitCamera& camera, const CameraFraming& framing);
 
+glm::vec3 amplify_from_barycenter(
+    const glm::vec3& render_position,
+    const glm::vec3& barycenter,
+    float amplification);
+
 struct LabelCandidate {
     std::size_t body_index{0};
     glm::vec2 anchor{0.0F};
@@ -72,6 +77,7 @@ std::vector<LabelPlacement> declutter_labels(
     std::vector<LabelCandidate> candidates,
     glm::vec2 viewport_size,
     float left_inset = 0.0F,
-    float margin = 6.0F);
+    float margin = 6.0F,
+    const std::vector<LabelPlacement>& previous = {});
 
 }  // namespace nbody::visualization

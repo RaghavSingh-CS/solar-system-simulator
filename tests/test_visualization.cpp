@@ -2,6 +2,7 @@
 #include "nbody/solar_system.hpp"
 #include "nbody/visualization/camera.hpp"
 #include "nbody/visualization/conservation.hpp"
+#include "nbody/visualization/compute_comparison.hpp"
 #include "nbody/visualization/controller.hpp"
 #include "nbody/visualization/presentation.hpp"
 #include "nbody/visualization/render_space.hpp"
@@ -9,13 +10,16 @@
 #include "nbody/visualization/trails.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/geometric.hpp>
 
+#include <array>
 #include <cmath>
 #include <exception>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -112,6 +116,20 @@ void test_scenario_switch_and_diagnostics() {
                 synthetic.name == "Compute Experiment",
             "synthetic mode is not intentionally framed as a low-clutter compute experiment");
 
+    nbody::visualization::RenderSpaceTransform solar_transform(
+        solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
+    std::vector<nbody::visualization::RenderBody> solar_snapshot;
+    solar_transform.update_snapshot(solar.initial_state, solar_snapshot);
+    require(std::abs(solar_snapshot[0].radius - 0.052F) < 1.0e-6F,
+            "Solar render-only Sun cap was not applied");
+    require(glm::distance(solar_snapshot[0].position, solar_snapshot[1].position) >
+                solar_snapshot[0].radius + solar_snapshot[1].radius,
+            "rendered Sun overlaps Mercury in the initial Solar composition");
+    constexpr double validated_ten_year_mercury_minimum_m = 4.60084e10;
+    require(validated_ten_year_mercury_minimum_m * solar_transform.position_scale() >
+                solar_snapshot[0].radius + solar_snapshot[1].radius,
+            "render-only Sun cap still covers Mercury at the validated physical minimum");
+
     nbody::visualization::SimulationController controller(
         solar.initial_state,
         {solar.dt_s, 1, nbody::visualization::BackendKind::sequential, 1});
@@ -161,6 +179,34 @@ void test_trail_boundedness() {
     for (const auto& trail : trails.positions()) {
         require(trail.size() == 1, "trail reset did not clear and seed history");
     }
+}
+
+void test_actual_sun_trail_and_barycentric_transform() {
+    const auto solar = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    auto state = solar.initial_state;
+    nbody::visualization::TrailHistory trails(state, 16, 86400.0);
+    for (int step = 0; step < 8; ++step) {
+        nbody::velocity_verlet_step(state, solar.dt_s);
+        trails.sample(state);
+    }
+    require(trails.positions()[0].size() == 3,
+            "actual Sun trajectory was not sampled at the declared cadence");
+    const auto& sampled_sun = trails.positions()[0].back();
+    require(sampled_sun.x == state.bodies[0].position_m.x &&
+                sampled_sun.y == state.bodies[0].position_m.y &&
+                sampled_sun.z == state.bodies[0].position_m.z,
+            "Sun trail does not contain the integrated Sun position");
+
+    nbody::visualization::RenderSpaceTransform transform(
+        solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
+    const glm::vec3 barycenter = transform.to_render_position({});
+    require(barycenter == glm::vec3(0.0F), "barycenter marker transform is not at the origin");
+    const glm::vec3 rendered_sun = transform.to_render_position(sampled_sun);
+    const glm::vec3 amplified = nbody::visualization::amplify_from_barycenter(
+        rendered_sun, barycenter, 10.0F);
+    require(glm::length(amplified - barycenter) > glm::length(rendered_sun - barycenter),
+            "Sun-motion amplification did not affect only displacement from barycenter");
 }
 
 void test_camera_math() {
@@ -238,6 +284,64 @@ void test_presentation_helpers() {
             require(!overlap, "decluttered labels still overlap");
         }
     }
+
+    auto moved_candidates = candidates;
+    for (auto& candidate : moved_candidates) {
+        candidate.anchor += glm::vec2(0.25F, -0.20F);
+    }
+    const auto stable = nbody::visualization::declutter_labels(
+        moved_candidates, {1280.0F, 720.0F}, 420.0F, 6.0F, placements);
+    require(stable.size() == placements.size(),
+            "tiny projected motion changed the accepted label set");
+    for (std::size_t index = 0; index < stable.size(); ++index) {
+        require(glm::distance(
+                    stable[index].position - stable[index].anchor,
+                    placements[index].position - placements[index].anchor) < 1.0e-4F,
+                "label hysteresis did not retain the prior accepted anchor");
+    }
+}
+
+void test_compute_experiment_scaling_and_comparison() {
+    constexpr std::array<std::size_t, 6> supported{{32, 64, 128, 256, 512, 1024}};
+    for (const std::size_t count : supported) {
+        const auto first = nbody::visualization::make_visual_scenario(
+            nbody::visualization::ScenarioKind::synthetic, count, 24301);
+        const auto second = nbody::visualization::make_visual_scenario(
+            nbody::visualization::ScenarioKind::synthetic, count, 24301);
+        require(first.initial_state.bodies.size() == count &&
+                    same_state(first.initial_state, second.initial_state),
+                "supported Compute Experiment workload is not deterministic");
+        nbody::visualization::RenderSpaceTransform transform(
+            first.initial_state, first.styles, 9.0F, first.default_radius_multiplier);
+        std::vector<nbody::visualization::RenderBody> snapshot;
+        transform.update_snapshot(first.initial_state, snapshot);
+        require(snapshot.size() == count,
+                "large-N Compute Experiment render snapshot is incomplete");
+    }
+
+    const auto initial = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::synthetic, 512, 24301);
+    const auto visible_state = initial.initial_state;
+    if (nbody::visualization::SimulationController::openmp_available()) {
+        const auto comparison = nbody::visualization::run_live_compute_comparison(
+            initial.initial_state, initial.dt_s, 4);
+        require(comparison.body_count == 512 && comparison.integration_steps > 0 &&
+                    comparison.sequential_ms > 0.0 && comparison.openmp_ms > 0.0,
+                "live CPU comparison did not execute the declared fixed workload");
+        require(comparison.correctness_passed,
+                "live Sequential/OpenMP comparison failed established mixed tolerances");
+        require(nbody::visualization::live_comparison_matches(comparison, 512, 4) &&
+                    !nbody::visualization::live_comparison_matches(comparison, 256, 4) &&
+                    !nbody::visualization::live_comparison_matches(comparison, 512, 2),
+                "live comparison result did not invalidate for N/thread changes");
+        require(same_state(visible_state, initial.initial_state),
+                "live CPU comparison mutated its visible input state");
+        std::cout << "live diagnostic (not benchmark evidence): N=512 steps="
+                  << comparison.integration_steps
+                  << " sequential_ms=" << comparison.sequential_ms
+                  << " openmp4_ms=" << comparison.openmp_ms
+                  << " ratio=" << comparison.sequential_to_openmp_ratio << '\n';
+    }
 }
 
 }  // namespace
@@ -248,8 +352,10 @@ int main() {
         test_render_space_is_read_only();
         test_scenario_switch_and_diagnostics();
         test_trail_boundedness();
+        test_actual_sun_trail_and_barycentric_transform();
         test_camera_math();
         test_presentation_helpers();
+        test_compute_experiment_scaling_and_comparison();
         std::cout << "all visualization model tests passed\n";
         return 0;
     } catch (const std::exception& error) {

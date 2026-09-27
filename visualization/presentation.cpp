@@ -56,6 +56,19 @@ void apply_camera_framing(OrbitCamera& camera, const CameraFraming& framing) {
         framing.target);
 }
 
+glm::vec3 amplify_from_barycenter(
+    const glm::vec3& render_position,
+    const glm::vec3& barycenter,
+    float amplification) {
+    if (!(amplification >= 1.0F) || !std::isfinite(amplification) ||
+        !std::isfinite(render_position.x) || !std::isfinite(render_position.y) ||
+        !std::isfinite(render_position.z) || !std::isfinite(barycenter.x) ||
+        !std::isfinite(barycenter.y) || !std::isfinite(barycenter.z)) {
+        throw std::invalid_argument("barycentric visual amplification must be finite and at least one");
+    }
+    return barycenter + (render_position - barycenter) * amplification;
+}
+
 namespace {
 
 bool overlaps(const LabelPlacement& left, const LabelPlacement& right, float margin) {
@@ -71,7 +84,8 @@ std::vector<LabelPlacement> declutter_labels(
     std::vector<LabelCandidate> candidates,
     glm::vec2 viewport_size,
     float left_inset,
-    float margin) {
+    float margin,
+    const std::vector<LabelPlacement>& previous) {
     if (!(viewport_size.x > 0.0F) || !(viewport_size.y > 0.0F) ||
         left_inset < 0.0F || margin < 0.0F) {
         throw std::invalid_argument("label viewport and margins must be valid");
@@ -87,11 +101,7 @@ std::vector<LabelPlacement> declutter_labels(
     std::vector<LabelPlacement> placed;
     placed.reserve(candidates.size());
     for (const auto& candidate : candidates) {
-        for (const auto& offset : offsets) {
-            glm::vec2 position = candidate.anchor + offset;
-            if (offset.x < 0.0F) {
-                position.x -= candidate.size.x;
-            }
+        const auto try_position = [&](glm::vec2 position, bool leader_line) {
             position.x = std::clamp(
                 position.x,
                 left_inset + margin,
@@ -106,13 +116,31 @@ std::vector<LabelPlacement> declutter_labels(
                 position,
                 candidate.size,
                 candidate.selected,
-                std::abs(offset.x) > 15.0F || std::abs(offset.y) > 20.0F,
+                leader_line,
             };
             const bool collision = std::any_of(placed.begin(), placed.end(), [&](const auto& item) {
                 return overlaps(proposal, item, margin);
             });
             if (!collision) {
                 placed.push_back(proposal);
+            }
+            return !collision;
+        };
+        const auto prior = std::find_if(previous.begin(), previous.end(), [&](const auto& item) {
+            return item.body_index == candidate.body_index;
+        });
+        if (prior != previous.end() &&
+            try_position(candidate.anchor + prior->position - prior->anchor, prior->leader_line)) {
+            continue;
+        }
+        for (const auto& offset : offsets) {
+            glm::vec2 position = candidate.anchor + offset;
+            if (offset.x < 0.0F) {
+                position.x -= candidate.size.x;
+            }
+            if (try_position(
+                    position,
+                    std::abs(offset.x) > 15.0F || std::abs(offset.y) > 20.0F)) {
                 break;
             }
         }

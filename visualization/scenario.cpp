@@ -3,6 +3,7 @@
 #include "nbody/scenarios.hpp"
 #include "nbody/solar_system.hpp"
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 #include <utility>
@@ -37,6 +38,12 @@ constexpr std::array<BodyMaterial, 9> solar_materials{{
 
 constexpr std::array<float, 9> solar_visual_scales{{
     1.35F, 0.92F, 1.0F, 1.08F, 1.0F, 1.25F, 1.18F, 1.05F, 1.05F,
+}};
+
+// Keeps the exaggerated Sun legible without covering Mercury's rendered
+// perihelion. Other bodies use the uncapped physical-radius transform.
+constexpr std::array<float, 9> solar_maximum_render_radii{{
+    0.052F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
 }};
 
 constexpr std::array<glm::vec3, 8> synthetic_colors{{
@@ -81,6 +88,7 @@ ScenarioDefinition make_visual_scenario(
                 index == 0,
                 solar_materials[index],
                 solar_visual_scales[index],
+                solar_maximum_render_radii[index],
             });
         }
         return result;
@@ -90,11 +98,15 @@ ScenarioDefinition make_visual_scenario(
     result.provenance = "deterministic seed fixture; not the Solar System";
     result.initial_state = make_seeded_synthetic_system(synthetic_body_count, synthetic_seed);
     result.dt_s = 10.0;
+    const std::size_t balanced_steps = synthetic_body_count <= 64 ? 32 :
+        synthetic_body_count <= 128 ? 16 :
+        synthetic_body_count <= 256 ? 8 :
+        synthetic_body_count <= 512 ? 4 : 2;
     result.speed_presets = {
-        {"Slow - light compute batch", 8},
-        {"Normal - balanced compute batch", 32},
-        {"Fast - heavy compute batch", 128},
-        {"Very Fast - maximum compute batch", 256},
+        {"Slow - light compute batch", std::max<std::size_t>(1, balanced_steps / 4)},
+        {"Normal - balanced compute batch", balanced_steps},
+        {"Fast - heavy compute batch", balanced_steps * 4},
+        {"Very Fast - maximum compute batch", balanced_steps * 8},
     };
     result.default_speed_index = 1;
     result.trail_sample_interval_s = 1000.0;
@@ -108,6 +120,7 @@ ScenarioDefinition make_visual_scenario(
             false,
             BodyMaterial::generic,
             1.0F,
+            0.0F,
         });
     }
     return result;

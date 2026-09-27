@@ -1,5 +1,6 @@
 #include "nbody/visualization/camera.hpp"
 #include "nbody/visualization/conservation.hpp"
+#include "nbody/visualization/compute_comparison.hpp"
 #include "nbody/visualization/controller.hpp"
 #include "nbody/visualization/presentation.hpp"
 #include "nbody/visualization/render_space.hpp"
@@ -17,6 +18,7 @@
 #include <glm/vec4.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -216,9 +218,16 @@ struct ApplicationModel {
     std::size_t speed_index{0};
     std::size_t selected_body{0};
     std::optional<std::size_t> focused_body;
+    std::vector<nbody::visualization::LabelPlacement> label_layout;
+    std::optional<nbody::visualization::LiveComputeComparison> live_comparison;
+    std::string live_comparison_error;
+    std::size_t synthetic_body_count{32};
+    std::uint64_t synthetic_seed{24301};
     bool show_trails{true};
     bool show_labels{true};
     bool show_reference_orbits{true};
+    bool show_barycentric_motion{true};
+    float sun_motion_amplification{10.0F};
 
     ApplicationModel(const Options& options, BackendKind backend)
         : scenario(nbody::visualization::make_visual_scenario(
@@ -237,7 +246,9 @@ struct ApplicationModel {
           conservation(scenario.initial_state),
           trails(scenario.initial_state, 768, scenario.trail_sample_interval_s),
           speed_index(scenario.default_speed_index),
-          selected_body(scenario.kind == ScenarioKind::solar_system ? 3U : 0U) {}
+          selected_body(scenario.kind == ScenarioKind::solar_system ? 3U : 0U),
+          synthetic_body_count(options.bodies),
+          synthetic_seed(options.seed) {}
 
     void switch_scenario(ScenarioKind kind, std::size_t bodies, std::uint64_t seed) {
         auto next = nbody::visualization::make_visual_scenario(kind, bodies, seed);
@@ -252,8 +263,15 @@ struct ApplicationModel {
             controller.state(), 768, scenario.trail_sample_interval_s);
         speed_index = next_speed;
         selected_body = scenario.kind == ScenarioKind::solar_system ? 3U : 0U;
+        if (scenario.kind == ScenarioKind::synthetic) {
+            synthetic_body_count = bodies;
+            synthetic_seed = seed;
+        }
         show_labels = true;
         show_reference_orbits = scenario.kind == ScenarioKind::solar_system;
+        label_layout.clear();
+        live_comparison.reset();
+        live_comparison_error.clear();
         focused_body.reset();
     }
 
@@ -428,7 +446,7 @@ void select_nearest_body(
 }
 
 void update_render_trails(
-    const ApplicationModel& app,
+    ApplicationModel& app,
     std::vector<nbody::visualization::RenderTrail>& output) {
     if (!app.show_trails) {
         output.clear();
@@ -441,11 +459,32 @@ void update_render_trails(
             trail.alpha = 0.68F;
             trail.fade_with_age = true;
             trail.points.clear();
+            if (index == 0 && app.scenario.kind == ScenarioKind::solar_system &&
+                app.show_barycentric_motion) {
+                continue;
+            }
             trail.points.reserve(physical[index].size());
             for (const auto& point : physical[index]) {
                 trail.points.push_back(app.render_space.to_render_position(point));
             }
         }
+    }
+    if (app.show_barycentric_motion &&
+        app.scenario.kind == ScenarioKind::solar_system) {
+        const auto& sun_history = app.trails.positions().front();
+        nbody::visualization::RenderTrail sun_motion;
+        sun_motion.color = {1.0F, 0.66F, 0.22F};
+        sun_motion.alpha = 0.92F;
+        sun_motion.fade_with_age = true;
+        sun_motion.points.reserve(sun_history.size());
+        const glm::vec3 barycenter = app.render_space.to_render_position({});
+        for (const auto& point : sun_history) {
+            sun_motion.points.push_back(nbody::visualization::amplify_from_barycenter(
+                app.render_space.to_render_position(point),
+                barycenter,
+                app.sun_motion_amplification));
+        }
+        output.push_back(std::move(sun_motion));
     }
     if (app.show_reference_orbits && !app.scenario.reference_paths_m.empty()) {
         const std::size_t first_reference = output.size();
@@ -479,6 +518,7 @@ std::string human_time(double seconds) {
 
 struct UiActions {
     std::optional<ScenarioKind> scenario;
+    std::optional<std::size_t> synthetic_body_count;
     std::optional<nbody::visualization::CameraPreset> camera_preset;
     bool reset{false};
     bool frame_focus{false};
@@ -495,9 +535,7 @@ void section_heading(const char* label) {
 
 UiActions draw_control_panel(
     ApplicationModel& app,
-    int& preferred_openmp_threads,
-    std::size_t synthetic_bodies,
-    std::uint64_t synthetic_seed) {
+    int& preferred_openmp_threads) {
     UiActions actions;
     ImGui::SetNextWindowPos({16.0F, 16.0F}, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize({438.0F, 980.0F}, ImGuiCond_FirstUseEver);
@@ -520,7 +558,8 @@ UiActions draw_control_panel(
     if (app.scenario.kind == ScenarioKind::synthetic) {
         ImGui::TextDisabled(
             "Deterministic synthetic N-body workload  /  N=%zu  seed=%llu",
-            synthetic_bodies, static_cast<unsigned long long>(synthetic_seed));
+            app.synthetic_body_count,
+            static_cast<unsigned long long>(app.synthetic_seed));
     }
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16F, 0.38F, 0.42F, 1.0F));
     if (ImGui::Button(app.controller.paused() ? "PLAY" : "PAUSE", {112.0F, 0.0F})) {
@@ -568,15 +607,83 @@ UiActions draw_control_panel(
     ImGui::TextDisabled("CUDA");
     ImGui::SameLine();
     ImGui::TextDisabled("Auto");
-    if (app.controller.backend_kind() == BackendKind::openmp) {
+    if (app.controller.backend_kind() == BackendKind::openmp ||
+        app.scenario.kind == ScenarioKind::synthetic) {
         const int hardware_threads =
             static_cast<int>(std::max(1U, std::thread::hardware_concurrency()));
         const int maximum_threads = std::min(64, hardware_threads);
-        if (ImGui::SliderInt("OpenMP threads", &preferred_openmp_threads, 1, maximum_threads)) {
-            app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+        const char* thread_label = app.scenario.kind == ScenarioKind::synthetic
+            ? "OpenMP comparison threads" : "OpenMP threads";
+        if (ImGui::SliderInt(thread_label, &preferred_openmp_threads, 1, maximum_threads)) {
+            if (app.controller.backend_kind() == BackendKind::openmp) {
+                app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+            }
+            app.live_comparison.reset();
+            app.live_comparison_error.clear();
         }
     }
     ImGui::TextDisabled("CUDA not integrated  /  Auto awaits Stage 5 calibration");
+    if (app.scenario.kind == ScenarioKind::solar_system) {
+        ImGui::TextWrapped(
+            "9-body physical visualization. Parallel speedup is not expected to be meaningful at this scale.");
+    } else {
+        constexpr std::array<std::size_t, 6> supported_counts{{32, 64, 128, 256, 512, 1024}};
+        const std::string current_count = std::to_string(app.synthetic_body_count);
+        if (ImGui::BeginCombo("Workload N", current_count.c_str())) {
+            for (const std::size_t count : supported_counts) {
+                const std::string label = std::to_string(count);
+                if (ImGui::Selectable(label.c_str(), app.synthetic_body_count == count)) {
+                    actions.synthetic_body_count = count;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::BeginDisabled(!openmp_available);
+        if (ImGui::Button("COMPARE CPU BACKENDS", {220.0F, 0.0F})) {
+            try {
+                app.live_comparison = nbody::visualization::run_live_compute_comparison(
+                    app.controller.initial_state(), app.controller.dt_s(), preferred_openmp_threads);
+                app.live_comparison_error.clear();
+            } catch (const std::exception& error) {
+                app.live_comparison.reset();
+                app.live_comparison_error = error.what();
+            }
+        }
+        ImGui::EndDisabled();
+        ImGui::TextColored(
+            ImVec4(0.92F, 0.67F, 0.31F, 1.0F),
+            "LIVE DIAGNOSTIC - NOT BENCHMARK EVIDENCE");
+        if (app.live_comparison && !nbody::visualization::live_comparison_matches(
+                *app.live_comparison, app.synthetic_body_count, preferred_openmp_threads)) {
+            app.live_comparison.reset();
+        }
+        if (app.live_comparison) {
+            const auto& comparison = *app.live_comparison;
+            ImGui::Text("Workload                   N=%zu, %zu fixed steps",
+                        comparison.body_count, comparison.integration_steps);
+            ImGui::Text("Sequential                %.3f ms", comparison.sequential_ms);
+            ImGui::Text("OpenMP (%d)                %.3f ms",
+                        comparison.openmp_threads, comparison.openmp_ms);
+            if (comparison.correctness_passed) {
+                ImGui::Text("Observed Seq/OpenMP ratio %.3fx",
+                            comparison.sequential_to_openmp_ratio);
+                if (comparison.sequential_to_openmp_ratio < 1.0) {
+                    ImGui::TextDisabled("No speedup observed at this workload.");
+                }
+                ImGui::TextColored(
+                    ImVec4(0.38F, 0.90F, 0.61F, 1.0F),
+                    "CORRECTNESS PASS");
+            } else {
+                ImGui::TextColored(
+                    ImVec4(1.0F, 0.34F, 0.28F, 1.0F),
+                    "COMPARISON INVALID - CORRECTNESS FAILURE");
+            }
+        } else if (!app.live_comparison_error.empty()) {
+            ImGui::TextColored(
+                ImVec4(1.0F, 0.34F, 0.28F, 1.0F), "%s",
+                app.live_comparison_error.c_str());
+        }
+    }
 
     section_heading(app.scenario.kind == ScenarioKind::solar_system
         ? "SELECTED BODY" : "SELECTED WORKLOAD BODY");
@@ -654,6 +761,14 @@ UiActions draw_control_panel(
     ImGui::Checkbox("Simulation history trails", &app.show_trails);
     if (app.scenario.kind == ScenarioKind::solar_system) {
         ImGui::Checkbox("Reference orbit guides", &app.show_reference_orbits);
+        ImGui::Checkbox("Barycenter & real Sun motion", &app.show_barycentric_motion);
+        if (app.show_barycentric_motion) {
+            ImGui::SliderFloat(
+                "Sun-motion visual amplification", &app.sun_motion_amplification,
+                1.0F, 100.0F, "%.0fx", ImGuiSliderFlags_Logarithmic);
+            ImGui::TextDisabled(
+                "Trail shape uses integrated Sun positions; amplification is presentation-only.");
+        }
     }
     ImGui::Checkbox("Body labels", &app.show_labels);
     float radius_multiplier = app.render_space.radius_multiplier();
@@ -686,8 +801,8 @@ UiActions draw_control_panel(
             app.trails.set_capacity(static_cast<std::size_t>(trail_capacity));
         }
         if (app.scenario.kind == ScenarioKind::synthetic) {
-            ImGui::Text("Deterministic workload N=%zu seed=%llu", synthetic_bodies,
-                        static_cast<unsigned long long>(synthetic_seed));
+            ImGui::Text("Deterministic workload N=%zu seed=%llu", app.synthetic_body_count,
+                        static_cast<unsigned long long>(app.synthetic_seed));
         }
     }
 
@@ -697,11 +812,12 @@ UiActions draw_control_panel(
 }
 
 void draw_labels(
-    const ApplicationModel& app,
+    ApplicationModel& app,
     const std::vector<nbody::visualization::RenderBody>& bodies,
     const nbody::visualization::OrbitCamera& camera,
     float panel_right) {
     if (!app.show_labels) {
+        app.label_layout.clear();
         return;
     }
     const ImVec2 display = ImGui::GetIO().DisplaySize;
@@ -729,9 +845,10 @@ void draw_labels(
             selected,
         });
     }
-    const auto placements = nbody::visualization::declutter_labels(
-        std::move(candidates), {display.x, display.y}, panel_right + 8.0F, 5.0F);
-    for (const auto& placement : placements) {
+    app.label_layout = nbody::visualization::declutter_labels(
+        std::move(candidates), {display.x, display.y}, panel_right + 8.0F, 7.0F,
+        app.label_layout);
+    for (const auto& placement : app.label_layout) {
         const char* label = app.controller.state().bodies[placement.body_index].name.c_str();
         const ImVec2 position{placement.position.x, placement.position.y};
         if (placement.leader_line) {
@@ -836,14 +953,20 @@ int main(int argc, char** argv) {
             input.pending_selection = false;
 
             const UiActions actions = draw_control_panel(
-                app, input.preferred_openmp_threads, options.bodies, options.seed);
+                app, input.preferred_openmp_threads);
             bool state_replaced = false;
             if (actions.reset) {
                 app.reset();
                 state_replaced = true;
             }
-            if (actions.scenario) {
-                app.switch_scenario(*actions.scenario, options.bodies, options.seed);
+            if (actions.synthetic_body_count) {
+                app.switch_scenario(
+                    ScenarioKind::synthetic, *actions.synthetic_body_count, app.synthetic_seed);
+                camera.reset();
+                state_replaced = true;
+            } else if (actions.scenario) {
+                app.switch_scenario(
+                    *actions.scenario, app.synthetic_body_count, app.synthetic_seed);
                 camera.reset();
                 state_replaced = true;
             }
@@ -868,9 +991,18 @@ int main(int argc, char** argv) {
 
             draw_labels(app, snapshot, camera, actions.panel_right);
             ImGui::Render();
+            std::optional<nbody::visualization::RenderMarker> barycenter_marker;
+            if (app.show_barycentric_motion &&
+                app.scenario.kind == ScenarioKind::solar_system) {
+                barycenter_marker = nbody::visualization::RenderMarker{
+                    app.render_space.to_render_position({}),
+                    {0.96F, 0.78F, 0.30F},
+                    0.065F,
+                };
+            }
             renderer.render(
                 snapshot, render_trails, camera, framebuffer_width, framebuffer_height,
-                app.selected_body);
+                app.selected_body, barycenter_marker);
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             glfwSwapBuffers(window.get());
         }

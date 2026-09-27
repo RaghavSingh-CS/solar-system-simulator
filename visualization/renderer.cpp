@@ -159,6 +159,34 @@ void main() {
 }
 )glsl";
 
+constexpr const char* point_body_vertex_shader_source = R"glsl(
+#version 330 core
+layout(location = 0) in vec3 in_position;
+layout(location = 1) in vec3 in_color;
+layout(location = 2) in float in_size;
+uniform mat4 view;
+uniform mat4 projection;
+out vec3 point_color;
+void main() {
+    gl_Position = projection * view * vec4(in_position, 1.0);
+    gl_PointSize = in_size;
+    point_color = in_color;
+}
+)glsl";
+
+constexpr const char* point_body_fragment_shader_source = R"glsl(
+#version 330 core
+in vec3 point_color;
+out vec4 fragment_color;
+void main() {
+    vec2 p = gl_PointCoord * 2.0 - 1.0;
+    float distance_squared = dot(p, p);
+    if (distance_squared > 1.0) discard;
+    float light = 0.72 + 0.28 * (1.0 - distance_squared);
+    fragment_color = vec4(point_color * light, 0.96);
+}
+)glsl";
+
 struct Vertex {
     float position[3];
     float normal[3];
@@ -167,6 +195,12 @@ struct Vertex {
 struct StarVertex {
     glm::vec3 position;
     float brightness;
+};
+
+struct PointBodyVertex {
+    glm::vec3 position;
+    glm::vec3 color;
+    float size_pixels;
 };
 
 unsigned int compile_shader(unsigned int type, const char* source, const char* label) {
@@ -362,6 +396,9 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
             ring_vertex_shader_source, ring_fragment_shader_source, "Saturn ring");
         star_program_ = create_aux_program(
             star_vertex_shader_source, star_fragment_shader_source, "starfield");
+        point_program_ = create_aux_program(
+            point_body_vertex_shader_source, point_body_fragment_shader_source,
+            "compute point body");
         std::vector<Vertex> vertices;
         std::vector<unsigned int> indices;
         make_sphere(vertices, indices);
@@ -457,6 +494,26 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
         star_view_location_ = uniform_location(star_program_, "view");
         star_projection_location_ = uniform_location(star_program_, "projection");
 
+        glGenVertexArrays(1, &point_vertex_array_);
+        glGenBuffers(1, &point_vertex_buffer_);
+        glBindVertexArray(point_vertex_array_);
+        glBindBuffer(GL_ARRAY_BUFFER, point_vertex_buffer_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(
+            0, 3, GL_FLOAT, GL_FALSE, sizeof(PointBodyVertex),
+            reinterpret_cast<const void*>(offsetof(PointBodyVertex, position)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            1, 3, GL_FLOAT, GL_FALSE, sizeof(PointBodyVertex),
+            reinterpret_cast<const void*>(offsetof(PointBodyVertex, color)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(
+            2, 1, GL_FLOAT, GL_FALSE, sizeof(PointBodyVertex),
+            reinterpret_cast<const void*>(offsetof(PointBodyVertex, size_pixels)));
+        glBindVertexArray(0);
+        point_view_location_ = uniform_location(point_program_, "view");
+        point_projection_location_ = uniform_location(point_program_, "projection");
+
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glEnable(GL_BLEND);
@@ -472,6 +529,18 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
 BodyRenderer::~BodyRenderer() { release(); }
 
 void BodyRenderer::release() noexcept {
+    if (point_vertex_buffer_ != 0) {
+        glDeleteBuffers(1, &point_vertex_buffer_);
+        point_vertex_buffer_ = 0;
+    }
+    if (point_vertex_array_ != 0) {
+        glDeleteVertexArrays(1, &point_vertex_array_);
+        point_vertex_array_ = 0;
+    }
+    if (point_program_ != 0) {
+        glDeleteProgram(point_program_);
+        point_program_ = 0;
+    }
     if (star_vertex_buffer_ != 0) {
         glDeleteBuffers(1, &star_vertex_buffer_);
         star_vertex_buffer_ = 0;
@@ -532,7 +601,8 @@ void BodyRenderer::render(
     const OrbitCamera& camera,
     int framebuffer_width,
     int framebuffer_height,
-    std::optional<std::size_t> selected_body) const {
+    std::optional<std::size_t> selected_body,
+    std::optional<RenderMarker> barycenter_marker) const {
     if (framebuffer_width <= 0 || framebuffer_height <= 0) {
         return;
     }
@@ -603,29 +673,76 @@ void BodyRenderer::render(
         glUniform1i(line_count_location_, static_cast<int>(marker.size()));
         glDrawArrays(GL_LINE_STRIP, 0, static_cast<int>(marker.size()));
     }
+    if (barycenter_marker) {
+        const auto& marker = *barycenter_marker;
+        const std::vector<glm::vec3> diamond{
+            marker.position + glm::vec3(marker.radius, 0.0F, 0.0F),
+            marker.position + glm::vec3(0.0F, marker.radius, 0.0F),
+            marker.position - glm::vec3(marker.radius, 0.0F, 0.0F),
+            marker.position - glm::vec3(0.0F, marker.radius, 0.0F),
+        };
+        glBindBuffer(GL_ARRAY_BUFFER, line_vertex_buffer_);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(diamond.size() * sizeof(glm::vec3)),
+            diamond.data(),
+            GL_DYNAMIC_DRAW);
+        glUniform3fv(line_color_location_, 1, glm::value_ptr(marker.color));
+        glUniform1f(line_alpha_location_, 0.90F);
+        glUniform1i(line_fade_location_, 0);
+        glUniform1i(line_count_location_, static_cast<int>(diamond.size()));
+        glDrawArrays(GL_LINE_LOOP, 0, static_cast<int>(diamond.size()));
+    }
     glDepthMask(GL_TRUE);
 
-    glUseProgram(program_);
-    glUniformMatrix4fv(view_location_, 1, GL_FALSE, glm::value_ptr(view));
-    glUniformMatrix4fv(projection_location_, 1, GL_FALSE, glm::value_ptr(projection));
-    glm::vec3 sun_position(0.0F);
-    for (const auto& body : bodies) {
-        if (body.emissive) {
-            sun_position = body.position;
-            break;
+    const bool use_point_bodies = bodies.size() > 64 &&
+        std::all_of(bodies.begin(), bodies.end(), [](const auto& body) {
+            return body.material == BodyMaterial::generic;
+        });
+    if (use_point_bodies) {
+        std::vector<PointBodyVertex> points;
+        points.reserve(bodies.size());
+        for (const auto& body : bodies) {
+            points.push_back({
+                body.position,
+                body.color,
+                std::clamp(4.0F + body.radius * 24.0F, 4.0F, 11.0F),
+            });
         }
-    }
-    glUniform3fv(sun_position_location_, 1, glm::value_ptr(sun_position));
-    glBindVertexArray(vertex_array_);
-    for (const auto& body : bodies) {
-        glm::mat4 model(1.0F);
-        model = glm::translate(model, body.position);
-        model = glm::scale(model, glm::vec3(body.radius));
-        glUniformMatrix4fv(model_location_, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform3fv(color_location_, 1, glm::value_ptr(body.color));
-        glUniform1i(emissive_location_, body.emissive ? 1 : 0);
-        glUniform1i(material_location_, static_cast<int>(body.material));
-        glDrawElements(GL_TRIANGLES, index_count_, GL_UNSIGNED_INT, nullptr);
+        glUseProgram(point_program_);
+        glUniformMatrix4fv(point_view_location_, 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(point_projection_location_, 1, GL_FALSE, glm::value_ptr(projection));
+        glBindVertexArray(point_vertex_array_);
+        glBindBuffer(GL_ARRAY_BUFFER, point_vertex_buffer_);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(points.size() * sizeof(PointBodyVertex)),
+            points.data(),
+            GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_POINTS, 0, static_cast<int>(points.size()));
+    } else {
+        glUseProgram(program_);
+        glUniformMatrix4fv(view_location_, 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(projection_location_, 1, GL_FALSE, glm::value_ptr(projection));
+        glm::vec3 sun_position(0.0F);
+        for (const auto& body : bodies) {
+            if (body.emissive) {
+                sun_position = body.position;
+                break;
+            }
+        }
+        glUniform3fv(sun_position_location_, 1, glm::value_ptr(sun_position));
+        glBindVertexArray(vertex_array_);
+        for (const auto& body : bodies) {
+            glm::mat4 model(1.0F);
+            model = glm::translate(model, body.position);
+            model = glm::scale(model, glm::vec3(body.radius));
+            glUniformMatrix4fv(model_location_, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform3fv(color_location_, 1, glm::value_ptr(body.color));
+            glUniform1i(emissive_location_, body.emissive ? 1 : 0);
+            glUniform1i(material_location_, static_cast<int>(body.material));
+            glDrawElements(GL_TRIANGLES, index_count_, GL_UNSIGNED_INT, nullptr);
+        }
     }
 
     glDepthMask(GL_FALSE);
