@@ -18,9 +18,17 @@ private:
     int thread_count_;
 };
 
+struct OpenMpFeatureProbe {
+    int requested_threads{0};
+    int effective_threads{0};
+    int participating_threads{0};
+    bool static_schedule_complete{false};
+};
+
 int openmp_processor_count() noexcept;
 int openmp_runtime_max_threads() noexcept;
 int openmp_effective_thread_count(int requested_thread_count);
 int openmp_specification_date() noexcept;
+OpenMpFeatureProbe openmp_feature_probe(int requested_thread_count);
 
 }  // namespace nbody

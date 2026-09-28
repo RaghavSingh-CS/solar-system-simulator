@@ -4,9 +4,11 @@
 
 #include <omp.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
+#include <vector>
 
 namespace nbody {
 
@@ -64,5 +66,44 @@ int openmp_effective_thread_count(int requested_thread_count) {
 }
 
 int openmp_specification_date() noexcept { return _OPENMP; }
+
+OpenMpFeatureProbe openmp_feature_probe(int requested_thread_count) {
+    if (requested_thread_count <= 0) {
+        throw std::invalid_argument("OpenMP thread count must be positive");
+    }
+    const int work_items = std::max(4, requested_thread_count * 4);
+    std::vector<int> owners(static_cast<std::size_t>(work_items), -1);
+    int effective_threads = 0;
+#pragma omp parallel num_threads(requested_thread_count)
+    {
+#pragma omp single
+        effective_threads = omp_get_num_threads();
+#pragma omp for schedule(static)
+        for (int i = 0; i < work_items; ++i) {
+            owners[static_cast<std::size_t>(i)] = omp_get_thread_num();
+        }
+    }
+
+    std::vector<bool> participated(static_cast<std::size_t>(effective_threads), false);
+    bool complete = effective_threads > 0;
+    for (const int owner : owners) {
+        if (owner < 0 || owner >= effective_threads) {
+            complete = false;
+            continue;
+        }
+        participated[static_cast<std::size_t>(owner)] = true;
+    }
+    int participating_threads = 0;
+    for (const bool value : participated) {
+        participating_threads += value ? 1 : 0;
+    }
+    complete = complete && participating_threads == effective_threads;
+    return {
+        requested_thread_count,
+        effective_threads,
+        participating_threads,
+        complete,
+    };
+}
 
 }  // namespace nbody

@@ -771,4 +771,14 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # v1.0's mixed pilot/full entry point is retired. Keep its implementation
+    # above only as historical source context; all operator calls dispatch to
+    # the phase-separated v2.0 implementation.
+    from stage5_common import Stage5Error
+    from run_stage5_v2 import main as stage5_v2_main
+
+    try:
+        raise SystemExit(stage5_v2_main())
+    except (Stage5Error, OSError, ValueError) as exc:
+        print(f"stage5-v2.0 error: {exc}", file=sys.stderr)
+        raise SystemExit(2)

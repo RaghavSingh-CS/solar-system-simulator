@@ -16,6 +16,39 @@
 #ifndef NBODY_BUILD_CONFIGURATION
 #define NBODY_BUILD_CONFIGURATION "unknown"
 #endif
+#ifndef NBODY_STAGE5_SOURCE_SHA
+#define NBODY_STAGE5_SOURCE_SHA "uncontrolled"
+#endif
+#ifndef NBODY_STAGE5_PROTOCOL_VERSION
+#define NBODY_STAGE5_PROTOCOL_VERSION "none"
+#endif
+#ifndef NBODY_STAGE5_CXX_COMPILER
+#define NBODY_STAGE5_CXX_COMPILER "unknown"
+#endif
+#ifndef NBODY_STAGE5_CXX_COMPILER_ID
+#define NBODY_STAGE5_CXX_COMPILER_ID "unknown"
+#endif
+#ifndef NBODY_STAGE5_CXX_COMPILER_VERSION
+#define NBODY_STAGE5_CXX_COMPILER_VERSION "unknown"
+#endif
+#ifndef NBODY_STAGE5_GENERATOR
+#define NBODY_STAGE5_GENERATOR "unknown"
+#endif
+#ifndef NBODY_STAGE5_CUDA_COMPILER
+#define NBODY_STAGE5_CUDA_COMPILER "unknown"
+#endif
+#ifndef NBODY_STAGE5_CUDA_COMPILER_ID
+#define NBODY_STAGE5_CUDA_COMPILER_ID "unknown"
+#endif
+#ifndef NBODY_STAGE5_CUDA_COMPILER_VERSION
+#define NBODY_STAGE5_CUDA_COMPILER_VERSION "unknown"
+#endif
+#ifndef NBODY_STAGE5_CUDA_HOST_COMPILER
+#define NBODY_STAGE5_CUDA_HOST_COMPILER "unknown"
+#endif
+#ifndef NBODY_STAGE5_CUDA_ARCHITECTURES
+#define NBODY_STAGE5_CUDA_ARCHITECTURES "unknown"
+#endif
 
 namespace {
 
@@ -106,6 +139,22 @@ double state_checksum(const nbody::SimulationState& state) {
 
 int main(int argc, char** argv) {
     try {
+        if (argc == 2 && std::string(argv[1]) == "--build-info") {
+            std::cout << "{\"component\":\"nbody_cuda_benchmark\",\"source_commit\":\""
+                      << NBODY_STAGE5_SOURCE_SHA << "\",\"protocol_version\":\""
+                      << NBODY_STAGE5_PROTOCOL_VERSION << "\",\"build_configuration\":\""
+                      << NBODY_BUILD_CONFIGURATION << "\",\"cxx_compiler\":\""
+                      << NBODY_STAGE5_CXX_COMPILER << "\",\"compiler_id\":\""
+                      << NBODY_STAGE5_CXX_COMPILER_ID << "\",\"compiler_version\":\""
+                      << NBODY_STAGE5_CXX_COMPILER_VERSION << "\",\"generator\":\""
+                      << NBODY_STAGE5_GENERATOR << "\",\"cuda_compiler\":\""
+                      << NBODY_STAGE5_CUDA_COMPILER << "\",\"cuda_compiler_id\":\""
+                      << NBODY_STAGE5_CUDA_COMPILER_ID << "\",\"cuda_compiler_version\":\""
+                      << NBODY_STAGE5_CUDA_COMPILER_VERSION << "\",\"cuda_host_compiler\":\""
+                      << NBODY_STAGE5_CUDA_HOST_COMPILER << "\",\"cuda_architectures\":\""
+                      << NBODY_STAGE5_CUDA_ARCHITECTURES << "\"}\n";
+            return 0;
+        }
         const Options options = parse_options(argc, argv);
         const auto initial_state = nbody::make_seeded_synthetic_system(options.bodies, options.seed);
         const auto initial_diagnostics = nbody::compute_diagnostics(initial_state);

@@ -23,6 +23,30 @@
 #ifndef NBODY_BUILD_CONFIGURATION
 #define NBODY_BUILD_CONFIGURATION "unknown"
 #endif
+#ifndef NBODY_STAGE5_SOURCE_SHA
+#define NBODY_STAGE5_SOURCE_SHA "uncontrolled"
+#endif
+#ifndef NBODY_STAGE5_PROTOCOL_VERSION
+#define NBODY_STAGE5_PROTOCOL_VERSION "none"
+#endif
+#ifndef NBODY_STAGE5_CXX_COMPILER
+#define NBODY_STAGE5_CXX_COMPILER "unknown"
+#endif
+#ifndef NBODY_STAGE5_CXX_COMPILER_ID
+#define NBODY_STAGE5_CXX_COMPILER_ID "unknown"
+#endif
+#ifndef NBODY_STAGE5_CXX_COMPILER_VERSION
+#define NBODY_STAGE5_CXX_COMPILER_VERSION "unknown"
+#endif
+#ifndef NBODY_STAGE5_GENERATOR
+#define NBODY_STAGE5_GENERATOR "unknown"
+#endif
+#ifndef NBODY_STAGE5_OPENMP_FLAGS
+#define NBODY_STAGE5_OPENMP_FLAGS ""
+#endif
+#ifndef NBODY_STAGE5_OPENMP_LIBRARIES
+#define NBODY_STAGE5_OPENMP_LIBRARIES ""
+#endif
 
 namespace {
 
@@ -168,6 +192,26 @@ double state_checksum(const nbody::SimulationState& state) {
 
 int main(int argc, char** argv) {
     try {
+        if (argc == 2 && std::string(argv[1]) == "--build-info") {
+            std::cout << "{\"component\":\"nbody_benchmark\",\"source_commit\":\""
+                      << NBODY_STAGE5_SOURCE_SHA << "\",\"protocol_version\":\""
+                      << NBODY_STAGE5_PROTOCOL_VERSION << "\",\"build_configuration\":\""
+                      << NBODY_BUILD_CONFIGURATION << "\",\"cxx_compiler\":\""
+                      << NBODY_STAGE5_CXX_COMPILER << "\",\"compiler_id\":\""
+                      << NBODY_STAGE5_CXX_COMPILER_ID << "\",\"compiler_version\":\""
+                      << NBODY_STAGE5_CXX_COMPILER_VERSION << "\",\"generator\":\""
+                      << NBODY_STAGE5_GENERATOR << "\",\"openmp_flags\":\""
+                      << NBODY_STAGE5_OPENMP_FLAGS << "\",\"openmp_libraries\":\""
+                      << NBODY_STAGE5_OPENMP_LIBRARIES << "\",\"openmp_compiled\":"
+#ifdef NBODY_HAS_OPENMP
+                      << "true,\"openmp_specification_date\":"
+                      << nbody::openmp_specification_date()
+#else
+                      << "false,\"openmp_specification_date\":0"
+#endif
+                      << "}\n";
+            return 0;
+        }
         const Options options = parse_options(argc, argv);
         const nbody::ForceBackend* backend = &nbody::sequential_force_backend();
         std::unique_ptr<nbody::ForceBackend> owned_backend;

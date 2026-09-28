@@ -13,6 +13,16 @@
 
 namespace {
 
+#ifndef NBODY_BUILD_CONFIGURATION
+#define NBODY_BUILD_CONFIGURATION "unknown"
+#endif
+#ifndef NBODY_STAGE5_SOURCE_SHA
+#define NBODY_STAGE5_SOURCE_SHA "uncontrolled"
+#endif
+#ifndef NBODY_STAGE5_PROTOCOL_VERSION
+#define NBODY_STAGE5_PROTOCOL_VERSION "none"
+#endif
+
 void require(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
@@ -154,8 +164,15 @@ void test_invalid_input(nbody::CudaForceBackend& cuda) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     try {
+        if (argc == 2 && std::string(argv[1]) == "--build-info") {
+            std::cout << "{\"component\":\"nbody_cuda_tests\",\"source_commit\":\""
+                      << NBODY_STAGE5_SOURCE_SHA << "\",\"protocol_version\":\""
+                      << NBODY_STAGE5_PROTOCOL_VERSION << "\",\"build_configuration\":\""
+                      << NBODY_BUILD_CONFIGURATION << "\"}\n";
+            return 0;
+        }
         require(nbody::cuda_device_count() > 0, "no CUDA device available");
         nbody::CudaForceBackend cuda;
         const auto binary = nbody::make_analytic_circular_two_body();

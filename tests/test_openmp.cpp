@@ -13,6 +13,16 @@
 
 namespace {
 
+#ifndef NBODY_BUILD_CONFIGURATION
+#define NBODY_BUILD_CONFIGURATION "unknown"
+#endif
+#ifndef NBODY_STAGE5_SOURCE_SHA
+#define NBODY_STAGE5_SOURCE_SHA "uncontrolled"
+#endif
+#ifndef NBODY_STAGE5_PROTOCOL_VERSION
+#define NBODY_STAGE5_PROTOCOL_VERSION "none"
+#endif
+
 struct StateDifference {
     double maximum_absolute_position_m{0.0};
     double maximum_scaled_position{0.0};
@@ -234,15 +244,28 @@ void test_invalid_inputs() {
     for (const int requested_threads : std::array<int, 3>{1, 2, 4}) {
         require(nbody::openmp_effective_thread_count(requested_threads) == requested_threads,
                 "OpenMP runtime did not honor the requested thread count");
+        const auto probe = nbody::openmp_feature_probe(requested_threads);
+        require(probe.effective_threads == requested_threads,
+                "OpenMP feature probe did not honor num_threads");
+        require(probe.participating_threads == requested_threads,
+                "OpenMP feature probe did not create the requested real team");
+        require(probe.static_schedule_complete,
+                "OpenMP schedule(static) feature probe was incomplete");
     }
-    require(nbody::openmp_specification_date() >= 201511,
-            "OpenMP runtime is older than the required 4.5 specification");
 }
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     try {
+        if (argc == 2 && std::string(argv[1]) == "--build-info") {
+            std::cout << "{\"component\":\"nbody_openmp_tests\",\"source_commit\":\""
+                      << NBODY_STAGE5_SOURCE_SHA << "\",\"protocol_version\":\""
+                      << NBODY_STAGE5_PROTOCOL_VERSION << "\",\"build_configuration\":\""
+                      << NBODY_BUILD_CONFIGURATION << "\",\"openmp_specification_date\":"
+                      << nbody::openmp_specification_date() << "}\n";
+            return 0;
+        }
         const auto binary = nbody::make_analytic_circular_two_body();
         const auto seeded = nbody::make_seeded_synthetic_system(32, 0x5eedULL);
         for (const int threads : std::array<int, 3>{1, 2, 4}) {

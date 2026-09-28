@@ -361,4 +361,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # v1.0 verification remains above for historical source comparison. The
+    # public entry point verifies only phase-separated v2.0 evidence.
+    from stage5_common import Stage5Error
+    from verify_stage5_v2 import main as stage5_v2_main
+
+    try:
+        raise SystemExit(stage5_v2_main())
+    except (Stage5Error, OSError, ValueError) as exc:
+        print(f"stage5-v2.0 verification error: {exc}", file=sys.stderr)
+        raise SystemExit(2)

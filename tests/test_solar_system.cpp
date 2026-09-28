@@ -13,6 +13,16 @@
 
 namespace {
 
+#ifndef NBODY_BUILD_CONFIGURATION
+#define NBODY_BUILD_CONFIGURATION "unknown"
+#endif
+#ifndef NBODY_STAGE5_SOURCE_SHA
+#define NBODY_STAGE5_SOURCE_SHA "uncontrolled"
+#endif
+#ifndef NBODY_STAGE5_PROTOCOL_VERSION
+#define NBODY_STAGE5_PROTOCOL_VERSION "none"
+#endif
+
 constexpr double astronomical_unit_m = 149597870700.0;
 
 struct InnerElement {
@@ -248,8 +258,15 @@ void test_solar_system_definition() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     try {
+        if (argc == 2 && std::string(argv[1]) == "--build-info") {
+            std::cout << "{\"component\":\"nbody_solar_system_tests\",\"source_commit\":\""
+                      << NBODY_STAGE5_SOURCE_SHA << "\",\"protocol_version\":\""
+                      << NBODY_STAGE5_PROTOCOL_VERSION << "\",\"build_configuration\":\""
+                      << NBODY_BUILD_CONFIGURATION << "\"}\n";
+            return 0;
+        }
         test_inner_orbital_shapes();
         test_solar_system_definition();
         test_mercury_sun_clearance();

@@ -35,6 +35,7 @@ def file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
+@unittest.skip("historical stage5-v1.0 tests; superseded by test_stage5_v2_tools.py")
 class Stage5ToolTests(unittest.TestCase):
     def test_frozen_split_is_disjoint_and_complete(self) -> None:
         calibration = set(RUNNER.CALIBRATION_BODIES)

@@ -6,6 +6,22 @@ option(NBODY_ENABLE_OPENMP "Build the OpenMP force backend" OFF)
 option(NBODY_ENABLE_CUDA "Build the CUDA force backend" OFF)
 option(NBODY_ENABLE_MPI "Build the optional MPI distributed-memory backend" OFF)
 option(NBODY_BUILD_VISUALIZATION "Build the optional GLFW/OpenGL viewer" OFF)
+set(NBODY_STAGE5_SOURCE_SHA "uncontrolled" CACHE STRING
+    "Source commit embedded in Stage 5 benchmark/test binaries")
+set(NBODY_STAGE5_PROTOCOL_VERSION "none" CACHE STRING
+    "Stage 5 protocol embedded in benchmark/test binaries")
+
+function(nbody_embed_stage5_identity target)
+    file(TO_CMAKE_PATH "${CMAKE_CXX_COMPILER}" nbody_stage5_cxx_compiler)
+    target_compile_definitions(${target} PRIVATE
+        NBODY_STAGE5_SOURCE_SHA="${NBODY_STAGE5_SOURCE_SHA}"
+        NBODY_STAGE5_PROTOCOL_VERSION="${NBODY_STAGE5_PROTOCOL_VERSION}"
+        NBODY_STAGE5_CXX_COMPILER="${nbody_stage5_cxx_compiler}"
+        NBODY_STAGE5_CXX_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+        NBODY_STAGE5_CXX_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+        NBODY_STAGE5_GENERATOR="${CMAKE_GENERATOR}"
+    )
+endfunction()
 
 add_library(nbody_core
     src/diagnostics.cpp
@@ -49,6 +65,20 @@ if(NBODY_ENABLE_CUDA)
     target_compile_definitions(nbody_cuda_benchmark PRIVATE
         NBODY_BUILD_CONFIGURATION="$<CONFIG>"
     )
+    nbody_embed_stage5_identity(nbody_cuda_benchmark)
+    file(TO_CMAKE_PATH "${CMAKE_CUDA_COMPILER}" nbody_stage5_cuda_compiler)
+    if(CMAKE_CUDA_HOST_COMPILER)
+        file(TO_CMAKE_PATH "${CMAKE_CUDA_HOST_COMPILER}" nbody_stage5_cuda_host_compiler)
+    else()
+        file(TO_CMAKE_PATH "${CMAKE_CXX_COMPILER}" nbody_stage5_cuda_host_compiler)
+    endif()
+    target_compile_definitions(nbody_cuda_benchmark PRIVATE
+        NBODY_STAGE5_CUDA_COMPILER="${nbody_stage5_cuda_compiler}"
+        NBODY_STAGE5_CUDA_COMPILER_ID="${CMAKE_CUDA_COMPILER_ID}"
+        NBODY_STAGE5_CUDA_COMPILER_VERSION="${CMAKE_CUDA_COMPILER_VERSION}"
+        NBODY_STAGE5_CUDA_HOST_COMPILER="${nbody_stage5_cuda_host_compiler}"
+        NBODY_STAGE5_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES}"
+    )
 endif()
 add_executable(nbody_headless src/main.cpp)
 target_link_libraries(nbody_headless PRIVATE nbody_core)
@@ -58,6 +88,7 @@ target_link_libraries(nbody_benchmark PRIVATE nbody_core)
 target_compile_definitions(nbody_benchmark PRIVATE
     NBODY_BUILD_CONFIGURATION="$<CONFIG>"
 )
+nbody_embed_stage5_identity(nbody_benchmark)
 
 add_executable(nbody_conservation_probe src/conservation_probe.cpp)
 target_link_libraries(nbody_conservation_probe PRIVATE nbody_core)
@@ -79,6 +110,11 @@ if(NBODY_ENABLE_OPENMP)
     target_compile_features(nbody_openmp PUBLIC cxx_std_17)
     target_link_libraries(nbody_openmp PUBLIC nbody_core OpenMP::OpenMP_CXX)
     target_compile_definitions(nbody_benchmark PRIVATE NBODY_HAS_OPENMP=1)
+    string(REPLACE ";" "," nbody_stage5_openmp_libraries "${OpenMP_CXX_LIB_NAMES}")
+    target_compile_definitions(nbody_benchmark PRIVATE
+        NBODY_STAGE5_OPENMP_FLAGS="${OpenMP_CXX_FLAGS}"
+        NBODY_STAGE5_OPENMP_LIBRARIES="${nbody_stage5_openmp_libraries}"
+    )
     target_link_libraries(nbody_benchmark PRIVATE nbody_openmp)
 
     if(MSVC)
@@ -214,6 +250,10 @@ if(BUILD_TESTING)
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
         add_test(
+            NAME nbody_stage5_v2_tools
+            COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_stage5_v2_tools.py
+        )
+        add_test(
             NAME nbody_stage6d_tools
             COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_stage6d_tools.py
         )
@@ -221,21 +261,29 @@ if(BUILD_TESTING)
 
     add_executable(nbody_tests tests/test_two_body.cpp)
     target_link_libraries(nbody_tests PRIVATE nbody_core)
+    target_compile_definitions(nbody_tests PRIVATE NBODY_BUILD_CONFIGURATION="$<CONFIG>")
+    nbody_embed_stage5_identity(nbody_tests)
     add_test(NAME nbody_two_body COMMAND nbody_tests)
 
     add_executable(nbody_solar_system_tests tests/test_solar_system.cpp)
     target_link_libraries(nbody_solar_system_tests PRIVATE nbody_core)
+    target_compile_definitions(nbody_solar_system_tests PRIVATE NBODY_BUILD_CONFIGURATION="$<CONFIG>")
+    nbody_embed_stage5_identity(nbody_solar_system_tests)
     add_test(NAME nbody_solar_system COMMAND nbody_solar_system_tests)
 
     if(NBODY_ENABLE_OPENMP)
         add_executable(nbody_openmp_tests tests/test_openmp.cpp)
         target_link_libraries(nbody_openmp_tests PRIVATE nbody_openmp)
+        target_compile_definitions(nbody_openmp_tests PRIVATE NBODY_BUILD_CONFIGURATION="$<CONFIG>")
+        nbody_embed_stage5_identity(nbody_openmp_tests)
         add_test(NAME nbody_openmp_validation COMMAND nbody_openmp_tests)
     endif()
 
     if(NBODY_ENABLE_CUDA)
         add_executable(nbody_cuda_tests tests/test_cuda.cpp)
         target_link_libraries(nbody_cuda_tests PRIVATE nbody_cuda)
+        target_compile_definitions(nbody_cuda_tests PRIVATE NBODY_BUILD_CONFIGURATION="$<CONFIG>")
+        nbody_embed_stage5_identity(nbody_cuda_tests)
         add_test(NAME nbody_cuda_validation COMMAND nbody_cuda_tests)
     endif()
 
