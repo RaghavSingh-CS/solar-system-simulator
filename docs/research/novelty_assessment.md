@@ -8,9 +8,19 @@ The project should therefore be framed as a **reproducible comparative experimen
 
 ## Narrow proposed contribution
 
-On one fully specified Windows/RTX 4050 machine, calibrate sequential, OpenMP, and CUDA implementations of the same O(N^2) force law and timestep scheme. Given `(N, step count, precision mode, accuracy budget)`, select the fastest configuration whose validation run satisfies predeclared bounds on relative energy and angular-momentum drift. Compare this policy with always-sequential, always-OpenMP, always-CUDA, a size-only threshold, and an offline oracle.
+On one fully specified Windows/RTX 4050 machine, calibrate Sequential,
+topology-derived OpenMP, and CUDA implementations of the same O(N^2) force law
+and timestep scheme. For the fixed Stage 5 v2 workload, map only N to the
+configuration with the smallest calibration-predicted `selector_steady_state`
+median among configurations satisfying predeclared relative energy and
+angular-momentum-drift bounds. Evaluate the frozen mapping against the
+held-out empirical oracle without refitting.
 
-The contribution, if supported, is the **measurement protocol and evidence** that adding a scientific-validity gate changes or stabilizes backend choice for this implementation. It is not a claim that backend selection or crossover discovery is new.
+The contribution, if supported, is the **measurement protocol, custody, and
+same-machine evidence** for this narrow N-dependent mapping. Step count,
+precision, accuracy budget, scenario, seed, and cold-start behavior are future
+extensions rather than demonstrated selector inputs. It is not a claim that
+backend selection or crossover discovery is new.
 
 ## Established prior work
 
@@ -22,12 +32,14 @@ The contribution, if supported, is the **measurement protocol and evidence** tha
 
 ## Hypotheses to test
 
-- **H1:** no single backend minimizes end-to-end runtime over the full tested `(N, steps)` grid on the target machine.
-- **H2:** a calibration-derived selector chooses the fastest valid backend within 10% of an offline oracle for at least 90% of held-out configurations.
+- **H1:** no single configuration minimizes `selector_steady_state` over the tested N grid on the target machine.
+- **H2:** report empirical-fastest agreement and multiplicative regret on all six held-out N values without converting this small set into a universal success claim.
 - **H3:** enforcing a conservation bound changes at least some choices relative to a size-only performance selector.
 - **H4:** calibration is hardware-specific; a threshold learned on Colab does not transfer reliably to the RTX 4050.
 
-These are unverified hypotheses. The percentage targets are preregistered evaluation criteria, not expected results.
+These are unverified hypotheses. Stage 5 v2 reports the six held-out outcomes
+directly and does not introduce a percentage target that the small held-out set
+cannot resolve cleanly.
 
 ## Claims explicitly not made
 

@@ -111,16 +111,17 @@ No same-VM CPU control was collected. Stage 3 Windows CPU data and Stage 4 Colab
 
 ## Stage 5 same-machine protocol
 
-The frozen Stage 5 protocol is maintained in `docs/stage5_protocol.md`. Stage
-5A prepares the Windows runner, independent verifier, environment capture, and
-RTX 4050 runbook without collecting performance evidence. Stage 5B will use
-one frozen source revision and one Windows RTX 4050 environment for sequential,
-OpenMP, and CUDA measurements.
+The current prospective protocol is `stage5-v2.0`, maintained in
+`docs/stage5_v2_protocol.md`. The unexecuted v1.0 preparation remains
+historical. Stage 5 v2 prepares a source/build/test/evidence custody chain and
+does not itself constitute RTX measurement evidence.
 
-The full matrix retains the 14 Stage 3/4 body counts. Calibration sizes are
+Calibration sizes are
 64, 128, 192, 256, 512, 1024, 2048, and 4096; held-out interstitial sizes are
 96, 160, 384, 768, 1536, and 3072. The split is fixed before measurement and
-the held-out rows may not influence policy boundaries.
+the phases use separate deterministic schedules and evidence directories.
+Held-out values cannot be acquired until a calibration-only policy has been
+canonically hashed and frozen.
 
 Stage 5 preserves the CPU integration-only, CUDA device-compute, and CUDA
 transfer-inclusive metrics. It adds `selector_steady_state`, measuring CPU
@@ -129,7 +130,17 @@ host packing through a materialized host result. CUDA reusable allocation and
 context setup remain separately reported. This metric is the predeclared basis
 for later selector ranking; it is not cold-start application time.
 
-The pilot and full run are separate commands and directories. Full execution
-requires a passing independent pilot-verification report and an explicit human
-approval record. See `docs/stage5_rtx4050_runbook.md`; do not bypass its pilot
-inspection stop.
+The policy maps only N to Sequential, one topology-derived OpenMP team, or
+CUDA for the fixed binary64 synthetic scenario, 100 steps, dt=10 s, seed
+24301, direct O(N^2) force law, Velocity Verlet, and frozen gates. It uses
+piecewise-linear interpolation in log(N), log(calibration median) and a fixed
+tie-break: Sequential, ascending OpenMP thread count, CUDA. Arbitrary scenario,
+steps, precision, accuracy budget, seed, and cold-start behavior are future
+dimensions, not measured selector inputs.
+
+Pilot, calibration, policy freeze, held-out acquisition, and held-out
+evaluation are distinct phases. Calibration requires independent verification
+of the actual pilot and approval bound to that pilot manifest. Held-out
+evaluation reports multiplicative regret `selected_median/oracle_median`
+without refitting. See `docs/stage5_rtx4050_runbook.md`; the first NVIDIA
+rehearsal stops after pilot verification and human approval.

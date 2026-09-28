@@ -17,7 +17,7 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Computation-only benchmark plus a controlled, block-randomized CPU experiment runner with raw and summary CSV output.
 - Optional double-precision direct CUDA backend, GPU-resident Velocity Verlet executor, and validated dual-regime CUDA benchmark.
 - Reproducible sequential conservation-study harness with retained timestep-duration evidence.
-- Prepared Stage 5 same-machine runner and independent evidence verifier; no Stage 5 timings collected yet.
+- Prepared Stage 5 v2.0 phase-separated runner, deterministic policy/freezer, independent evidence verifier, and source/build/test provenance chain; no Stage 5 timings collected yet.
 - Optional replicated-state MPI backend with deterministic target partitioning, global acceleration exchange, and MPI+OpenMP local force computation.
 - Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with Solar/Compute Experiment modes, deterministic camera presets, stable inner-system callouts, camera-aware body sizing, reference/history/Sun-motion trails, barycenter marker, procedural planet identity, batched large-N points through 100,000 bodies, live numerical-health bounds, and an isolated CPU-backend comparison.
 
@@ -27,10 +27,11 @@ An independent 30-configuration sequential conservation characterization is
 documented in `docs/conservation_study.md`, with evidence under
 `data/experiments/conservation/`. It is not a backend benchmark or Stage 5.
 
-Stage 5A preparation is complete at the candidate frozen revision recorded in
-`docs/MASTER_LEDGER.md`. The RTX 4050 pilot and full same-machine experiment
-remain unexecuted; follow `docs/stage5_rtx4050_runbook.md` and stop for review
-after the pilot.
+Stage 5 v2.0 pre-RTX remediation is locally validated. The exact candidate SHA
+is delivered by an external post-commit deployment packet. The RTX 4050 pilot,
+calibration, policy freeze, held-out acquisition, and evaluation remain
+unexecuted; follow `docs/stage5_rtx4050_runbook.md` and stop the first NVIDIA
+rehearsal after pilot verification and manifest-bound approval.
 
 ## Build and test
 
@@ -143,13 +144,17 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/validation_plan.md`: correctness criteria.
 - `docs/benchmark_protocol.md`: same-machine experimental method.
 - `docs/conservation_study.md`: independent timestep-duration conservation characterization.
-- `docs/stage5_protocol.md`: frozen same-machine matrix, split, metrics, and gates.
+- `docs/stage5_protocol.md`: versioned Stage 5 protocol index and retained v1.0 history.
+- `docs/stage5_v2_protocol.md`: authoritative phase custody, policy, provenance, metrics, and gates.
 - `docs/stage5_rtx4050_runbook.md`: Windows RTX 4050 pilot-gated execution procedure.
 - `docs/visualization.md`: final viewer provenance, presentation policy, controls, and validation boundary.
 - `docs/mpi_and_large_n.md`: MPI/hybrid architecture, workload safety policy, and bounded pilot protocol.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
-- `scripts/run_stage5.py`: Stage 5 preflight, dry-run, pilot, and full orchestrator.
+- `scripts/prepare_stage5_build.py`: fresh source-bound build, tool/topology capture, CTest, and manifest.
+- `scripts/run_stage5.py`: Stage 5 v2 preflight, dry-run, pilot, calibration, and held-out dispatcher.
+- `scripts/build_stage5_policy.py`: calibration-only deterministic policy and freeze builder.
+- `scripts/evaluate_stage5_policy.py`: held-out evaluation without refitting.
 - `scripts/verify_stage5_evidence.py`: independent Stage 5 evidence auditor.
 - `backends`: implemented optional OpenMP, CUDA, and MPI backends.
 - `visualization`: optional desktop application/controller, camera, and OpenGL renderer.

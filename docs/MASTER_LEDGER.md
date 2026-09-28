@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-09-27
+Last updated: 2026-09-28
 
 ## Stage status
 
@@ -13,8 +13,9 @@ Last updated: 2026-09-27
 | Controlled CPU benchmarking | Complete | 660 raw samples; randomized 64–1024-body sequential/OpenMP matrix |
 | CUDA backend | Complete | Tesla T4 build/tests plus verified 15-row pilot and 154-row controlled matrix |
 | Independent conservation characterization | Complete | 30 sequential timestep-duration configurations; all passed frozen bounds |
-| Stage 5A same-machine preparation | **PREPARED** | Frozen v1.0 protocol, runner, verifier, environment capture, and RTX 4050 runbook |
-| Stage 5B RTX 4050 execution | Not started | Requires pilot, inspection/approval, then controlled full matrix |
+| Stage 5 v1.0 preparation | Historical / superseded | Unexecuted revision `4916b3c`; retained without reinterpretation |
+| Stage 5 v2.0 pre-RTX remediation | **LOCALLY VALIDATED / NVIDIA REHEARSAL PENDING** | Phase custody, deterministic policy freeze, build provenance, topology derivation, adversarial tests, and external packet generator |
+| Stage 5B RTX 4050 execution | Not started | First rehearsal stops after pilot approval; final collection requires separate authorization |
 | MPI and hybrid backend | Complete | Replicated-state 1/2/4-rank correctness plus 2-rank x 2-thread hybrid validation |
 | Stage 6A OpenGL application foundation | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Optional viewer builds/tests; Sequential and OpenMP real-context smoke launches passed |
 | Stage 6B Solar System application | Complete | Approximate J2000 scenario and scientific UI passed build/runtime validation and user visual inspection |
@@ -42,8 +43,8 @@ Last updated: 2026-09-27
 - Windows/libgomp affinity is explicitly classified as uncontrolled after the runtime rejected the requested placement policy.
 - Stage 4 real-GPU evidence is environment-scoped to a Colab Tesla T4; the local Windows machine still cannot compile or execute CUDA.
 - Colab CUDA results remain a separate environment and cannot be combined with Stage 3 Windows CPU timings to infer a workstation crossover.
-- Stage 5 selector calibration uses only same-machine `selector_steady_state` measurements from the frozen RTX 4050 full run.
-- Stage 5 calibration and held-out N values are fixed before data collection; held-out results cannot influence policy boundaries.
+- Stage 5 v2 selector calibration uses only same-machine calibration-phase `selector_steady_state` measurements for the fixed preregistered workload.
+- Stage 5 v2 calibration and held-out acquisition are separate; a canonically hashed calibration-only policy must be frozen before held-out timings are exposed.
 - Stage 6C remains optional and one-way dependent on the simulation core; presentation geometry cannot affect physics, display timing is never benchmark evidence, and no Auto backend selector exists.
 - Stage 6D MPI uses replicated global state, deterministic contiguous force-target partitions, and full acceleration exchange. Hybrid OpenMP is confined to local target work under `MPI_THREAD_FUNNELED`.
 - Stage 6D large-N display support does not change the exact O(N^2) algorithm: continuous viewer computation ends above N=1024, manual direct-force steps end above N=8192, and larger workloads are display-only.
@@ -53,8 +54,8 @@ Last updated: 2026-09-27
 - Intended RTX 4050 exact model, driver, power limit, CPU, and memory configuration are unknown.
 - Faculty acceptance criteria for “realistic” horizon and tolerated position error need confirmation before final study.
 - Stage 4 fixed CUDA at double precision; all predeclared comparison/conservation thresholds passed on the Tesla T4 without revision.
-- OpenMP is validated with GCC 15.1.0/libgomp; availability and numerical behavior under the final MSVC toolchain remain untested.
-- The exact RTX 4050 host CPU topology is unknown; Stage 5 freezes a topology-based thread-selection rule and requires one explicit list to remain unchanged from pilot through full execution.
+- OpenMP is validated locally with GCC 15.1.0/libgomp; the feature-based contract, not a version macro, must still pass under the final ordinary MSVC `/openmp` toolchain.
+- The exact RTX 4050 host CPU topology is unknown; native preflight must discover it and programmatically derive the one list bound through pilot, calibration, policy, and held-out evidence.
 
 ## Research evidence
 
@@ -776,6 +777,50 @@ The real launch
 created an AMD Radeon OpenGL 3.3 Core context and selected OpenMP with four
 threads. This is a launch/context smoke result, not subjective visual approval.
 
+## Stage 5 v2.0 pre-RTX protocol remediation
+
+The immutable adversarial audit at `docs/audits/pre_rtx_final_audit.md` records
+the pre-remediation NO-GO. Stage 5 v2.0 prospectively supersedes the unexecuted
+v1.0 preparation without rewriting it and without changing physics, the
+scientific workload, numerical gates, timing regions, checksums, or historical
+Stage 3/4/conservation evidence.
+
+The repaired OpenMP contract tests the actual subset used—enabled compilation,
+real requested/effective teams, explicit `num_threads`, `schedule(static)`,
+completion, numerical equivalence, and deterministic repetition—rather than
+requiring `_OPENMP >= 201511`. Historical GCC/libgomp OpenMP 4.5 reporting
+remains factual; ordinary MSVC `/openmp` is acceptable only if the semantic
+suite passes.
+
+Evidence custody is now pilot -> calibration-only acquisition -> deterministic
+policy freeze -> held-out-only acquisition -> evaluation without refitting.
+The policy compares median `selector_steady_state` using piecewise-linear
+log-log interpolation. Ties resolve by Sequential, ascending OpenMP thread
+count, then CUDA. Canonical policy content excludes timestamps from its hash;
+the separate freeze binds policy, calibration manifest, source, build,
+environment, and derived topology.
+
+Controlled preparation requires an absent build directory and clean exact
+source, embeds source/protocol/toolchain identity in benchmark/test binaries,
+validates Release Ninja/MSVC/CUDA `sm_89`, hashes executables and Stage 5
+scripts, runs CTest itself, and binds its retained log. Windows CIM supplies P
+physical cores and L logical processors; code derives sorted unique `1`, powers
+of two below P, P, and L capped at L, with no guessed fallback. Calibration
+re-verifies the actual pilot and requires human approval bound to its manifest.
+
+The same-machine selector claim is deliberately N-only for the fixed seeded
+binary64, direct-force, Velocity-Verlet, dt=10 s, 100-step workload. Broader
+scenario, step-count, precision, accuracy-budget, seed, and cold-start inputs
+remain future work. The detailed finding trace is in
+`docs/stage5_v2_remediation_trace.md`.
+
+Local validation uses CPU/OpenMP and synthetic fixture custody tests only;
+fixtures are not benchmark evidence. No NVIDIA pilot, calibration, held-out
+run, policy result, or Stage 5B collection is claimed. The exact frozen source
+SHA is supplied only by the external post-commit deployment packet, avoiding
+impossible commit self-reference. The first NVIDIA rehearsal must stop after
+pilot verification and manifest-bound approval.
+
 ## Known limitations
 
 - No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
@@ -784,18 +829,18 @@ threads. This is a launch/context smoke result, not subjective visual approval.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; viewer CUDA integration is deferred. MPI is implemented and locally validated, but no controlled multi-machine evidence exists.
 - Stage 6D native-window appearance and interaction need final user visual validation; approximate O(N^2) algorithms, distributed state, one-rank-per-GPU execution, instanced high-detail meshes, high-resolution textures, advanced atmosphere/post-processing, RTX presentation capture, and real ephemerides are deferred.
-- Stage 5A tooling is locally CPU/OpenMP-validated, but its Windows MSVC/CUDA integration remains unexecuted until the RTX 4050 pilot.
+- Stage 5 v2 tooling is locally CPU/OpenMP-validated, but native VS2022/MSVC, CUDA 12.8.x-class `sm_89`, RTX 4050, and driver integration remain unexecuted until the NVIDIA pilot rehearsal.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
 - Stage 3 CPU affinity could not be enforced by this Windows/libgomp configuration; thermal and continuous clock telemetry were unavailable.
 - Eleven samples per configuration characterize this run but remain too few for strong distributional or cross-machine claims.
 
 ## Next actions
 
-1. On the RTX 4050 host, check out the exact frozen Stage 5A preparation revision and follow `docs/stage5_rtx4050_runbook.md`.
-2. Run preflight, validation, and the pilot; stop for independent verification and human inspection.
-3. Only after explicit pilot approval, collect and verify the frozen full calibration/held-out matrix.
+1. Transfer and verify the external Stage 5 v2 deployment packet, then check out its exact frozen SHA and follow `docs/stage5_rtx4050_runbook.md`.
+2. Run fresh preparation, preflight, and the pilot; independently verify and record manifest-bound human approval, then stop the first NVIDIA rehearsal.
+3. Only in a separately authorized final session, acquire calibration, freeze the deterministic policy, acquire held-out evidence, and evaluate without refitting.
 4. Run the final Stage 6D native-window visual checklist in `docs/visualization.md`; the feature freeze closes after this gate.
-5. Do not derive the selector or optimize backends during Stage 5B collection.
+5. Do not tune the frozen policy, optimize backends, or pool historical cross-machine evidence during Stage 5B collection.
 
 ## Commit references
 

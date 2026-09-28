@@ -1,4 +1,52 @@
-# Stage 5B Windows RTX 4050 runbook
+# Stage 5 v2.0 Windows RTX 4050 runbook
+
+This tracked document defines the prospective clean-room procedure. The
+authoritative operator commands are the external deployment packet generated
+*after* the final remediation commit:
+
+```powershell
+python -B scripts/create_stage5_deployment_packet.py `
+  --source-sha <FINAL_40_CHARACTER_SHA> `
+  --output C:\stage5-v2-deployment-packet
+```
+
+The generated packet contains that exact, non-self-referential source SHA,
+file hashes, approval template, abort criteria, and full commands. Never infer
+the source SHA from this tracked template.
+
+The v2 workflow is:
+
+```text
+fresh exact-SHA clone
+ -> native Windows/MSVC/CUDA preflight and topology discovery
+ -> absent Release build directory
+ -> source-embedded build + controlled CTest + build manifest
+ -> Stage 5 preflight
+ -> pilot-only acquisition
+ -> independent pilot verification
+ -> manifest-bound human approval
+ -> STOP for the first NVIDIA rehearsal
+```
+
+For a separately authorized final collection session only, continue with
+calibration-only acquisition, independent verification, deterministic policy
+generation and freeze, held-out-only acquisition, independent verification,
+and evaluation without refitting. Use `docs/stage5_v2_protocol.md` for the
+complete custody rules.
+
+Preferred candidate family: Windows x64, VS2022/MSVC, ordinary `/openmp`
+validated by actual project semantics, Ninja, CMake, Python 3.12-class, Git,
+and CUDA Toolkit 12.8.x with `sm_89`. The exact driver, VS patch, Toolkit, GPU,
+CPU topology, RAM, and absolute tool paths are captured at preflight; they are
+not claimed validated before the target-host rehearsal. PATH resolution to
+MSYS/MinGW CMake or Ninja is an abort condition.
+
+Every build/evidence output directory must be absent. Failures retain logs and
+partial artifacts and restart only in a new directory. Do not patch the frozen
+checkout, reuse a CMake cache, accept a detached CTest text file, supply a
+hand-written OpenMP list, or run calibration during the first rehearsal.
+
+# Historical Stage 5 v1.0 runbook — superseded, do not operate
 
 This runbook executes the frozen `stage5-v1.0` protocol prepared in Stage 5A.
 It deliberately stops after the pilot. Do not run the full experiment until
