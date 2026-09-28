@@ -399,10 +399,11 @@ class Stage5V2Tests(unittest.TestCase):
 
     def test_ctest_pass_detection_accepts_combined_output_streams(self) -> None:
         completed = subprocess.CompletedProcess(
-            ["ctest"], 0, "", "100% tests passed, 0 tests failed out of 5\n"
+            ["ctest"], 0, "", "100% tests passed out of 5\n"
         )
         self.assertTrue(PREPARE.ctest_succeeded(completed))
         self.assertFalse(PREPARE.ctest_succeeded(subprocess.CompletedProcess(["ctest"], 1, completed.stderr, "")))
+        self.assertFalse(PREPARE.ctest_succeeded(subprocess.CompletedProcess(["ctest"], 0, "no summary", "")))
 
     def test_wrong_and_dirty_git_source_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

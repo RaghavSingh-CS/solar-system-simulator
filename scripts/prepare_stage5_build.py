@@ -118,7 +118,6 @@ def ctest_succeeded(completed: Any) -> bool:
     return (
         completed.returncode == 0
         and "100% tests passed" in output
-        and "0 tests failed" in output
     )
 
 
