@@ -1,6 +1,11 @@
-# Stage 5 same-machine protocol (version 1.0)
+# Stage 5 same-machine protocol (version 2.0)
 
-## Status and research boundary
+The authoritative prospective protocol is [Stage 5 v2.0](stage5_v2_protocol.md).
+It materially changes evidence custody and provenance while preserving the
+scientific workload. The remainder of this file retains the v1.0 preparation
+text for historical comparison only; it is not an executable current protocol.
+
+## Historical v1.0 protocol (retained, superseded, never executed)
 
 This protocol is frozen during Stage 5A, before RTX 4050 measurements exist.
 Stage 5A prepares tooling only. Stage 5B will collect same-machine evidence on
