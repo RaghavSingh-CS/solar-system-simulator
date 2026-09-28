@@ -821,6 +821,17 @@ SHA is supplied only by the external post-commit deployment packet, avoiding
 impossible commit self-reference. The first NVIDIA rehearsal must stop after
 pilot verification and manifest-bound approval.
 
+The final local matrix passed 29/29 Stage 5 v2 adversarial tests, 4/4 exact-SHA
+CPU-only Release CTests, and 5/5 exact-SHA OpenMP Release CTests. A fresh clone
+ran `prepare_stage5_build.py` end to end with native CIM topology (P=8, L=16,
+derived threads `1,2,4,8,16`), embedded source/protocol identity, binary
+hashing, and a passing controlled build manifest. Two earlier clean-room
+attempts conservatively retained their artifacts after exposing CTest output
+format assumptions; focused regressions cover the corrected combined-stream
+and current-summary handling. The expected CUDA-on/no-nvcc configure stopped
+with the explicit unavailable diagnostic. Native CUDA/MSVC/RTX execution was
+not possible on this AMD-only host.
+
 ## Known limitations
 
 - No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
