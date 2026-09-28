@@ -113,6 +113,15 @@ def build_info(path: Path, source_commit: str) -> dict[str, Any]:
     return value
 
 
+def ctest_succeeded(completed: Any) -> bool:
+    output = completed.stdout + completed.stderr
+    return (
+        completed.returncode == 0
+        and "100% tests passed" in output
+        and "0 tests failed" in output
+    )
+
+
 def main() -> int:
     args = parse_args()
     source = args.source_dir.resolve()
@@ -240,8 +249,9 @@ def main() -> int:
     ctest_command = [tools["ctest"]["absolute_path"] or args.ctest, "--test-dir", str(build), "-C", "Release", "--output-on-failure"]
     ctest = run_command(ctest_command)
     ctest_path = output / "ctest.txt"
-    ctest_path.write_text(ctest.stdout + ctest.stderr, encoding="utf-8")
-    ctest_passed = ctest.returncode == 0 and "100% tests passed" in ctest.stdout and "0 tests failed" in ctest.stdout
+    ctest_output = ctest.stdout + ctest.stderr
+    ctest_path.write_text(ctest_output, encoding="utf-8")
+    ctest_passed = ctest_succeeded(ctest)
 
     selected_cache_keys = (
         "CMAKE_HOME_DIRECTORY",

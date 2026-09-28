@@ -7,6 +7,7 @@ import argparse
 import copy
 import csv
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -20,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build_stage5_policy as POLICY  # noqa: E402
 import create_stage5_deployment_packet as PACKET  # noqa: E402
 import evaluate_stage5_policy as EVALUATE  # noqa: E402
+import prepare_stage5_build as PREPARE  # noqa: E402
 import run_stage5_v2 as RUNNER  # noqa: E402
 import stage5_common as COMMON  # noqa: E402
 import verify_stage5_v2 as VERIFIER  # noqa: E402
@@ -394,6 +396,13 @@ class Stage5V2Tests(unittest.TestCase):
             path, manifest = make_build_bundle(Path(temporary))
             RUNNER.validate_build_manifest_document(manifest, path.parent, SOURCE_SHA,
                                                     ENVIRONMENT_ID, ROOT, execute_binaries=False)
+
+    def test_ctest_pass_detection_accepts_combined_output_streams(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["ctest"], 0, "", "100% tests passed, 0 tests failed out of 5\n"
+        )
+        self.assertTrue(PREPARE.ctest_succeeded(completed))
+        self.assertFalse(PREPARE.ctest_succeeded(subprocess.CompletedProcess(["ctest"], 1, completed.stderr, "")))
 
     def test_wrong_and_dirty_git_source_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
