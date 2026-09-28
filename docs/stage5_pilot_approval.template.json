@@ -6,8 +6,8 @@
   "environment_id": "REPLACE_WITH_PILOT_ENVIRONMENT_ID",
   "environment_sha256": "REPLACE_WITH_ENVIRONMENT_SHA256",
   "pilot_manifest_sha256": "REPLACE_WITH_PILOT_MANIFEST_SHA256",
-  "openmp_threads": [1, 2, 4, 8],
+  "openmp_threads": null,
   "reviewer": "REPLACE_WITH_REVIEWER",
   "reviewed_utc": "REPLACE_WITH_ISO_8601_UTC_TIMESTAMP",
-  "notes": "Confirm exact source/build/environment/topology identity, device identity, CTest/build manifest, matrix completeness, conservation, timing relationships, repeatability, and acceptable projected duration. Set approved=true only after review."
+  "notes": "UNINITIALIZED TEMPLATE: replace openmp_threads with the exact automatically derived topology list from the controlled build manifest. Confirm exact source/build/environment/topology identity, device identity, CTest/build manifest, matrix completeness, conservation, timing relationships, repeatability, and acceptable projected duration. Set approved=true only after review."
 }

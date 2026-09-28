@@ -432,6 +432,11 @@ class Stage5V2Tests(unittest.TestCase):
             COMMON.write_json(approval_path, approval)
             RUNNER.validate_pilot_gate(pilot, approval_path, SOURCE_SHA,
                                        report["build_manifest_sha256"], build)
+            approval["openmp_threads"] = None
+            COMMON.write_json(approval_path, approval)
+            self.assert_rejected(RUNNER.validate_pilot_gate, pilot, approval_path, SOURCE_SHA,
+                                 report["build_manifest_sha256"], build)
+            approval["openmp_threads"] = list(THREADS)
             approval["pilot_manifest_sha256"] = "0" * 64
             COMMON.write_json(approval_path, approval)
             self.assert_rejected(RUNNER.validate_pilot_gate, pilot, approval_path, SOURCE_SHA,
@@ -537,6 +542,14 @@ class Stage5V2Tests(unittest.TestCase):
             self.assertIn(SOURCE_SHA, runbook)
             self.assertNotIn("STAGE5_FROZEN_SOURCE_COMMIT", runbook)
             self.assertIn("FIRST NVIDIA REHEARSAL STOP", runbook)
+
+    def test_tracked_approval_template_is_unmistakably_uninitialized(self) -> None:
+        template = json.loads(
+            (ROOT / "docs" / "stage5_pilot_approval.template.json").read_text(encoding="utf-8")
+        )
+        self.assertIsNone(template["openmp_threads"])
+        self.assertFalse(template["approved"])
+        self.assertIn("automatically derived topology", template["notes"])
 
 
 if __name__ == "__main__":
