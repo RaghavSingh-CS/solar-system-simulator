@@ -27,6 +27,7 @@ Last updated: 2026-10-09
 | Stage 6D.3 inner-orbit shape verification | Complete | Elements, 700-day integrated extrema, reference guides, trails, projection, and Sun invariant verified; no defect or visual change |
 | CUDA visualizer integration | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Host-authoritative batched CUDA controller path; CPU-only 5/5 and OpenMP 6/6 CTests passed; CUDA compilation/runtime unverified on this AMD-only machine |
 | Astronomical catalog foundation | **IMPLEMENTED LOCALLY / 60-BODY DATASET PENDING** | Immutable admitted records, stable IDs/parents, shared SSB/ICRF/TDB/SI contract, source custody, deterministic order, GM-derived mass, primary >=60-body admission gate, and CUDA-disabled regression validation |
+| Barnes--Hut large-N solver roadmap | **REQUIRED / UNIMPLEMENTED** | Sequential, OpenMP, and CUDA Barnes--Hut implementations, numerical verification against direct force, and controlled large-N performance evaluation are mandatory future work |
 
 ## Decisions and rationale
 
@@ -50,6 +51,11 @@ Last updated: 2026-10-09
 - Stage 6C remains optional and one-way dependent on the simulation core; presentation geometry cannot affect physics, display timing is never benchmark evidence, and no Auto backend selector exists.
 - Stage 6D MPI uses replicated global state, deterministic contiguous force-target partitions, and full acceleration exchange. Hybrid OpenMP is confined to local target work under `MPI_THREAD_FUNNELED`.
 - Stage 6D large-N display support does not change the exact O(N^2) algorithm: continuous viewer computation ends above N=1024, manual direct-force steps end above N=8192, and larger workloads are display-only.
+- Barnes--Hut is the required future approximate-force path for large-N work,
+  not an optional enhancement. Its Sequential implementation must establish the
+  reference tree/acceptance semantics before matched OpenMP and CUDA variants;
+  all three require numerical verification against direct force and a separate
+  controlled large-N performance evaluation. None is implemented or validated.
 - CUDA viewer execution reuses the existing `CudaVelocityVerlet` allocation and
   advances one complete fixed-step frame batch per call. Host
   `SimulationState` remains authoritative at completed advancement boundaries;
@@ -1072,10 +1078,12 @@ Stage 5 executables do not link to the new library.
 
 Curated one-body removal, paired long-horizon impact measurement, expert-mode
 Sun-removal architecture, scenario composition, GUI controls, CUDA experiment
-execution, 60-body data generation, and approximate/large-scale solvers remain
-unimplemented. Existing 50K--100K synthetic selections remain display-only at
-those sizes. A 1920x1080 RTX 4050 target of 30--45 FPS is a future measurable
-goal, not an achieved or predicted result.
+execution, and 60-body data generation remain unimplemented. The mandatory
+large-N roadmap is Sequential Barnes--Hut, OpenMP Barnes--Hut, CUDA Barnes--Hut,
+cross-solver numerical verification, and controlled large-N performance
+evaluation; none of those stages has begun. Existing 50K--100K synthetic
+selections remain display-only at those sizes. A 1920x1080 RTX 4050 target of
+30--45 FPS is a future measurable goal, not an achieved or predicted result.
 
 ## Known limitations
 
