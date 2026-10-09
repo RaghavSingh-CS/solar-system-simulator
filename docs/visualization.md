@@ -67,12 +67,18 @@ ctest --test-dir build-visual --output-on-failure
 ./build-visual/nbody_visualizer.exe --backend sequential
 ```
 
+CUDA remains opt-in. On a system with a usable CUDA toolkit and NVIDIA device,
+configure with `-DNBODY_ENABLE_CUDA=ON` and select it with
+`--backend cuda --device 0` or the enabled CUDA control. The viewer never
+silently substitutes a CPU backend.
+
 Options are `--scenario solar|synthetic`, `--backend sequential|openmp|cuda`,
-`--threads N`, `--bodies N`, `--seed N`, `--width N`, and `--height N`. Body
-count and seed apply to the synthetic scenario. CUDA is accepted only to issue
-a clear unavailable diagnostic; it never silently falls back. MPI is exercised
-by its separate benchmark executable and Auto is not exposed because Stage 5
-calibration is not complete.
+`--threads N`, `--device N`, `--bodies N`, `--seed N`, `--width N`, and
+`--height N`. Body count and seed apply to the synthetic scenario. CUDA is
+accepted only when support was compiled and the requested device is available;
+otherwise it issues a clear diagnostic and never silently falls back. MPI is
+exercised by its separate benchmark executable and Auto is not exposed because
+Stage 5 calibration is not complete.
 
 ## Loop and separation
 
@@ -81,6 +87,12 @@ scenario's fixed physical timestep, updates diagnostics and bounded physical-
 space trail history, then creates a read-only render snapshot. Wall-clock frame
 duration never becomes a physics timestep. Pausing stops physics advancement
 but leaves rendering and interaction active.
+
+Sequential and OpenMP retain the CPU integrator path. CUDA uses one persistent
+`CudaVelocityVerlet` allocation per active body count and performs one complete
+upload/integration/download operation per requested frame batch. Host
+`SimulationState` remains authoritative at completed advancement boundaries;
+there is no CUDA/OpenGL interoperability or automatic backend selection.
 
 The Solar scenario uses a six-hour timestep. Named presets map to 1, 4, 16, or
 64 steps per render: six hours, one day, four days, or sixteen days of simulated
@@ -266,10 +278,11 @@ Pending user visual checks are theme/readability at 1920x1080 and laptop sizes,
 all five preset compositions, inner-label separation, trail/guide distinction,
 planet material identity, Saturn ring depth/tilt, starfield restraint, selection
 marker, barycenter/Sun-trail appearance, resize behavior, N switching, the live
-comparison interaction, and live Sequential/OpenMP switching. CUDA viewer
-integration, Auto selection, high-resolution texture assets, advanced atmosphere/
-post-processing, instanced high-detail large-N meshes, final RTX capture, and
-ephemeris-grade Horizons input are intentionally deferred beyond Stage 6C.1.
+comparison interaction, and live backend switching. CUDA compilation and runtime
+validation still require an NVIDIA/CUDA host. Auto selection, high-resolution
+texture assets, advanced atmosphere/post-processing, instanced high-detail
+large-N meshes, final RTX capture, and ephemeris-grade Horizons input remain
+deferred.
 
 ## Final user visual-validation checklist
 

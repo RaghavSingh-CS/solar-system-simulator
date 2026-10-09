@@ -60,6 +60,11 @@ ctest --test-dir build-visual --output-on-failure
 ./build-visual/nbody_visualizer.exe --backend sequential
 ```
 
+On a machine with a usable CUDA toolkit and NVIDIA device, add
+`-DNBODY_ENABLE_CUDA=ON` and launch with `--backend cuda --device 0`. CUDA is
+never selected automatically and an unavailable device produces an explicit
+error rather than a CPU fallback.
+
 The first visualization configure requires network access to fetch exact pinned revisions of GLFW 3.4, GLM 1.0.1, and Dear ImGui 1.92.9b. The generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, so Python, Jinja2, copied DLLs, and runtime asset discovery are not required. Shaders are embedded in the executable.
 
 The default is a nine-body Solar System demonstration at J2000.0. Planet positions come from JPL's published 1800--2050 approximate mean-element model; centered finite differences of that same model provide initial velocities, then the state is shifted to its center of mass. This is a deterministic educational approximation, not a Horizons ephemeris. The physical timestep remains fixed at six hours and named UI speed presets change only the number of physics steps per rendered frame. A deterministic seeded `Compute Experiment` remains available with `--scenario synthetic`.
@@ -73,11 +78,12 @@ Controls:
 - Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.
 - `Compare CPU Backends` times isolated identical Sequential/OpenMP state copies, checks established mixed correctness tolerances, and is explicitly a live diagnostic—not benchmark evidence.
 - `Space`: pause/resume; `R`: exact scenario reset; `Esc`: exit.
-- `1`: Sequential; `2`: OpenMP using `--threads N` when OpenMP was built.
+- `1`: Sequential; `2`: OpenMP using `--threads N` when OpenMP was built; `3`:
+  CUDA using `--device N` when CUDA was built and the device is available.
 - Click a body to select it; focus selected, focus Sun/body 0, or return to overview from the panel.
 - Left-drag, `A`/`D`, or arrow keys: orbit; mouse wheel or `W`/`S`: dolly; `C`: overview camera.
 
-The panel is resizable from 380 px to the smaller of 680 px or 55% of the window, and the 3D scene viewport always occupies the remaining width. Hover help documents every primary control. CUDA and MPI are intentionally not exposed in the viewer; CUDA requests are rejected with an actionable error, while MPI is exercised by its separate benchmark executable. Auto remains absent until Stage 5 produces a valid calibration. Viewer FPS/frame time is display-only and is not controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for provenance, architecture, options, and limitations.
+The panel is resizable from 380 px to the smaller of 680 px or 55% of the window, and the 3D scene viewport always occupies the remaining width. Hover help documents every primary control. CUDA is exposed only in CUDA-enabled builds with an available device; MPI remains a separate benchmark executable. Auto remains absent until Stage 5 produces a valid calibration. Viewer FPS/frame time is display-only and is not controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for provenance, architecture, options, and limitations.
 
 Run (Visual Studio multi-config path shown):
 

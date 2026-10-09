@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-09-28
+Last updated: 2026-10-09
 
 ## Stage status
 
@@ -25,6 +25,7 @@ Last updated: 2026-09-28
 | Stage 6D.1 Sun readability correction | Superseded | Mercury-dependent clearance override caused visible Sun pulsation |
 | Stage 6D.2 stable Sun sizing | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-dependent 20--36 px Sun radius invariant to orbital phase |
 | Stage 6D.3 inner-orbit shape verification | Complete | Elements, 700-day integrated extrema, reference guides, trails, projection, and Sun invariant verified; no defect or visual change |
+| CUDA visualizer integration | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Host-authoritative batched CUDA controller path; CPU-only 5/5 and OpenMP 6/6 CTests passed; CUDA compilation/runtime unverified on this AMD-only machine |
 
 ## Decisions and rationale
 
@@ -48,6 +49,11 @@ Last updated: 2026-09-28
 - Stage 6C remains optional and one-way dependent on the simulation core; presentation geometry cannot affect physics, display timing is never benchmark evidence, and no Auto backend selector exists.
 - Stage 6D MPI uses replicated global state, deterministic contiguous force-target partitions, and full acceleration exchange. Hybrid OpenMP is confined to local target work under `MPI_THREAD_FUNNELED`.
 - Stage 6D large-N display support does not change the exact O(N^2) algorithm: continuous viewer computation ends above N=1024, manual direct-force steps end above N=8192, and larger workloads are display-only.
+- CUDA viewer execution reuses the existing `CudaVelocityVerlet` allocation and
+  advances one complete fixed-step frame batch per call. Host
+  `SimulationState` remains authoritative at completed advancement boundaries;
+  no CUDA/OpenGL interoperability, force-law change, or automatic selection is
+  introduced.
 
 ## Assumptions and unresolved questions
 
@@ -832,13 +838,157 @@ and current-summary handling. The expected CUDA-on/no-nvcc configure stopped
 with the explicit unavailable diagnostic. Native CUDA/MSVC/RTX execution was
 not possible on this AMD-only host.
 
+## CUDA visualizer integration
+
+### Implementation record
+
+Development was performed on `feature/cuda-visualizer` from baseline
+`a9b03cd89e585ca6dad154c3b3abdfeb3625578b`. At the start of this ledger audit,
+the implementation and its documentation were present as uncommitted working-
+tree changes; no push had occurred.
+
+The reviewed implementation/build/test set was then committed locally as
+`45be2d33695c774199a462be120e5cd8800624bc`; documentation and ledger changes
+were deliberately reserved for the second focused commit. The branch remained
+`feature/cuda-visualizer` and was not pushed during this workflow.
+
+`SimulationController` still owns the authoritative host `SimulationState`.
+Sequential and OpenMP retain their existing CPU Velocity Verlet paths. CUDA
+owns one RAII `CudaVelocityVerlet` executor for the active body count and calls
+`run(state, steps, dt)` once per requested frame or manual-step batch. The
+executor's device, event, stream, and pinned-host allocations are reused while
+the backend and body count remain unchanged. Each completed call synchronizes,
+materializes a host result, and only then replaces controller state.
+
+Backend switching is transactional: OpenMP or CUDA replacement resources are
+constructed before the active backend fields are changed. Switching never
+regenerates or resets the current state or simulated time. A failed CUDA call
+leaves the prior host state intact. Scenario replacement constructs a new CUDA
+executor before committing a different-sized state; same-sized replacement
+reuses the existing allocation. CUDA is offered through `--backend cuda
+--device N`, the UI, and shortcut `3` only when support is compiled and that
+device is available. There is no silent CPU fallback.
+
+CMake links `nbody_cuda` to the visualization model only under
+`NBODY_ENABLE_CUDA=ON`; CUDA-disabled builds do not require NVCC, CUDA runtime
+libraries, or NVIDIA hardware. The interactive workload policy now uses an
+explicit Sequential/OpenMP/CUDA classification. CUDA continuous advancement
+ends above N=1024, bounded manual single-step execution ends above N=8192, and
+larger cases remain display-only. This is an interactive safety rule, not
+performance evidence or an Auto-selection policy.
+
+Relevant changes cover `CMakeLists.txt`, the visualization controller,
+application/backend UI, presentation help, workload policy, focused
+visualization/CUDA tests, current README/architecture/visualization guidance,
+and this ledger. Physics sources, CUDA kernels/host wrappers, scenarios,
+diagnostics, trails, renderer physics separation, Stage 5 tooling, benchmark
+programs, and evidence files are unchanged.
+
+### Bug and risk record
+
+Resolved integration hazards are: the formerly unconditional CUDA CLI
+rejection; per-force-evaluation transfer/synchronization that would have
+resulted from inserting `CudaForceBackend` into the CPU integrator; state loss
+during backend switching; stale size-dependent allocations after scenario
+replacement; mutation of host state after a failed CUDA batch; accidental
+Sequential/OpenMP workload-policy inheritance; and silent fallback while
+reporting CUDA.
+
+Open risks remain:
+
+- NVCC compilation, CUDA linkage, device execution, and CUDA/OpenGL process
+  coexistence have not been exercised on this machine.
+- CUDA execution synchronizes on the viewer thread. A long batch can delay
+  window event processing even though its state boundary is correct.
+- CPU time advances by repeated additions while CUDA records
+  `initial_time + steps * dt`; non-exact binary timesteps may differ in the
+  final bits although physical timestep semantics are unchanged.
+- CPU/CUDA state agreement is tolerance-based, not bitwise; compiler
+  contraction and device math can produce expected small differences.
+- Device availability is captured for UI capability at application startup.
+  Later device/driver loss raises an error and preserves host state; it does
+  not fall back automatically.
+- CUDA resource recreation and failure paths are covered by GPU-dependent
+  tests but remain pending real-device execution.
+
+### Validation record
+
+On the AMD-only Windows development machine, the final Release validation was:
+
+- Sequential-only viewer (`NBODY_ENABLE_OPENMP=OFF`,
+  `NBODY_ENABLE_CUDA=OFF`): configure/build passed and CTest passed `5/5`.
+- OpenMP viewer (`NBODY_ENABLE_OPENMP=ON`, `NBODY_ENABLE_CUDA=OFF`):
+  configure/build passed and CTest passed `6/6`.
+- Focused `nbody_visualization_tests` passed independently in both builds after
+  the final test review.
+- A CUDA request against the CPU-only executable exited `1` with the explicit
+  not-compiled diagnostic before OpenGL initialization; no NVIDIA dependency
+  was needed by either CPU build.
+- The first all-CTest invocation encountered only a sandbox denial in Python's
+  default temporary directory. Re-running with `TEMP`/`TMP` inside the writable
+  build tree produced the passing totals above without source changes.
+- `nvcc` was unavailable. CUDA-enabled CMake configuration stopped with the
+  intended `no usable CUDA compiler was found` diagnostic. Host-compiler syntax
+  checks passed for the CUDA-conditional controller code and CUDA test source,
+  but these checks are not CUDA compilation or runtime evidence.
+
+`nbody_cuda_validation` and the new `nbody_visualization_cuda` are registered
+with CTest skip return code `77`. When CUDA support is compiled but no device is
+available, they report an explicit skip instead of a pass. On this machine the
+CUDA configure gate occurs before those targets can be built, so neither GPU
+test was executed or counted as passing. CUDA viewer compilation and runtime
+validation are therefore **UNVERIFIED** here.
+
+The GPU visualization test is prepared to check batched time advancement,
+pause/manual-step/reset behavior, Sequential-to-CUDA and CUDA-to-Sequential
+state preservation, different-size scenario replacement, transactional switch
+failure, failed-advance host-state preservation, and Sequential/CUDA agreement
+under the established mixed position/velocity tolerances.
+
+### Frozen Stage 5 boundary
+
+This integration does not alter the frozen Stage 5 v2 scientific workload,
+force law, binary64 precision, Velocity Verlet equations, `dt=10 s`, 100-step
+measurement case, numerical gates, timing definitions, policy algorithm,
+evidence custody, scripts, benchmarks, or retained evidence. It does not add
+Auto selection and viewer FPS/frame time remain non-evidence. The existing
+CUDA validation executable only adds explicit no-device skip semantics; its
+device-present assertions and `--build-info` path are unchanged.
+
+### Outstanding RTX 4050 validation
+
+Before CUDA viewer integration can be called hardware-validated on the target
+RTX 4050, a separate non-Stage-5 measurement session must:
+
+1. Configure and build the visualization with the intended VS2022/MSVC host
+   toolchain, CUDA 12.8.x-class toolkit, `NBODY_ENABLE_CUDA=ON`, and Ada
+   `sm_89` support.
+2. Confirm `nbody_cuda_validation` and `nbody_visualization_cuda` execute and
+   pass on device 0; a skipped result is not acceptance.
+3. Run the complete CPU/OpenMP/CUDA CTest matrix without changing tolerances.
+4. Launch a real OpenGL Solar view with `--backend cuda --device 0`, verify
+   advancement, pause/manual step/reset, scenario size changes, and live
+   Sequential/OpenMP/CUDA switching without state reset or fallback.
+5. Exercise a failed CUDA selection/advance and confirm the displayed host
+   state remains valid and unchanged.
+6. Observe UI responsiveness at the existing bounded frame batches and record
+   any synchronous-stall limitation without interpreting FPS as benchmark
+   evidence.
+
+This feature validation must remain separate from Stage 5 pilot/calibration/
+held-out evidence collection and must not consume, tune, or reinterpret the
+frozen selector protocol.
+
 ## Known limitations
 
 - No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
   a bounded JPL mean-element approximation with the documented Earth--Moon
   barycenter simplification.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
-- CUDA is T4-validated, but no same-machine CPU/OpenMP/CUDA matrix exists; viewer CUDA integration is deferred. MPI is implemented and locally validated, but no controlled multi-machine evidence exists.
+- CUDA physics is T4-validated and the viewer has an opt-in batched CUDA path,
+  but viewer CUDA compilation/runtime and a same-machine CPU/OpenMP/CUDA matrix
+  remain unverified until an NVIDIA/CUDA host is available. MPI is implemented
+  and locally validated, but no controlled multi-machine evidence exists.
 - Stage 6D native-window appearance and interaction need final user visual validation; approximate O(N^2) algorithms, distributed state, one-rank-per-GPU execution, instanced high-detail meshes, high-resolution textures, advanced atmosphere/post-processing, RTX presentation capture, and real ephemerides are deferred.
 - Stage 5 v2 tooling is locally CPU/OpenMP-validated, but native VS2022/MSVC, CUDA 12.8.x-class `sm_89`, RTX 4050, and driver integration remain unexecuted until the NVIDIA pilot rehearsal.
 - The pacman CMake executable is unusable in the partially updated MSYS2 environment; the verified portable CMake is project-local and ignored.
@@ -874,3 +1024,6 @@ not possible on this AMD-only host.
 - `50a0473` — Stage 6C final presentation system: themed UI, deterministic camera framing, orbit guides, label decluttering, procedural bodies/rings/starfield, and headless presentation tests.
 - `96c36a6` — Stage 6C.1 render-clearance, stable-label, real Sun-motion, scalable Compute Experiment, live CPU comparison, and regression-test implementation.
 - `b432abe` — Stage 6D MPI/hybrid backend, large-N safety/protocol infrastructure, camera-aware Solar sizing, stable inner callouts, and final UI implementation.
+- `45be2d3` — opt-in batched CUDA visualizer integration, transactional
+  switching/resource management, explicit workload policy, and focused CPU/GPU
+  test coverage.
