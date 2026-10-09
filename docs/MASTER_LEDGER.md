@@ -26,7 +26,7 @@ Last updated: 2026-10-09
 | Stage 6D.2 stable Sun sizing | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-dependent 20--36 px Sun radius invariant to orbital phase |
 | Stage 6D.3 inner-orbit shape verification | Complete | Elements, 700-day integrated extrema, reference guides, trails, projection, and Sun invariant verified; no defect or visual change |
 | CUDA visualizer integration | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Host-authoritative batched CUDA controller path; CPU-only 5/5 and OpenMP 6/6 CTests passed; CUDA compilation/runtime unverified on this AMD-only machine |
-| Astronomical catalog foundation | **IMPLEMENTED LOCALLY / 60-BODY DATASET PENDING** | Immutable admitted records, stable IDs/parents, shared SSB/ICRF/TDB/SI contract, source custody, deterministic order, GM-derived mass, primary >=60-body admission gate, and CUDA-disabled regression validation |
+| Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | Barnes--Hut large-N solver roadmap | **REQUIRED / UNIMPLEMENTED** | Sequential, OpenMP, and CUDA Barnes--Hut implementations, numerical verification against direct force, and controlled large-N performance evaluation are mandatory future work |
 
 ## Decisions and rationale
@@ -1078,12 +1078,101 @@ Stage 5 executables do not link to the new library.
 
 Curated one-body removal, paired long-horizon impact measurement, expert-mode
 Sun-removal architecture, scenario composition, GUI controls, CUDA experiment
-execution, and 60-body data generation remain unimplemented. The mandatory
-large-N roadmap is Sequential Barnes--Hut, OpenMP Barnes--Hut, CUDA Barnes--Hut,
-cross-solver numerical verification, and controlled large-N performance
-evaluation; none of those stages has begun. Existing 50K--100K synthetic
-selections remain display-only at those sizes. A 1920x1080 RTX 4050 target of
-30--45 FPS is a future measurable goal, not an achieved or predicted result.
+execution, and simulation-state composition from catalog selections remain
+unimplemented. The mandatory large-N roadmap is Sequential Barnes--Hut, OpenMP
+Barnes--Hut, CUDA Barnes--Hut, cross-solver numerical verification, and
+controlled large-N performance evaluation; none of those stages has begun.
+Existing 50K--100K synthetic selections remain display-only at those sizes. A
+1920x1080 RTX 4050 target of 30--45 FPS is a future measurable goal, not an
+achieved or predicted result.
+
+## Astronomical 60-body dataset v1
+
+### Dataset and source-custody record
+
+The next catalog-only increment creates `jpl-ssd-j2000-60-v1`, version `1.0.0`,
+with exactly 60 real, individually identified, gravitating bodies in explicit
+parent-before-child order. The roster SHA-256 is
+`2df8e58be8924f7a49b44ca761db8ffb0e0a1204689844044624c907d65273cd`.
+The source snapshot manifest SHA-256 is
+`82b271f3fe7470172693c9ab4810a664153ab59f94f293498000b19504749229`.
+Generation produced normalized catalog SHA-256
+`3813b0c4e31b0e58f60fb33f7a23485afe853f32601a49c14459f850f2d759d0`
+and typed C++ data SHA-256
+`b60199f05e1d29359b37ef9c25416f9c80f0770c18fb1e5098060495b4c37482`.
+
+The immutable raw archive contains 60 exact Horizons batch responses, 13 exact
+JPL Small-Body Database API responses, and three exact JPL parameter sources.
+Its manifest retains every request parameter, target identifier, source URL,
+UTC retrieval time, media type, byte count, and response SHA-256. The three
+shared-source hashes are:
+
+- JPL Horizons GM kernel:
+  `169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c`;
+- JPL planetary physical parameters:
+  `e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b`;
+- JPL satellite physical parameters:
+  `d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440`.
+
+Each state was admitted only after matching the roster's unique Horizons/SPK
+identity and expected solution, exact `JD 2451545.0 TDB` epoch, Solar System
+barycenter origin, J2000 ICRF/equatorial frame, geometric correction mode, and
+`KM-S` output units. Generation converts positions, velocities, radii, and GM
+to SI and derives mass from the existing project gravitational constant.
+Body-specific planet GM values are used rather than planet-system GM values so
+that independently represented satellite masses are not counted twice.
+
+The admitted roster is the 51 approved original candidates plus nine approved
+replacements: Epimetheus, Helene, Atlas, Prometheus, Pandora, Nix, Hydra,
+Thalassa, and Eunomia. Eris, Haumea, Quaoar, Orcus, and Gonggong remain explicit
+in the deferred expansion queue, together with the other preliminary candidates
+whose current source package was not admitted. No failed or missing datum was
+silently replaced during acquisition or generation, and no unresolved source
+identity discrepancy was found for the frozen roster.
+
+### Validation record
+
+The offline custody test verifies all 76 archived source checksums, response and
+solution identities, request parameters, roster identity, SI conversions, and
+byte-for-byte deterministic reconstruction of both generated artifacts. The
+C++ dataset test verifies exactly 60 unique admitted bodies, deterministic
+ordering, parent relationships, the common coordinate contract, finite state,
+positive GM/radius, GM-derived mass, body-only Jupiter GM, and representative
+Sun--Earth, Earth--Moon, Jupiter--Io, Saturn--Titan, and Pluto--Charon relative
+distance/speed envelopes.
+
+Fresh CUDA-disabled Release validation on the AMD Windows development machine:
+
+- CPU-only configure/build passed; CTest passed `7/7`.
+- OpenMP configure/build passed; CTest passed `8/8`, including the existing
+  OpenMP validation.
+- The focused catalog/dataset/snapshot/legacy-Solar tests passed `4/4` in the
+  OpenMP build.
+- The first sandboxed full CPU invocation exposed only denied Windows temporary
+  directory creation in the unchanged Stage 5 tooling test. The same unchanged
+  suite rerun outside that restricted sandbox passed `7/7`; no Stage 5 repair
+  or source modification was made.
+- No CUDA compilation, NVIDIA execution, MPI test, benchmark, or long-duration
+  ephemeris comparison was performed. CUDA viewer validation on the RTX 4050
+  remains pending.
+
+### Scientific limitations and frozen boundaries
+
+Catalog admission proves identity, provenance custody, coordinate consistency,
+and deterministic conversion; it does not prove long-duration orbital accuracy.
+Source epochs and identifiers are exact, but several small-body and small-moon
+GM/radius estimates carry material uncertainty (including the documented large
+Proteus GM uncertainty), and covariance is not propagated. The simulation does
+not reproduce the complete JPL dynamical model and does not include relativity,
+extended-body gravity, tides, nongravitational comet acceleration, adaptive
+timesteps, or close-encounter regularization.
+
+The legacy approximate nine-body scenario and its regression remain unchanged.
+No GUI selector, body-removal/counterfactual controller, Barnes--Hut solver,
+CUDA kernel, force law, integrator, benchmark, Stage 5 script, Stage 5 protocol,
+or experimental evidence changed. Frozen Stage 5 remains unchanged. Sequential,
+OpenMP, and CUDA Barnes--Hut plus numerical verification and large-N performance
+evaluation remain mandatory and unimplemented.
 
 ## Known limitations
 

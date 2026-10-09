@@ -34,6 +34,7 @@ target_compile_features(nbody_core PUBLIC cxx_std_17)
 
 add_library(nbody_astronomy
     src/astronomy/catalog.cpp
+    src/astronomy/solar_system_60.cpp
 )
 target_include_directories(nbody_astronomy PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_features(nbody_astronomy PUBLIC cxx_std_17)
@@ -287,6 +288,18 @@ if(BUILD_TESTING)
     add_executable(nbody_astronomical_catalog_tests tests/test_astronomical_catalog.cpp)
     target_link_libraries(nbody_astronomical_catalog_tests PRIVATE nbody_astronomy)
     add_test(NAME nbody_astronomical_catalog COMMAND nbody_astronomical_catalog_tests)
+
+    add_executable(nbody_astronomical_dataset_tests tests/test_astronomical_dataset.cpp)
+    target_link_libraries(nbody_astronomical_dataset_tests PRIVATE nbody_astronomy)
+    add_test(NAME nbody_astronomical_dataset COMMAND nbody_astronomical_dataset_tests)
+
+    if(Python3_Interpreter_FOUND)
+        add_test(
+            NAME nbody_astronomical_snapshot
+            COMMAND ${Python3_EXECUTABLE} -B
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_astronomical_snapshot.py
+        )
+    endif()
 
     if(NBODY_ENABLE_OPENMP)
         add_executable(nbody_openmp_tests tests/test_openmp.cpp)

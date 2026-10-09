@@ -1,0 +1,3359 @@
+{
+  "bodies": [
+    {
+      "class": "star",
+      "ephemeris_solution": "DE441",
+      "gravitational_parameter_m3_s2": 1.3271244004127942e+20,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "10"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "10"
+        }
+      ],
+      "mean_radius_m": 695700000.0,
+      "name": "Sun",
+      "order": 0,
+      "parent": null,
+      "position_m": [
+        -1067706805.380953,
+        -396036184.7959462,
+        -138065184.28688088
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY10_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "DE441:volume-mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:23Z",
+          "sha256": "67e2f3dca74eabad3de1d4b5ac64f5635e439877e2b72566ef7dbcd7f1f014cd",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%2710%27"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "10:DE441:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:23Z",
+          "sha256": "67e2f3dca74eabad3de1d4b5ac64f5635e439877e2b72566ef7dbcd7f1f014cd",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%2710%27"
+        }
+      },
+      "stable_id": "sol:sun",
+      "velocity_m_s": [
+        9.312571926520471,
+        -11.70150612817771,
+        -5.251266205200356
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "DE441",
+      "gravitational_parameter_m3_s2": 22031868551400.004,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "199"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "199"
+        }
+      ],
+      "mean_radius_m": 2439400.0,
+      "name": "Mercury",
+      "order": 1,
+      "parent": "sol:sun",
+      "position_m": [
+        -20529433161.23468,
+        -60324003958.27633,
+        -30130837864.1183
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY199_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Mercury:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "199:DE441:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:24Z",
+          "sha256": "de8c851c3ed95b29eac79158d559592827344e4e749ff58961d07257895a09eb",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27199%27"
+        }
+      },
+      "stable_id": "sol:mercury",
+      "velocity_m_s": [
+        37004.30442920571,
+        -8541.376789510447,
+        -8398.372409672424
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "DE441",
+      "gravitational_parameter_m3_s2": 324858592000000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "299"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "299"
+        }
+      ],
+      "mean_radius_m": 6051800.0,
+      "name": "Venus",
+      "order": 2,
+      "parent": "sol:sun",
+      "position_m": [
+        -108524200857.5715,
+        -7318564959.678599,
+        3548121861.333776
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY299_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Venus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "299:DE441:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:26Z",
+          "sha256": "784ca253c9d5c93260fab2bface81318342f967cfd0de3d1a0b7063e9aad7471",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27299%27"
+        }
+      },
+      "stable_id": "sol:venus",
+      "velocity_m_s": [
+        1391.2186011899669,
+        -32029.51993781091,
+        -14497.0867394732
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "DE441",
+      "gravitational_parameter_m3_s2": 398600435507022.7,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "399"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "399"
+        }
+      ],
+      "mean_radius_m": 6371008.399999999,
+      "name": "Earth",
+      "order": 3,
+      "parent": "sol:sun",
+      "position_m": [
+        -27566740482.81145,
+        132361381153.5491,
+        57418653286.253845
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY399_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Earth:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "399:DE441:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:27Z",
+          "sha256": "48ec3a15224d7ad4387e5fb69f53595367dbe7044c19e26a8c509f015740c3ca",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27399%27"
+        }
+      },
+      "stable_id": "sol:earth",
+      "velocity_m_s": [
+        -29784.947498510883,
+        -5029.753814928081,
+        -2180.645069035755
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "mar099",
+      "gravitational_parameter_m3_s2": 42828374857356.266,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "499"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "499"
+        }
+      ],
+      "mean_radius_m": 3389500.0,
+      "name": "Mars",
+      "order": 4,
+      "parent": "sol:sun",
+      "position_m": [
+        206980433836.461,
+        -186417011.2571357,
+        -5667227497.442207
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY499_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Mars:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "499:mar099:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:28Z",
+          "sha256": "0e2fd65343e2ac1e4ee9acdceed482b77755a705517f74a6e44b5bba8d4efd14",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27499%27"
+        }
+      },
+      "stable_id": "sol:mars",
+      "velocity_m_s": [
+        1171.984975692608,
+        23906.70819298843,
+        10933.92065056128
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 1.266865319003704e+17,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "599"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "599"
+        }
+      ],
+      "mean_radius_m": 69911000.0,
+      "name": "Jupiter",
+      "order": 5,
+      "parent": "sol:sun",
+      "position_m": [
+        597499917851.6835,
+        408990269799.3661,
+        160756261693.2818
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY599_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Jupiter:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "599:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:29Z",
+          "sha256": "227ac263b48dae9773e022ed44e649783043d2655f331cce7e0e9647e4234bd4",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27599%27"
+        }
+      },
+      "stable_id": "sol:jupiter",
+      "velocity_m_s": [
+        -7900.547720245487,
+        10171.8725762267,
+        4552.504127783228
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 3.793120623436167e+16,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "699"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "699"
+        }
+      ],
+      "mean_radius_m": 58232000.0,
+      "name": "Saturn",
+      "order": 6,
+      "parent": "sol:sun",
+      "position_m": [
+        957317652110.3407,
+        923319435057.4769,
+        340162793274.0891
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY699_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Saturn:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "699:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:30Z",
+          "sha256": "a6a2866de1e2da8b07ad074bebd7cb4d51b3eaecf94813fc26b8fd197098f6e0",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27699%27"
+        }
+      },
+      "stable_id": "sol:saturn",
+      "velocity_m_s": [
+        -7421.90038683812,
+        6098.450820882325,
+        2837.547973276323
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "ura184_merged",
+      "gravitational_parameter_m3_s2": 5793950610340896.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "799"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "799"
+        }
+      ],
+      "mean_radius_m": 25362000.0,
+      "name": "Uranus",
+      "order": 7,
+      "parent": "sol:sun",
+      "position_m": [
+        2157907112723.4167,
+        -1871307099571.1821,
+        -850106925996.147
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY799_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Uranus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "799:ura184_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:31Z",
+          "sha256": "9c7d3aa6a519bb7cc0f303ba48aa08715b6657b680ecd873da82a636e1d7fc9e",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27799%27"
+        }
+      },
+      "stable_id": "sol:uranus",
+      "velocity_m_s": [
+        4646.584677611653,
+        4251.110198227457,
+        1796.121552064855
+      ]
+    },
+    {
+      "class": "planet",
+      "ephemeris_solution": "nep098_merged",
+      "gravitational_parameter_m3_s2": 6835099968446816.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "899"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "899"
+        }
+      ],
+      "mean_radius_m": 24622000.0,
+      "name": "Neptune",
+      "order": 8,
+      "parent": "sol:sun",
+      "position_m": [
+        2513978816984.908,
+        -3438170168305.3223,
+        -1469851595078.865
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY899_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Neptune:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "899:nep098_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:33Z",
+          "sha256": "3624643a5963f0fe04755983c07b51ca767f3e034b20b17a713d05ffb37edcc2",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27899%27"
+        }
+      },
+      "stable_id": "sol:neptune",
+      "velocity_m_s": [
+        4474.58791838248,
+        2876.584787253288,
+        1065.7731203769001
+      ]
+    },
+    {
+      "class": "dwarf_planet",
+      "ephemeris_solution": "plu060_merged",
+      "gravitational_parameter_m3_s2": 869326122631.1509,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "999"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "999"
+        }
+      ],
+      "mean_radius_m": 1188300.0,
+      "name": "Pluto",
+      "order": 9,
+      "parent": "sol:sun",
+      "position_m": [
+        -1478398629112.175,
+        -4185974175189.1333,
+        -860876296390.587
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY999_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Pluto:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:21Z",
+          "sha256": "e49a487947295c389ba6e5833dd8fb04b63e826d39f70c123881882096e5e68b",
+          "source_name": "JPL Planetary Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/planets/phys_par.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "999:plu060_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:34Z",
+          "sha256": "d88dd740ab6a49cbccb9e80cb9949d8a28cf4513a8a8d4b8b9951393f2e02640",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27999%27"
+        }
+      },
+      "stable_id": "sol:pluto",
+      "velocity_m_s": [
+        5269.1628487778735,
+        -1951.4629586845851,
+        -2209.300654621625
+      ]
+    },
+    {
+      "class": "dwarf_planet",
+      "ephemeris_solution": "JPL#48",
+      "gravitational_parameter_m3_s2": 62628400000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "1;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000001"
+        },
+        {
+          "authority": "SBDB",
+          "value": "1"
+        }
+      ],
+      "mean_radius_m": 469700.0,
+      "name": "Ceres",
+      "order": 10,
+      "parent": "sol:sun",
+      "position_m": [
+        -357010065307.87744,
+        81235203244.38826,
+        110747688437.9996
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:1:orbit-48:GM",
+          "retrieved_utc": "2026-10-09T14:41:36Z",
+          "sha256": "c2bf24fa5ae3ae49e2b3718b052280ed970f1ab054205cec8305d52b8a34fd06",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=1&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:1:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:41:36Z",
+          "sha256": "c2bf24fa5ae3ae49e2b3718b052280ed970f1ab054205cec8305d52b8a34fd06",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=1&phys-par=1"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project omits relativistic, multipole, tidal, and ephemeris-fit dynamics, so long-term ephemeris agreement is not implied.",
+        "state_vector": {
+          "record_id": "1;:JPL#48:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:35Z",
+          "sha256": "3907a1cd3012060489c1df50e2958da119ccd9e6cc4bc0aa0793948f14420866",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%271%3B%27"
+        }
+      },
+      "stable_id": "sol:ceres",
+      "velocity_m_s": [
+        -6196.623976346606,
+        -17058.27032346107,
+        -6765.80036839787
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "DE441",
+      "gravitational_parameter_m3_s2": 4902800118457.55,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "301"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "301"
+        }
+      ],
+      "mean_radius_m": 1737400.0,
+      "name": "Moon",
+      "order": 11,
+      "parent": "sol:earth",
+      "position_m": [
+        -27858348866.99916,
+        132094664319.69499,
+        57342550798.94725
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY301_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Moon:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "301:DE441:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:37Z",
+          "sha256": "e6d177577566252b4639377a18558712bda360fc11359cdbc9c90f0006dd7334",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27301%27"
+        }
+      },
+      "stable_id": "sol:moon",
+      "velocity_m_s": [
+        -29141.41610952193,
+        -5695.841497884601,
+        -2481.970773696848
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "mar099",
+      "gravitational_parameter_m3_s2": 708754.6066894452,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "401"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "401"
+        }
+      ],
+      "mean_radius_m": 11080.0,
+      "name": "Phobos",
+      "order": 12,
+      "parent": "sol:mars",
+      "position_m": [
+        206978444858.5325,
+        -195160171.48238608,
+        -5670409759.09171
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY401_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Phobos:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "401:mar099:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:38Z",
+          "sha256": "d8c609f295029947ec53ab042bb19197579c46ec1df2bbe9d07dfea5bac52f60",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27401%27"
+        }
+      },
+      "stable_id": "sol:phobos",
+      "velocity_m_s": [
+        3015.167323354003,
+        23863.711164281,
+        9915.593814014872
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "mar099",
+      "gravitational_parameter_m3_s2": 96155.69648120314,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "402"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "402"
+        }
+      ],
+      "mean_radius_m": 6200.0,
+      "name": "Deimos",
+      "order": 13,
+      "parent": "sol:mars",
+      "position_m": [
+        206990800276.7496,
+        -202164674.9646674,
+        -5681172843.519379
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY402_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Deimos:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "402:mar099:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:39Z",
+          "sha256": "18328c174cc042ff3c5ef291a4166f5de875191a09489eb9053702ad69606bcf",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27402%27"
+        }
+      },
+      "stable_id": "sol:deimos",
+      "velocity_m_s": [
+        2212.841442567695,
+        24750.24265716711,
+        10755.03304426905
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 5959915466180.539,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "501"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "501"
+        }
+      ],
+      "mean_radius_m": 1821490.0,
+      "name": "Io",
+      "order": 14,
+      "parent": "sol:jupiter",
+      "position_m": [
+        597899632088.0131,
+        409104628033.1596,
+        160817464360.2226
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY501_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Io:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "501:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:40Z",
+          "sha256": "08007e91b517571a9ffa74efe93085581d25cff39b0d297d25b063a08c3e06d9",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27501%27"
+        }
+      },
+      "stable_id": "sol:io",
+      "velocity_m_s": [
+        -13297.629436032259,
+        25140.857898920458,
+        11593.24671672037
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 3202712099607.295,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "502"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "502"
+        }
+      ],
+      "mean_radius_m": 1560800.0,
+      "name": "Europa",
+      "order": 15,
+      "parent": "sol:jupiter",
+      "position_m": [
+        596938673377.9362,
+        408670775934.124,
+        160598175268.8281
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY502_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Europa:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "502:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:41Z",
+          "sha256": "debeeae609ffbff49d68b7d926e021ef9042d8878b59974c96ff83a26f60afc0",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27502%27"
+        }
+      },
+      "stable_id": "sol:europa",
+      "velocity_m_s": [
+        -438.25287301112945,
+        -465.68484475445973,
+        -296.2724920973372
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 9887832752719.639,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "503"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "503"
+        }
+      ],
+      "mean_radius_m": 2631200.0,
+      "name": "Ganymede",
+      "order": 16,
+      "parent": "sol:jupiter",
+      "position_m": [
+        596678572756.8232,
+        408375184125.9785,
+        160451923571.9095
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY503_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Ganymede:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "503:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:43Z",
+          "sha256": "63386d240f3616ebc0ab04323b1b5f2958ad85b2b22cf992c85448e28ab1ad34",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27503%27"
+        }
+      },
+      "stable_id": "sol:ganymede",
+      "velocity_m_s": [
+        -912.910621600103,
+        2613.956810344494,
+        1024.6833221124182
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 7179283402579.837,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "504"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "504"
+        }
+      ],
+      "mean_radius_m": 2410300.0,
+      "name": "Callisto",
+      "order": 17,
+      "parent": "sol:jupiter",
+      "position_m": [
+        597824997582.3167,
+        410663927187.7642,
+        161552459758.1377
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY504_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Callisto:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "504:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:44Z",
+          "sha256": "f0e0d7e08aa90e5841dc5e38d04d2c9781cecda23891079f019c78493501fda2",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27504%27"
+        }
+      },
+      "stable_id": "sol:callisto",
+      "velocity_m_s": [
+        -15973.519993968299,
+        11553.65935823254,
+        5087.890651981713
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 164563453.4798259,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "505"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "505"
+        }
+      ],
+      "mean_radius_m": 83500.0,
+      "name": "Amalthea",
+      "order": 18,
+      "parent": "sol:jupiter",
+      "position_m": [
+        597612473694.702,
+        409117073816.45636,
+        160819541629.37408
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY505_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Amalthea:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics. Published GM uncertainty is material and must be retained in scientific interpretation.",
+        "state_vector": {
+          "record_id": "505:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:45Z",
+          "sha256": "c019ef4d549bc6c042eeb257dd7c60e5f50f107d94c5f0ca740232f12b0195a7",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27505%27"
+        }
+      },
+      "stable_id": "sol:amalthea",
+      "velocity_m_s": [
+        -28710.20599821352,
+        25203.44977110301,
+        11257.11837587126
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 30148000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "514"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "514"
+        }
+      ],
+      "mean_radius_m": 49300.0,
+      "name": "Thebe",
+      "order": 19,
+      "parent": "sol:jupiter",
+      "position_m": [
+        597276015702.2709,
+        408966816999.0748,
+        160739227267.1698
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY514_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Thebe:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics. Published GM and radius have large relative uncertainties.",
+        "state_vector": {
+          "record_id": "514:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:46Z",
+          "sha256": "5d683b1ff72fce115f163d61fabe5aed858344140ce8dcd18cb4fbe0bdb3baf0",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27514%27"
+        }
+      },
+      "stable_id": "sol:thebe",
+      "velocity_m_s": [
+        -4909.403137554895,
+        -10725.253196112339,
+        -5789.005642115599
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup347_merged_DE442",
+      "gravitational_parameter_m3_s2": 151552429.9611265,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "506"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "506"
+        }
+      ],
+      "mean_radius_m": 85000.0,
+      "name": "Himalia",
+      "order": 20,
+      "parent": "sol:jupiter",
+      "position_m": [
+        592579940247.1569,
+        415261412042.3051,
+        168763440811.1291
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY506_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Himalia:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics. Irregular-satellite GM and radius uncertainties are substantial.",
+        "state_vector": {
+          "record_id": "506:jup347_merged_DE442:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:47Z",
+          "sha256": "20ec678b3aaaa8c54a323926324f9699de8cd1b6ff978aaefc27cac7af869873",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27506%27"
+        }
+      },
+      "stable_id": "sol:himalia",
+      "velocity_m_s": [
+        -10719.66512059415,
+        8399.300590482513,
+        4995.804957179552
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "jup365_merged",
+      "gravitational_parameter_m3_s2": 2501000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "516"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "516"
+        }
+      ],
+      "mean_radius_m": 21500.0,
+      "name": "Metis",
+      "order": 21,
+      "parent": "sol:jupiter",
+      "position_m": [
+        597376667829.7974,
+        409022485715.1946,
+        160769612508.2626
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY516_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Metis:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics. Published GM has large relative uncertainty.",
+        "state_vector": {
+          "record_id": "516:jup365_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:48Z",
+          "sha256": "94d0a01eabd2bfa78f1b262b2046c5b27bae438aee6cc846002497cab65239cf",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27516%27"
+        }
+      },
+      "stable_id": "sol:metis",
+      "velocity_m_s": [
+        -16469.93704033384,
+        -17177.62176619767,
+        -8626.394059712533
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 8978137095521.047,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "606"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "606"
+        }
+      ],
+      "mean_radius_m": 2574760.0,
+      "name": "Titan",
+      "order": 22,
+      "parent": "sol:saturn",
+      "position_m": [
+        956370849171.8918,
+        924143533282.7957,
+        340189875504.496
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY606_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Titan:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "606:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:49Z",
+          "sha256": "92af2663ce497d94ba57d3ced71af318bf47d37dac1aca8c155fd585a0de8348",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27606%27"
+        }
+      },
+      "stable_id": "sol:titan",
+      "velocity_m_s": [
+        -10983.24390619495,
+        2053.2038047525657,
+        3421.8330002894127
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 153941751914.65628,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "605"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "605"
+        }
+      ],
+      "mean_radius_m": 763500.0,
+      "name": "Rhea",
+      "order": 23,
+      "parent": "sol:saturn",
+      "position_m": [
+        956792889732.6206,
+        923296338097.2621,
+        340212334991.26263
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY605_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Rhea:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "605:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:50Z",
+          "sha256": "8a11879fdc83926a14a0c09055844c56d69a6013565355f841b289196030b53b",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27605%27"
+        }
+      },
+      "stable_id": "sol:rhea",
+      "velocity_m_s": [
+        -6990.121492420047,
+        -2344.937951137413,
+        3442.0222416261267
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 120515106013.76419,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "608"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "608"
+        }
+      ],
+      "mean_radius_m": 734300.0,
+      "name": "Iapetus",
+      "order": 24,
+      "parent": "sol:saturn",
+      "position_m": [
+        954463878871.5685,
+        921048219962.0823,
+        340323362551.7492
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY608_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Iapetus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "608:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:51Z",
+          "sha256": "3fabb80f23be4dd18c05b2cff17cbcce9305e65d8595aeb5f739793522c71a71",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27608%27"
+        }
+      },
+      "stable_id": "sol:iapetus",
+      "velocity_m_s": [
+        -5501.123064904944,
+        3693.057823604032,
+        2026.7863214359409
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 73116071724.82066,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "604"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "604"
+        }
+      ],
+      "mean_radius_m": 561400.0,
+      "name": "Dione",
+      "order": 25,
+      "parent": "sol:saturn",
+      "position_m": [
+        957546200743.9397,
+        923020026785.9625,
+        340165021081.8028
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY604_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Dione:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "604:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:52Z",
+          "sha256": "0d3ece07749a738999d35dabe51b2330bae81af4fda18a6eb142e3ce3785acff",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27604%27"
+        }
+      },
+      "stable_id": "sol:dione",
+      "velocity_m_s": [
+        509.9135006162827,
+        12162.05224416116,
+        1706.434768982083
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 41213528854.89587,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "603"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "603"
+        }
+      ],
+      "mean_radius_m": 531100.0,
+      "name": "Tethys",
+      "order": 26,
+      "parent": "sol:saturn",
+      "position_m": [
+        957534685871.8075,
+        923120299218.6847,
+        340153397243.2579
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY603_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Tethys:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "603:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:53Z",
+          "sha256": "c3f416b32b02d8ef65e216f59d622e6d46e85f7dcfebd1b91269432c7bc97a4b",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27603%27"
+        }
+      },
+      "stable_id": "sol:tethys",
+      "velocity_m_s": [
+        178.88439691878318,
+        14441.91790144705,
+        1633.434307228571
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 7210366688.598896,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "602"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "602"
+        }
+      ],
+      "mean_radius_m": 252100.0,
+      "name": "Enceladus",
+      "order": 27,
+      "parent": "sol:saturn",
+      "position_m": [
+        957479362207.6818,
+        923146293449.0206,
+        340161610468.1801
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY602_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Enceladus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "602:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:54Z",
+          "sha256": "c59cbc30f8a5541a0e8a465d3c89b36528512d5e7fdb094961886781e754917b",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27602%27"
+        }
+      },
+      "stable_id": "sol:enceladus",
+      "velocity_m_s": [
+        1797.308777381544,
+        14705.290672027351,
+        1408.791195159804
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 2503488768.152587,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "601"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "601"
+        }
+      ],
+      "mean_radius_m": 198200.0,
+      "name": "Mimas",
+      "order": 28,
+      "parent": "sol:saturn",
+      "position_m": [
+        957458640057.542,
+        923203013832.7612,
+        340160710325.77167
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY601_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Mimas:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "601:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:55Z",
+          "sha256": "ac313fb9627608b3de4df4706684bc5ad758a9951af6261aebaa5689e53c0d36",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27601%27"
+        }
+      },
+      "stable_id": "sol:mimas",
+      "velocity_m_s": [
+        1932.475383719731,
+        17142.043796240847,
+        1603.8626159167939
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 370491374.79322654,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "607"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "607"
+        }
+      ],
+      "mean_radius_m": 135000.0,
+      "name": "Hyperion",
+      "order": 29,
+      "parent": "sol:saturn",
+      "position_m": [
+        957488701397.321,
+        924750881058.9813,
+        340064710376.5285
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY607_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Hyperion:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "607:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:56Z",
+          "sha256": "0a27108c19eabf815acff59b214aabae6c10181b6def17135628112329253ab7",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27607%27"
+        }
+      },
+      "stable_id": "sol:hyperion",
+      "velocity_m_s": [
+        -12439.4698603379,
+        7374.276620529415,
+        3232.163872608911
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 554786005.2791678,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "609"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "609"
+        }
+      ],
+      "mean_radius_m": 106500.0,
+      "name": "Phoebe",
+      "order": 30,
+      "parent": "sol:saturn",
+      "position_m": [
+        945585112709.2826,
+        920278829840.6042,
+        340303746405.7735
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY609_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Phoebe:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "609:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:57Z",
+          "sha256": "29d60bcf67303310406e94b8259b800e0f828d87be46342145698ad0f1528c63",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27609%27"
+        }
+      },
+      "stable_id": "sol:phoebe",
+      "velocity_m_s": [
+        -8093.128608813057,
+        7611.258687321017,
+        3605.133819390198
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat415_merged_DE437",
+      "gravitational_parameter_m3_s2": 126576509.90121971,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "610"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "610"
+        }
+      ],
+      "mean_radius_m": 89200.0,
+      "name": "Janus",
+      "order": 31,
+      "parent": "sol:saturn",
+      "position_m": [
+        957403789136.274,
+        923443585966.9961,
+        340146577002.7254
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY610_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Janus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "610:sat415_merged_DE437:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:58Z",
+          "sha256": "a6085bf65efe4bec5e954ae7b483522d6e65b4ae55ff3406134fd33e67838c1e",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27610%27"
+        }
+      },
+      "stable_id": "sol:janus",
+      "velocity_m_s": [
+        -20332.10505913462,
+        15218.82229117482,
+        3246.386195599994
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "ura184_merged",
+      "gravitational_parameter_m3_s2": 222800635187.9754,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "703"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "703"
+        }
+      ],
+      "mean_radius_m": 788900.0,
+      "name": "Titania",
+      "order": 32,
+      "parent": "sol:uranus",
+      "position_m": [
+        2157844005721.6602,
+        -1871179099248.489,
+        -850518913190.4497
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY703_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Titania:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "703:ura184_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:41:59Z",
+          "sha256": "8f72eaed52b3349d61606b5a4bf5f62b03d5f42155f300e27221e015085c1ff9",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27703%27"
+        }
+      },
+      "stable_id": "sol:titania",
+      "velocity_m_s": [
+        1121.231511584747,
+        4848.393366728495,
+        2512.4733666816132
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "ura184_merged",
+      "gravitational_parameter_m3_s2": 214209839940.7347,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "704"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "704"
+        }
+      ],
+      "mean_radius_m": 761400.0,
+      "name": "Oberon",
+      "order": 33,
+      "parent": "sol:uranus",
+      "position_m": [
+        2157346542763.5122,
+        -1871162138582.336,
+        -850179736135.998
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY704_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Oberon:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "704:ura184_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:00Z",
+          "sha256": "6b17e99370da17cf338d7391fbd283d84513c3848746c20d004ce07c158fad11",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27704%27"
+        }
+      },
+      "stable_id": "sol:oberon",
+      "velocity_m_s": [
+        4071.3356263580076,
+        3549.166225612699,
+        4813.546819242526
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "ura184_merged",
+      "gravitational_parameter_m3_s2": 83430746772.82457,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "701"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "701"
+        }
+      ],
+      "mean_radius_m": 578900.0,
+      "name": "Ariel",
+      "order": 34,
+      "parent": "sol:uranus",
+      "position_m": [
+        2158082790658.9407,
+        -1871326371862.699,
+        -850179886033.5525
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY701_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Ariel:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "701:ura184_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:01Z",
+          "sha256": "8ae202f4bf88a8a196e10232c57159b639b9a10d695a10877fbd9b72632bdd70",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27701%27"
+        }
+      },
+      "stable_id": "sol:ariel",
+      "velocity_m_s": [
+        2818.792393479228,
+        6019.116866320788,
+        -3081.982424753942
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "ura184_merged",
+      "gravitational_parameter_m3_s2": 85403004223.26411,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "702"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "702"
+        }
+      ],
+      "mean_radius_m": 584700.0,
+      "name": "Umbriel",
+      "order": 35,
+      "parent": "sol:uranus",
+      "position_m": [
+        2158007123047.1357,
+        -1871262016306.855,
+        -850349243513.2117
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY702_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Umbriel:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "702:ura184_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:02Z",
+          "sha256": "bf8fb9f9bc69d9307508e4c637ae1dd3385d0c17d1140b2e116d0bc70bd4d158",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27702%27"
+        }
+      },
+      "stable_id": "sol:umbriel",
+      "velocity_m_s": [
+        429.31740443329767,
+        5610.922876781708,
+        329.9087780844656
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "ura184_merged",
+      "gravitational_parameter_m3_s2": 4105527241.1815605,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "705"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "705"
+        }
+      ],
+      "mean_radius_m": 235800.0,
+      "name": "Miranda",
+      "order": 36,
+      "parent": "sol:uranus",
+      "position_m": [
+        2157802783191.183,
+        -1871272231538.0918,
+        -850175791432.7855
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY705_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Miranda:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "705:ura184_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:03Z",
+          "sha256": "27b75f733df486f46061210ca41e57b367d0842757420b70401f54452ce22374",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27705%27"
+        }
+      },
+      "stable_id": "sol:miranda",
+      "velocity_m_s": [
+        770.1598597639188,
+        3260.281547915453,
+        7150.3239348591
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "nep098_merged",
+      "gravitational_parameter_m3_s2": 1428495462910.464,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "801"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "801"
+        }
+      ],
+      "mean_radius_m": 1352600.0,
+      "name": "Triton",
+      "order": 37,
+      "parent": "sol:neptune",
+      "position_m": [
+        2513773120510.44,
+        -3438160164228.1963,
+        -1469562782710.436
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY801_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Triton:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "801:nep098_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:05Z",
+          "sha256": "7f0a5c97fc96a578b222130e9bc767f89cc30ffcd6ddaefd46b8c72103a6657f",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27801%27"
+        }
+      },
+      "stable_id": "sol:triton",
+      "velocity_m_s": [
+        7465.02580086091,
+        5357.844324699899,
+        3109.435712059524
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "nep098_merged",
+      "gravitational_parameter_m3_s2": 2583422379.120727,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "808"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "808"
+        }
+      ],
+      "mean_radius_m": 208000.0,
+      "name": "Proteus",
+      "order": 38,
+      "parent": "sol:neptune",
+      "position_m": [
+        2514024868778.49,
+        -3438235055381.216,
+        -1469938272847.607
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY808_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Proteus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics. Published GM uncertainty is approximately 94 percent; sensitivity analysis is required before interpreting its perturbations.",
+        "state_vector": {
+          "record_id": "808:nep098_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:06Z",
+          "sha256": "6cb6bb40eca249b70e527927902f858757a281dc6aa8d9c4634c1eda80f84602",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27808%27"
+        }
+      },
+      "stable_id": "sol:proteus",
+      "velocity_m_s": [
+        10922.53868954319,
+        6921.31145232395,
+        1468.652031018356
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "plu060_merged",
+      "gravitational_parameter_m3_s2": 106101138823.6118,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "901"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "901"
+        }
+      ],
+      "mean_radius_m": 606000.0,
+      "name": "Charon",
+      "order": 39,
+      "parent": "sol:pluto",
+      "position_m": [
+        -1478405466833.2268,
+        -4185982966572.001,
+        -860892422664.6815
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY901_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Charon:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "901:plu060_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:07Z",
+          "sha256": "9788ac2e9fcce12c165583a221ebb1c79e8542da588416f86f315169ea5bc3ba",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27901%27"
+        }
+      },
+      "stable_id": "sol:charon",
+      "velocity_m_s": [
+        5124.8367009053045,
+        -2067.46152245208,
+        -2084.8897980441043
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#36",
+      "gravitational_parameter_m3_s2": 17288284400.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "4;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000004"
+        },
+        {
+          "authority": "SBDB",
+          "value": "4"
+        }
+      ],
+      "mean_radius_m": 261385.0,
+      "name": "Vesta",
+      "order": 40,
+      "parent": "sol:sun",
+      "position_m": [
+        -203560458092.58508,
+        -242827748520.85828,
+        -70204768728.24214
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:4:orbit-36:GM",
+          "retrieved_utc": "2026-10-09T14:42:09Z",
+          "sha256": "4dc3c4e7d6a5e58f90c427e9f9fbee81d14ffd23309a4c9c0f9494c84eee5b3b",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=4&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:4:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:09Z",
+          "sha256": "4dc3c4e7d6a5e58f90c427e9f9fbee81d14ffd23309a4c9c0f9494c84eee5b3b",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=4&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "4;:JPL#36:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:08Z",
+          "sha256": "6b2473176275ee7e5cfff70aa87ee9ff35ec631f126e90cbbe3eb7bae83522a1",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%274%3B%27"
+        }
+      },
+      "stable_id": "sol:vesta",
+      "velocity_m_s": [
+        16674.24583221878,
+        -11120.20505619099,
+        -6606.095439295566
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#74",
+      "gravitational_parameter_m3_s2": 13630000000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "2;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000002"
+        },
+        {
+          "authority": "SBDB",
+          "value": "2"
+        }
+      ],
+      "mean_radius_m": 256500.0,
+      "name": "Pallas",
+      "order": 41,
+      "parent": "sol:sun",
+      "position_m": [
+        -126900226892.7843,
+        290488790810.35266,
+        -49124573435.013916
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:2:orbit-74:GM",
+          "retrieved_utc": "2026-10-09T14:42:11Z",
+          "sha256": "1f75bbb42716157adcfe43ce5b281103f8df919ee02456b2a1c9132bd23d96ea",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=2&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:2:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:11Z",
+          "sha256": "1f75bbb42716157adcfe43ce5b281103f8df919ee02456b2a1c9132bd23d96ea",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=2&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "2;:JPL#74:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:10Z",
+          "sha256": "336e35062501fbf4af8811df19c7c9124e6b1e60564d6bbd3c768483c984dff2",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%272%3B%27"
+        }
+      },
+      "stable_id": "sol:pallas",
+      "velocity_m_s": [
+        -20313.722643435893,
+        -9189.004891206703,
+        3220.148192842943
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#129",
+      "gravitational_parameter_m3_s2": 7000000000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "10;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000010"
+        },
+        {
+          "authority": "SBDB",
+          "value": "10"
+        }
+      ],
+      "mean_radius_m": 203560.0,
+      "name": "Hygiea",
+      "order": 42,
+      "parent": "sol:sun",
+      "position_m": [
+        -356222399625.50964,
+        -190673836098.99988,
+        -111684447154.4101
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:10:orbit-129:GM",
+          "retrieved_utc": "2026-10-09T14:42:13Z",
+          "sha256": "8ccbb0bfa252514c78b7df88a0553fc14dd2fcdaf21243e2ec4fc579fbcf949e",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=10&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:10:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:13Z",
+          "sha256": "8ccbb0bfa252514c78b7df88a0553fc14dd2fcdaf21243e2ec4fc579fbcf949e",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=10&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "10;:JPL#129:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:12Z",
+          "sha256": "678bfc124dd24f926893136b3406cc84fc496025f5cc22c00093f95d22954386",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%2710%3B%27"
+        }
+      },
+      "stable_id": "sol:hygiea",
+      "velocity_m_s": [
+        10588.03870658594,
+        -14405.27063339443,
+        -5761.049138115527
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#144",
+      "gravitational_parameter_m3_s2": 1920570700.2025888,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "3;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000003"
+        },
+        {
+          "authority": "SBDB",
+          "value": "3"
+        }
+      ],
+      "mean_radius_m": 123298.0,
+      "name": "Juno",
+      "order": 43,
+      "parent": "sol:sun",
+      "position_m": [
+        56404402887.45724,
+        -455143257174.143,
+        -87942035681.19081
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY2000003_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:3:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:15Z",
+          "sha256": "a5fbd42311267aa88bd86a9cd89d9b04bec5b4aec22998e8397fb546527f9205",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=3&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "3;:JPL#144:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:14Z",
+          "sha256": "4bb09859c1326e8af14e124f2b040eea011311fb2509bf46f1bc9b9385153e4a",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%273%3B%27"
+        }
+      },
+      "stable_id": "sol:juno",
+      "velocity_m_s": [
+        14573.3935786436,
+        4886.139926246435,
+        348.2836962399274
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#92",
+      "gravitational_parameter_m3_s2": 1601000000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "16;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000016"
+        },
+        {
+          "authority": "SBDB",
+          "value": "16"
+        }
+      ],
+      "mean_radius_m": 111000.0,
+      "name": "Psyche",
+      "order": 44,
+      "parent": "sol:sun",
+      "position_m": [
+        373328294642.24896,
+        -74644453457.23947,
+        -38917735149.25267
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:16:orbit-92:GM",
+          "retrieved_utc": "2026-10-09T14:42:17Z",
+          "sha256": "cc67fdde5d5e247359d76d768d68691bcb9c02cd42879c359d4afc44efe886f7",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=16&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:16:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:17Z",
+          "sha256": "cc67fdde5d5e247359d76d768d68691bcb9c02cd42879c359d4afc44efe886f7",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=16&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "16;:JPL#92:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:16Z",
+          "sha256": "7e86360a33333e9e60ac6865f985b20af8e405ea17da4a0787b5de032c8fea50",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%2716%3B%27"
+        }
+      },
+      "stable_id": "sol:psyche",
+      "velocity_m_s": [
+        3006.2775731076126,
+        18224.34969387242,
+        6817.480899889448
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#659",
+      "gravitational_parameter_m3_s2": 446300.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "433;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000433"
+        },
+        {
+          "authority": "SBDB",
+          "value": "433"
+        }
+      ],
+      "mean_radius_m": 8420.0,
+      "name": "Eros",
+      "order": 45,
+      "parent": "sol:sun",
+      "position_m": [
+        -180138176241.8602,
+        -62583331054.85155,
+        -67790896672.57703
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:433:orbit-659:GM",
+          "retrieved_utc": "2026-10-09T14:42:19Z",
+          "sha256": "543528d7d1722e7e19f4651999714fe3316cbae53dca4acb35dd17213aec3057",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=433&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:433:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:19Z",
+          "sha256": "543528d7d1722e7e19f4651999714fe3316cbae53dca4acb35dd17213aec3057",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=433&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "433;:JPL#659:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:18Z",
+          "sha256": "fcaadacbac887ca8ab7f289db5e39bf4794449ca46fc96aec5933747502b3865",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27433%3B%27"
+        }
+      },
+      "stable_id": "sol:eros",
+      "velocity_m_s": [
+        6233.725673835197,
+        -23010.592484293033,
+        -11952.28141796617
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "ORX_merged_DE424",
+      "gravitational_parameter_m3_s2": 4.8904000000000005,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "101955;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20101955"
+        },
+        {
+          "authority": "SBDB",
+          "value": "101955"
+        }
+      ],
+      "mean_radius_m": 242.22,
+      "name": "Bennu",
+      "order": 46,
+      "parent": "sol:sun",
+      "position_m": [
+        -73245690094.41519,
+        107762069922.888,
+        61287254157.24657
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:101955:orbit-118:GM",
+          "retrieved_utc": "2026-10-09T14:42:22Z",
+          "sha256": "57d9afef86ba3d4df6c4c1851f001b6b8e8d45f43f590bce50a950c64e8904fd",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=101955&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:101955:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:22Z",
+          "sha256": "57d9afef86ba3d4df6c4c1851f001b6b8e8d45f43f590bce50a950c64e8904fd",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=101955&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep. The state uses the mission-special ORX merged solution and must not be replaced by a generic numbered-asteroid solution.",
+        "state_vector": {
+          "record_id": "101955;:ORX_merged_DE424:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:22Z",
+          "sha256": "4e6d7f6d2e947fca82bdb6781fac208064f1821e016bb247cc1ca4f4bbff3c6c",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27101955%3B%27"
+        }
+      },
+      "stable_id": "sol:bennu",
+      "velocity_m_s": [
+        -30188.535164470402,
+        -10661.269362269239,
+        -5882.403290747015
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#270",
+      "gravitational_parameter_m3_s2": 29.999999999999996,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "162173;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20162173"
+        },
+        {
+          "authority": "SBDB",
+          "value": "162173"
+        }
+      ],
+      "mean_radius_m": 448.0,
+      "name": "Ryugu",
+      "order": 47,
+      "parent": "sol:sun",
+      "position_m": [
+        168855206495.70798,
+        20859686370.759247,
+        26148062017.5417
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:162173:orbit-270:GM",
+          "retrieved_utc": "2026-10-09T14:42:25Z",
+          "sha256": "e0d9051755d154a49c54e9d6c1b8dfa806a07aabe6f15cdf5cf870835149faad",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=162173&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:162173:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:25Z",
+          "sha256": "e0d9051755d154a49c54e9d6c1b8dfa806a07aabe6f15cdf5cf870835149faad",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=162173&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "162173;:JPL#270:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:24Z",
+          "sha256": "b24c23212e183a841dbb3be5f3d8bc187be9aeaf5516bfbd357a3eaed1b4adfd",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27162173%3B%27"
+        }
+      },
+      "stable_id": "sol:ryugu",
+      "velocity_m_s": [
+        -9823.589254127935,
+        24737.60885810492,
+        8753.479157406256
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#128",
+      "gravitational_parameter_m3_s2": 3894483148.170564,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "511;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000511"
+        },
+        {
+          "authority": "SBDB",
+          "value": "511"
+        }
+      ],
+      "mean_radius_m": 135163.5,
+      "name": "Davida",
+      "order": 48,
+      "parent": "sol:sun",
+      "position_m": [
+        -39358682398.23455,
+        -534499014670.8129,
+        -167473967106.91742
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY2000511_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:511:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:27Z",
+          "sha256": "bdbe335161ba5ed17842f35976733b90098afa038a9de84114551bb3dcf2f1c7",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=511&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "511;:JPL#128:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:26Z",
+          "sha256": "1294e9111972e8561746e86d89f62ffa5037de1b5a4511dfda9b837310133baf",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27511%3B%27"
+        }
+      },
+      "stable_id": "sol:davida",
+      "velocity_m_s": [
+        13388.528183144419,
+        133.4768208135659,
+        -3779.369526587881
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#179",
+      "gravitational_parameter_m3_s2": 5000000000.0,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "704;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000704"
+        },
+        {
+          "authority": "SBDB",
+          "value": "704"
+        }
+      ],
+      "mean_radius_m": 153156.5,
+      "name": "Interamnia",
+      "order": 49,
+      "parent": "sol:sun",
+      "position_m": [
+        -204035162850.5707,
+        -372929736163.04865,
+        -257383326368.8981
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:704:orbit-179:GM",
+          "retrieved_utc": "2026-10-09T14:42:29Z",
+          "sha256": "dabb0f3b46dc125a3dd2501ef34923bd308ab5626022ff3693ce4b7d36498c31",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=704&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:704:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:29Z",
+          "sha256": "dabb0f3b46dc125a3dd2501ef34923bd308ab5626022ff3693ce4b7d36498c31",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=704&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "704;:JPL#179:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:28Z",
+          "sha256": "ba0c97edec21bdd05d95a6510fb07f26059307b218d32418164b97d0b04c5ed6",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27704%3B%27"
+        }
+      },
+      "stable_id": "sol:interamnia",
+      "velocity_m_s": [
+        14226.553497974272,
+        -6379.683980035982,
+        1658.197708340681
+      ]
+    },
+    {
+      "class": "comet",
+      "ephemeris_solution": "JPL#K284/1",
+      "gravitational_parameter_m3_s2": 662.1999999999999,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "90000703"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "1000012"
+        },
+        {
+          "authority": "SBDB",
+          "value": "67P"
+        }
+      ],
+      "mean_radius_m": 1700.0,
+      "name": "67P/Churyumov-Gerasimenko",
+      "order": 50,
+      "parent": "sol:sun",
+      "position_m": [
+        -244643063486.4346,
+        -713784696414.3013,
+        -351750940413.8053
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "SBDB:67P:orbit-K284/1:GM",
+          "retrieved_utc": "2026-10-09T14:42:31Z",
+          "sha256": "13fcb7fe5898a36316f62134dfa5ef2b03ee4dcf99a904815528ff748b72d6ba",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=67P&phys-par=1"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:67P:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:31Z",
+          "sha256": "13fcb7fe5898a36316f62134dfa5ef2b03ee4dcf99a904815528ff748b72d6ba",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=67P&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep. The project gravity-only model omits the comet's non-gravitational outgassing acceleration.",
+        "state_vector": {
+          "record_id": "90000703:JPL#K284/1:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:30Z",
+          "sha256": "42b26be388fd67528d9ac75379c299996dd9ef20371fe6ac9c56bcbca92185d3",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%2790000703%27"
+        }
+      },
+      "stable_id": "sol:67p",
+      "velocity_m_s": [
+        8121.687199383812,
+        374.6783092070679,
+        -689.1737976538795
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat415_merged_DE437",
+      "gravitational_parameter_m3_s2": 35123332.88208074,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "611"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "611"
+        }
+      ],
+      "mean_radius_m": 58200.0,
+      "name": "Epimetheus",
+      "order": 51,
+      "parent": "sol:saturn",
+      "position_m": [
+        957240520513.4531,
+        923188371657.4658,
+        340178150991.25836
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY611_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Epimetheus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "611:sat415_merged_DE437:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:32Z",
+          "sha256": "4c25cc6667a1570ef8ee604c3b43a94f0d4be77438d45d7297e4be6c062bde73",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27611%27"
+        }
+      },
+      "stable_id": "sol:epimetheus",
+      "velocity_m_s": [
+        6085.237441538329,
+        -1890.51422125624,
+        2274.742330587975
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat441l",
+      "gravitational_parameter_m3_s2": 475741.9551776972,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "612"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "612"
+        }
+      ],
+      "mean_radius_m": 18000.0,
+      "name": "Helene",
+      "order": 52,
+      "parent": "sol:saturn",
+      "position_m": [
+        957691368484.165,
+        923320908310.1127,
+        340131823744.0122
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY612_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Helene:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "612:sat441l:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:33Z",
+          "sha256": "9e32c9388698024eb9a4f002c451f8701c7768961e059ffd3e4a954157f478a4",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27612%27"
+        }
+      },
+      "stable_id": "sol:helene",
+      "velocity_m_s": [
+        -7493.530413238031,
+        16167.6980669077,
+        2116.939360265167
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat415_merged_DE437",
+      "gravitational_parameter_m3_s2": 371887.12475164747,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "615"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "615"
+        }
+      ],
+      "mean_radius_m": 15100.0,
+      "name": "Atlas",
+      "order": 53,
+      "parent": "sol:saturn",
+      "position_m": [
+        957207325495.991,
+        923401532606.1973,
+        340166246513.7215
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY615_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Atlas:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "615:sat415_merged_DE437:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:34Z",
+          "sha256": "4a4b427300888970c23c593e2fe2f6c4a7a384c12a6fa912866869009946ff1a",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27615%27"
+        }
+      },
+      "stable_id": "sol:atlas",
+      "velocity_m_s": [
+        -17236.25881731789,
+        -7219.3716786310315,
+        4662.492358090768
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat415_merged_DE437",
+      "gravitational_parameter_m3_s2": 10752080.0100761,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "616"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "616"
+        }
+      ],
+      "mean_radius_m": 43100.0,
+      "name": "Prometheus",
+      "order": 54,
+      "parent": "sol:saturn",
+      "position_m": [
+        957222466930.6111,
+        923218909519.9518,
+        340178407775.8482
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY616_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Prometheus:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "616:sat415_merged_DE437:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:36Z",
+          "sha256": "8ecbf0c919aa9618ccd5d7f5d0d660c53667f313c83b34d5dde4b236f88d188d",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27616%27"
+        }
+      },
+      "stable_id": "sol:prometheus",
+      "velocity_m_s": [
+        4536.278102688089,
+        -5311.3193685756305,
+        2647.7877761918107
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "sat415_merged_DE437",
+      "gravitational_parameter_m3_s2": 9290325.122028796,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "617"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "617"
+        }
+      ],
+      "mean_radius_m": 40600.0,
+      "name": "Pandora",
+      "order": 55,
+      "parent": "sol:saturn",
+      "position_m": [
+        957272723588.8953,
+        923454068995.3829,
+        340156721898.8395
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY617_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Pandora:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "617:sat415_merged_DE437:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:37Z",
+          "sha256": "76cdbe276954f73f2d82b47d170404e47a96ab01e0a6450b292b2d396d5cd4f4",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27617%27"
+        }
+      },
+      "stable_id": "sol:pandora",
+      "velocity_m_s": [
+        -22892.026378708968,
+        1057.766384482082,
+        4525.576441343444
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "plu060_merged",
+      "gravitational_parameter_m3_s2": 1496176.095836919,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "902"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "902"
+        }
+      ],
+      "mean_radius_m": 18000.0,
+      "name": "Nix",
+      "order": 56,
+      "parent": "sol:pluto",
+      "position_m": [
+        -1478401820749.5662,
+        -4185970180610.577,
+        -860829756757.8934
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY902_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Nix:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "902:plu060_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:38Z",
+          "sha256": "c4fdd60e8ead1ce0b7ce0db4fe3391d28c4974bfa53c8774a0c4d34c151538b1",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27902%27"
+        }
+      },
+      "stable_id": "sol:nix",
+      "velocity_m_s": [
+        5357.974519521176,
+        -1867.340918188253,
+        -2201.219355854085
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "plu060_merged",
+      "gravitational_parameter_m3_s2": 2007962.4736061008,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "903"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "903"
+        }
+      ],
+      "mean_radius_m": 18500.0,
+      "name": "Hydra",
+      "order": 57,
+      "parent": "sol:pluto",
+      "position_m": [
+        -1478367218759.0388,
+        -4185952380148.195,
+        -860928981143.3385
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY903_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Hydra:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "903:plu060_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:40Z",
+          "sha256": "72956e06b3c799ad81bf3d8ffa6f25e0286177cbe9c262a9d44f4762264ead00",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27903%27"
+        }
+      },
+      "stable_id": "sol:hydra",
+      "velocity_m_s": [
+        5186.864200005295,
+        -2037.71554770572,
+        -2270.044905444898
+      ]
+    },
+    {
+      "class": "natural_satellite",
+      "ephemeris_solution": "nep098_merged",
+      "gravitational_parameter_m3_s2": 23588731.979921702,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "804"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "804"
+        }
+      ],
+      "mean_radius_m": 40000.0,
+      "name": "Thalassa",
+      "order": 58,
+      "parent": "sol:neptune",
+      "position_m": [
+        2514011606256.196,
+        -3438187624671.296,
+        -1469885162008.306
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY804_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "Thalassa:mean-radius",
+          "retrieved_utc": "2026-10-09T14:41:22Z",
+          "sha256": "d48a005e6869b199796877492c894abb4c0fd49fe4819d27dfeb280f483aa440",
+          "source_name": "JPL Planetary Satellite Physical Parameters",
+          "source_uri": "https://ssd.jpl.nasa.gov/sats/phys_par/sep.html"
+        },
+        "model_limitations": "JPL state is an initial condition only; the project point-mass Newtonian model omits parent oblateness, tides, resonances, and ephemeris-fit dynamics.",
+        "state_vector": {
+          "record_id": "804:nep098_merged:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:41Z",
+          "sha256": "f0cdd564ce9878f5a9cc777f2cb86a6afd111aadd192824419046bc149c43783",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%27804%27"
+        }
+      },
+      "stable_id": "sol:thalassa",
+      "velocity_m_s": [
+        12239.53674406879,
+        10931.394021917651,
+        4464.061622607207
+      ]
+    },
+    {
+      "class": "asteroid",
+      "ephemeris_solution": "JPL#109",
+      "gravitational_parameter_m3_s2": 2023020987.1098285,
+      "identifiers": [
+        {
+          "authority": "Horizons",
+          "value": "15;"
+        },
+        {
+          "authority": "NAIF/SPK",
+          "value": "20000015"
+        },
+        {
+          "authority": "SBDB",
+          "value": "15"
+        }
+      ],
+      "mean_radius_m": 115844.5,
+      "name": "Eunomia",
+      "order": 59,
+      "parent": "sol:sun",
+      "position_m": [
+        -388137077153.81744,
+        183014547514.4238,
+        14687020154.83673
+      ],
+      "provenance": {
+        "gravitational_parameter": {
+          "record_id": "BODY2000015_GM",
+          "retrieved_utc": "2026-10-09T14:41:19Z",
+          "sha256": "169cfed3b0927e73929d0a1b5c931f9afb5167a83b921064127ffc54a673df0c",
+          "source_name": "JPL Horizons GM kernel",
+          "source_uri": "https://ssd.jpl.nasa.gov/ftp/xfr/gm_Horizons.pck"
+        },
+        "mean_radius": {
+          "record_id": "SBDB:15:diameter-to-characteristic-radius",
+          "retrieved_utc": "2026-10-09T14:42:43Z",
+          "sha256": "ed49ec6e467641cb5149ee6eb1afc0671f4ca1dea5ae8707b39b9ad8be6ad7b1",
+          "source_name": "NASA/JPL Small-Body Database API",
+          "source_uri": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=15&phys-par=1"
+        },
+        "model_limitations": "The small-body orbital solution is mutable and its covariance is not propagated; the project uses Newtonian point masses and a fixed timestep.",
+        "state_vector": {
+          "record_id": "15;:JPL#109:JD2451545.0",
+          "retrieved_utc": "2026-10-09T14:42:42Z",
+          "sha256": "0a853049032f2d597aeceecf9bf975625db86b5f9cd4866a6a69daa472835aed",
+          "source_name": "NASA/JPL Horizons API",
+          "source_uri": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&OBJ_DATA=YES&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27%400%27&TLIST=%272451545.0%27&TLIST_TYPE=JD&TIME_TYPE=TDB&REF_SYSTEM=ICRF&REF_PLANE=FRAME&VEC_TABLE=2&VEC_CORR=NONE&OUT_UNITS=KM-S&CSV_FORMAT=YES&COMMAND=%2715%3B%27"
+        }
+      },
+      "stable_id": "sol:eunomia",
+      "velocity_m_s": [
+        -8951.83965580769,
+        -11690.17090225957,
+        -8194.504077067173
+      ]
+    }
+  ],
+  "coordinate_contract": {
+    "epoch_julian_date": 2451545.0,
+    "epoch_label": "J2000.0 (JD 2451545.0 TDB)",
+    "normalized_position_unit": "m",
+    "normalized_velocity_unit": "m/s",
+    "origin": "Solar System Barycenter (0)",
+    "reference_frame": "ICRF",
+    "source_units": "KM-S",
+    "state_vector_kind": "GEOMETRIC",
+    "time_scale": "TDB"
+  },
+  "dataset_id": "jpl-ssd-j2000-60-v1",
+  "dataset_version": "1.0.0",
+  "deferred_catalog_expansion": [
+    {
+      "horizons_command": "136199;",
+      "name": "Eris",
+      "reason": "Resolve primary-body versus system mass and satellite treatment before admission."
+    },
+    {
+      "horizons_command": "136108;",
+      "name": "Haumea",
+      "reason": "Resolve system mass partition and a documented characteristic-radius convention for the triaxial body."
+    },
+    {
+      "horizons_command": "50000;",
+      "name": "Quaoar",
+      "reason": "Freeze Weywot-system mass partition and radius provenance before admission."
+    },
+    {
+      "horizons_command": "90482;",
+      "name": "Orcus",
+      "reason": "Freeze Vanth-system mass partition and radius provenance before admission."
+    },
+    {
+      "horizons_command": "225088;",
+      "name": "Gonggong",
+      "reason": "Freeze Xiangliu-system mass partition and radius provenance before admission."
+    },
+    {
+      "horizons_command": "136472;",
+      "name": "Makemake",
+      "reason": "A mass source with adequate published uncertainty is still required."
+    },
+    {
+      "horizons_command": "802",
+      "name": "Nereid",
+      "reason": "The current JPL satellite table publishes zero GM, which fails admission."
+    },
+    {
+      "horizons_command": "90000030",
+      "name": "1P/Halley",
+      "reason": "Horizons and SBDB do not publish an admissible positive GM."
+    },
+    {
+      "horizons_command": "90000091",
+      "name": "2P/Encke",
+      "reason": "Horizons and SBDB do not publish an admissible positive GM."
+    }
+  ],
+  "roster_sha256": "2df8e58be8924f7a49b44ca761db8ffb0e0a1204689844044624c907d65273cd",
+  "schema_version": 1,
+  "snapshot_manifest_sha256": "82b271f3fe7470172693c9ab4810a664153ab59f94f293498000b19504749229"
+}

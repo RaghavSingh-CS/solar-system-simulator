@@ -1,3 +1,8 @@
 *.sh text eol=lf
 data/benchmarks/stage4_cuda/pilot/** binary
 data/benchmarks/stage4_cuda/run/** binary
+data/astronomy/solar_system_60_v1/raw/** binary
+data/astronomy/solar_system_60_v1/roster.json text eol=lf
+data/astronomy/solar_system_60_v1/snapshot_manifest.json text eol=lf
+data/astronomy/solar_system_60_v1/normalized/catalog.json text eol=lf
+src/astronomy/generated/solar_system_60_v1.generated.inc text eol=lf
