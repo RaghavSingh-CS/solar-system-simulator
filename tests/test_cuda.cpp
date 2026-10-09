@@ -173,7 +173,17 @@ int main(int argc, char** argv) {
                       << NBODY_BUILD_CONFIGURATION << "\"}\n";
             return 0;
         }
-        require(nbody::cuda_device_count() > 0, "no CUDA device available");
+        int device_count = 0;
+        try {
+            device_count = nbody::cuda_device_count();
+        } catch (const std::exception& error) {
+            std::cout << "SKIP: CUDA runtime has no available device: " << error.what() << '\n';
+            return 77;
+        }
+        if (device_count == 0) {
+            std::cout << "SKIP: CUDA support compiled, but no CUDA device is available\n";
+            return 77;
+        }
         nbody::CudaForceBackend cuda;
         const auto binary = nbody::make_analytic_circular_two_body();
         compare_accelerations(binary.initial_state, cuda);

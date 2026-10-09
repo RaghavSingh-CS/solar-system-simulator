@@ -86,6 +86,21 @@ void test_controller() {
         }
         require(rejected, "OpenMP selection succeeded in a build without OpenMP");
     }
+
+    if (!nbody::visualization::SimulationController::cuda_available()) {
+        const auto state_before_selection = controller.state();
+        const auto backend_before_selection = controller.backend_kind();
+        bool rejected = false;
+        try {
+            controller.select_backend(nbody::visualization::BackendKind::cuda);
+        } catch (const std::exception&) {
+            rejected = true;
+        }
+        require(rejected, "CUDA selection succeeded without an available CUDA device");
+        require(controller.backend_kind() == backend_before_selection &&
+                    same_state(controller.state(), state_before_selection),
+                "failed CUDA selection changed the active backend or state");
+    }
 }
 
 void test_render_space_is_read_only() {
@@ -570,11 +585,24 @@ void test_compute_experiment_scaling_and_comparison() {
                 "large-N Compute Experiment render snapshot is incomplete");
     }
 
-    const auto ordinary = nbody::visualization::interactive_workload_policy(1024, false);
-    const auto guarded = nbody::visualization::interactive_workload_policy(4096, true);
-    const auto prohibited = nbody::visualization::interactive_workload_policy(100000, true);
+    const auto ordinary = nbody::visualization::interactive_workload_policy(
+        1024, nbody::visualization::WorkloadBackend::sequential);
+    const auto guarded = nbody::visualization::interactive_workload_policy(
+        4096, nbody::visualization::WorkloadBackend::openmp);
+    const auto cuda_guarded = nbody::visualization::interactive_workload_policy(
+        4096, nbody::visualization::WorkloadBackend::cuda);
+    const auto sequential_guarded = nbody::visualization::interactive_workload_policy(
+        4096, nbody::visualization::WorkloadBackend::sequential);
+    const auto prohibited = nbody::visualization::interactive_workload_policy(
+        100000, nbody::visualization::WorkloadBackend::cuda);
+    const auto cuda_boundary = nbody::visualization::interactive_workload_policy(
+        8192, nbody::visualization::WorkloadBackend::cuda);
+    const auto cuda_above_boundary = nbody::visualization::interactive_workload_policy(
+        16384, nbody::visualization::WorkloadBackend::cuda);
     require(ordinary.continuous_advancement && ordinary.live_cpu_comparison &&
                 !guarded.continuous_advancement && guarded.manual_single_step &&
+                cuda_guarded.manual_single_step && !sequential_guarded.manual_single_step &&
+                cuda_boundary.manual_single_step && !cuda_above_boundary.manual_single_step &&
                 !guarded.history_trails && !prohibited.manual_single_step &&
                 prohibited.warning_required,
             "large-N interactive feasibility policy is unsafe or incomplete");

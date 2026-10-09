@@ -74,6 +74,7 @@ enum class HelpTopic {
     simulation_speed,
     sequential_backend,
     openmp_backend,
+    cuda_backend,
     openmp_threads,
     workload_size,
     compare_cpu_backends,

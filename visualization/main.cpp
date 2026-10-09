@@ -48,6 +48,7 @@ struct Options {
     std::size_t bodies{32};
     std::uint64_t seed{24301};
     int openmp_threads{4};
+    int cuda_device{0};
     int width{1440};
     int height{900};
 };
@@ -57,6 +58,7 @@ void print_usage(const char* program) {
               << "  --scenario solar|synthetic        Default: solar\n"
               << "  --backend sequential|openmp|cuda  CUDA is accepted only in CUDA-enabled viewers\n"
               << "  --threads N                        OpenMP threads (default 4)\n"
+              << "  --device N                         CUDA device index (default 0)\n"
               << "  --bodies N                         Synthetic body count (default 32)\n"
               << "  --seed N                           Synthetic seed (default 24301)\n"
               << "  --width PIXELS --height PIXELS     Initial window size\n";
@@ -86,6 +88,8 @@ Options parse_options(int argc, char** argv) {
             options.backend = value;
         } else if (argument == "--threads") {
             options.openmp_threads = std::stoi(value);
+        } else if (argument == "--device") {
+            options.cuda_device = std::stoi(value);
         } else if (argument == "--bodies") {
             options.bodies = std::stoull(value);
         } else if (argument == "--seed") {
@@ -102,14 +106,10 @@ Options parse_options(int argc, char** argv) {
         options.backend != "cuda") {
         throw std::invalid_argument("backend must be sequential, openmp, or cuda");
     }
-    if (options.backend == "cuda") {
-        throw std::runtime_error(
-            "CUDA visualization is unavailable in this build; choose sequential or openmp.");
-    }
     if (options.bodies < 2 || options.openmp_threads <= 0 ||
-        options.width <= 0 || options.height <= 0) {
+        options.cuda_device < 0 || options.width <= 0 || options.height <= 0) {
         throw std::invalid_argument(
-            "bodies >= 2, positive threads, and positive window dimensions are required");
+            "bodies >= 2, positive threads, non-negative device, and positive window dimensions are required");
     }
     if (options.scenario == ScenarioKind::synthetic &&
         !nbody::visualization::is_supported_compute_body_count(options.bodies)) {
@@ -252,6 +252,8 @@ struct ApplicationModel {
     std::string live_comparison_error;
     std::size_t synthetic_body_count{32};
     std::uint64_t synthetic_seed{24301};
+    int preferred_cuda_device{0};
+    bool cuda_device_available{false};
     bool show_trails{true};
     bool show_labels{true};
     bool show_reference_orbits{true};
@@ -267,7 +269,8 @@ struct ApplicationModel {
               {scenario.dt_s,
                scenario.speed_presets[scenario.default_speed_index].steps_per_frame,
                backend,
-               options.openmp_threads}),
+               options.openmp_threads,
+               options.cuda_device}),
           render_space(
               scenario.initial_state,
               scenario.styles,
@@ -276,7 +279,10 @@ struct ApplicationModel {
           speed_index(scenario.default_speed_index),
           selected_body(scenario.kind == ScenarioKind::solar_system ? 3U : 0U),
           synthetic_body_count(options.bodies),
-          synthetic_seed(options.seed) {
+          synthetic_seed(options.seed),
+          preferred_cuda_device(options.cuda_device),
+          cuda_device_available(
+              nbody::visualization::SimulationController::cuda_available(options.cuda_device)) {
         rebuild_optional_analysis();
         apply_workload_safety();
     }
@@ -285,8 +291,15 @@ struct ApplicationModel {
         if (scenario.kind == ScenarioKind::solar_system) {
             return {};
         }
+        nbody::visualization::WorkloadBackend backend =
+            nbody::visualization::WorkloadBackend::sequential;
+        if (controller.backend_kind() == BackendKind::openmp) {
+            backend = nbody::visualization::WorkloadBackend::openmp;
+        } else if (controller.backend_kind() == BackendKind::cuda) {
+            backend = nbody::visualization::WorkloadBackend::cuda;
+        }
         return nbody::visualization::interactive_workload_policy(
-            synthetic_body_count, controller.backend_kind() == BackendKind::openmp);
+            synthetic_body_count, backend);
     }
 
     void rebuild_optional_analysis() {
@@ -378,6 +391,8 @@ void log_backend(const nbody::visualization::SimulationController& controller) {
     std::cout << "active_backend=" << controller.backend_name();
     if (controller.backend_kind() == BackendKind::openmp) {
         std::cout << " threads=" << controller.openmp_threads();
+    } else if (controller.backend_kind() == BackendKind::cuda) {
+        std::cout << " device=" << controller.cuda_device();
     }
     std::cout << '\n';
 }
@@ -407,6 +422,9 @@ void key_callback(GLFWwindow* window, int key, int, int action, int) {
             log_backend(app.controller);
         } else if (key == GLFW_KEY_2 && initial_press) {
             app.controller.select_backend(BackendKind::openmp, input->preferred_openmp_threads);
+            log_backend(app.controller);
+        } else if (key == GLFW_KEY_3 && initial_press) {
+            app.controller.select_backend(BackendKind::cuda, 1, app.preferred_cuda_device);
             log_backend(app.controller);
         } else if (key == GLFW_KEY_A) {
             input->camera->orbit(-8.0F, 0.0F);
@@ -730,6 +748,20 @@ UiActions draw_control_panel(
     }
     help_for_last_item(nbody::visualization::HelpTopic::openmp_backend);
     ImGui::EndDisabled();
+    ImGui::BeginDisabled(!app.cuda_device_available);
+    if (ImGui::RadioButton("CUDA", app.controller.backend_kind() == BackendKind::cuda)) {
+        app.controller.select_backend(BackendKind::cuda, 1, app.preferred_cuda_device);
+        app.live_comparison.reset();
+        app.apply_workload_safety();
+    }
+    help_for_last_item(nbody::visualization::HelpTopic::cuda_backend);
+    ImGui::EndDisabled();
+    if (!app.cuda_device_available) {
+        ImGui::TextDisabled(
+            nbody::visualization::SimulationController::cuda_compiled()
+                ? "CUDA device unavailable"
+                : "CUDA support not compiled");
+    }
     if (app.controller.backend_kind() == BackendKind::openmp ||
         app.scenario.kind == ScenarioKind::synthetic) {
         const int hardware_threads =
@@ -1085,7 +1117,23 @@ void draw_labels(
 int main(int argc, char** argv) {
     try {
         const Options options = parse_options(argc, argv);
-        const auto backend = options.backend == "openmp" ? BackendKind::openmp : BackendKind::sequential;
+        BackendKind backend = BackendKind::sequential;
+        if (options.backend == "openmp") {
+            backend = BackendKind::openmp;
+        } else if (options.backend == "cuda") {
+            if (!nbody::visualization::SimulationController::cuda_compiled()) {
+                throw std::runtime_error(
+                    "CUDA visualization is unavailable in this build; configure with "
+                    "-DNBODY_ENABLE_CUDA=ON or choose sequential/openmp.");
+            }
+            if (!nbody::visualization::SimulationController::cuda_available(
+                    options.cuda_device)) {
+                throw std::runtime_error(
+                    "requested CUDA device is unavailable; choose an available --device index "
+                    "or a CPU backend.");
+            }
+            backend = BackendKind::cuda;
+        }
         ApplicationModel app(options, backend);
         nbody::visualization::OrbitCamera camera(35.0F, 28.0F, 22.0F);
 

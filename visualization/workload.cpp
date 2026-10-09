@@ -11,7 +11,7 @@ bool is_supported_compute_body_count(std::size_t body_count) noexcept {
 
 InteractiveWorkloadPolicy interactive_workload_policy(
     std::size_t body_count,
-    bool openmp_backend) noexcept {
+    WorkloadBackend backend) noexcept {
     if (body_count <= 1024) {
         return {true, true, true, true, true, false, 32};
     }
@@ -19,7 +19,9 @@ InteractiveWorkloadPolicy interactive_workload_policy(
         return {false, true, false, false, false, true, 1};
     }
     if (body_count <= 8192) {
-        return {false, openmp_backend, false, false, false, true, 1};
+        const bool bounded_parallel_step =
+            backend == WorkloadBackend::openmp || backend == WorkloadBackend::cuda;
+        return {false, bounded_parallel_step, false, false, false, true, 1};
     }
     return {false, false, false, false, false, true, 1};
 }

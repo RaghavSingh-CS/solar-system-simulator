@@ -20,10 +20,16 @@ struct InteractiveWorkloadPolicy {
     std::size_t maximum_steps_per_frame{32};
 };
 
+enum class WorkloadBackend {
+    sequential,
+    openmp,
+    cuda,
+};
+
 bool is_supported_compute_body_count(std::size_t body_count) noexcept;
 
 InteractiveWorkloadPolicy interactive_workload_policy(
     std::size_t body_count,
-    bool openmp_backend) noexcept;
+    WorkloadBackend backend) noexcept;
 
 }  // namespace nbody::visualization

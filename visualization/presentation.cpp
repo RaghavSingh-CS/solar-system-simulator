@@ -112,6 +112,7 @@ const char* help_text(HelpTopic topic) noexcept {
         "Controls simulated time advanced per rendered frame; the integration timestep is unchanged.",
         "Compute gravitational forces using one CPU thread.",
         "Compute gravitational forces in parallel using shared-memory CPU threads.",
+        "Advance each fixed-step frame batch with the CUDA Velocity Verlet executor. No CPU fallback occurs.",
         "Number of CPU threads requested by the OpenMP force backend.",
         "Choose a deterministic direct N-body workload. Very large sizes are display-only in the viewer.",
         "Time isolated Sequential and OpenMP copies and validate their final states without advancing the view.",
