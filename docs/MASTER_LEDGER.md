@@ -26,6 +26,7 @@ Last updated: 2026-10-09
 | Stage 6D.2 stable Sun sizing | **IMPLEMENTED / USER VISUAL VALIDATION PENDING** | Camera-dependent 20--36 px Sun radius invariant to orbital phase |
 | Stage 6D.3 inner-orbit shape verification | Complete | Elements, 700-day integrated extrema, reference guides, trails, projection, and Sun invariant verified; no defect or visual change |
 | CUDA visualizer integration | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Host-authoritative batched CUDA controller path; CPU-only 5/5 and OpenMP 6/6 CTests passed; CUDA compilation/runtime unverified on this AMD-only machine |
+| Astronomical catalog foundation | **IMPLEMENTED LOCALLY / 60-BODY DATASET PENDING** | Immutable admitted records, stable IDs/parents, shared SSB/ICRF/TDB/SI contract, source custody, deterministic order, GM-derived mass, primary >=60-body admission gate, and CUDA-disabled regression validation |
 
 ## Decisions and rationale
 
@@ -978,6 +979,103 @@ RTX 4050, a separate non-Stage-5 measurement session must:
 This feature validation must remain separate from Stage 5 pilot/calibration/
 held-out evidence collection and must not consume, tune, or reinterpret the
 frozen selector protocol.
+
+## Astronomical catalog foundation
+
+### Implementation record
+
+The first gravitational-sandbox increment adds only a dependency-isolated
+`nbody_astronomy` catalog library and focused tests. It does not contain a real
+astronomical body record, retrieve Horizons data, construct a new simulation
+scenario, or change the frozen legacy nine-body state.
+
+Catalog ingestion definitions are mutable staging values. Admission validates,
+sorts, converts, and stores them as records exposing only const access. Each
+record requires a stable ID, display name, body class, at least one external
+identifier, finite geometric state vector, finite positive sourced GM, finite
+positive sourced mean radius, three complete provenance records, and explicit
+model limitations. A provenance record binds its source name, URI, record ID,
+retrieval time, and 64-hex-digit SHA-256.
+
+The shared coordinate contract is deliberately narrow: one named finite epoch,
+TDB, ICRF, Solar System barycenter origin, geometric vectors, metres, and metres
+per second. Every admitted record repeats and must exactly match that contract,
+preventing mixed epochs, origins, frames, aberration modes, or units. Explicit
+contiguous order values are sorted independently of ingestion order. Stable
+IDs, display names, and authority/value identifier pairs are unique; parents
+must exist and precede their children.
+
+Mass is never accepted as an independent catalog input. It is derived as
+`mass_kg = GM_m3_s2 / gravitational_constant`, using the existing project
+constant after validating both operands and the result. The primary Solar
+System policy additionally requires at least 60 admitted bodies, exactly one
+parentless star, a parent for every non-star, and Solar-compatible parent
+classes. This is an admission gate, not evidence that any candidate roster has
+passed it.
+
+No 60-body candidate roster is present in the repository or the locally
+available task attachments. Its identifier, state-vector, GM, radius,
+provenance, substitution, and model-limitation audit is therefore **PENDING**.
+No roster item or substitute has been inferred or invented in this increment.
+
+### Bug and risk record
+
+The first focused GCC build exposed that `std::vector::emplace_back` could not
+invoke the immutable record's private constructor through the allocator. The
+catalog now constructs the record inside its friend and moves the completed
+value into the vector. The public immutability and validation boundary are
+unchanged.
+
+Open scientific and implementation risks are:
+
+- the approved >=60-body roster and any defensible substitutions remain
+  unavailable for audit;
+- Horizons solution identities, common-epoch vectors, GM/radius source
+  snapshots, retrieval times, and checksums do not yet exist;
+- exact equality of the repeated coordinate contract is intentional for a
+  generated common-epoch dataset but requires deterministic canonicalization
+  by the future importer;
+- a positive mean radius is currently mandatory, so a real object without a
+  defensible radius will be rejected rather than admitted as a decorative or
+  massless placeholder;
+- the catalog does not yet create `SimulationState`, drive rendering, expose
+  GUI selection, or support removal experiments.
+
+### Validation record
+
+Focused Release catalog execution passed and covers GM-to-mass conversion,
+invalid GM/G rejection, immutable const record access, ingestion-order
+independence, stable-ID lookup, retained parent identity, shared-coordinate
+rejection, unsupported-vector-mode rejection, provenance/hash/model-limitation
+rejection, duplicate stable/external identity rejection, unknown and late
+parent rejection, non-finite state rejection, positive GM/radius admission,
+and the exact 60-record lower boundary. The 60-record case is explicitly a
+synthetic unit-test fixture, not astronomical data.
+
+Final CUDA-disabled Release regression results on the AMD Windows development
+machine were:
+
+- Fresh headless/default CPU-only configuration with visualization, OpenMP,
+  CUDA, and MPI disabled: configure/build passed and CTest passed `5/5`.
+- Sequential viewer configuration: CTest passed `6/6`.
+- OpenMP viewer configuration: CTest passed `7/7`, including the existing
+  OpenMP validation.
+- No CUDA compiler, device test, MPI test, benchmark, Horizons request, or
+  real-data validation was run for this increment.
+
+### Frozen boundaries and deferred work
+
+No existing physics, Solar scenario, CUDA, OpenMP, MPI, visualization,
+synthetic workload, benchmark, Stage 5 protocol, Stage 5 tool, or retained
+evidence file changed. `nbody_astronomy` links to `nbody_core`, while existing
+Stage 5 executables do not link to the new library.
+
+Curated one-body removal, paired long-horizon impact measurement, expert-mode
+Sun-removal architecture, scenario composition, GUI controls, CUDA experiment
+execution, 60-body data generation, and approximate/large-scale solvers remain
+unimplemented. Existing 50K--100K synthetic selections remain display-only at
+those sizes. A 1920x1080 RTX 4050 target of 30--45 FPS is a future measurable
+goal, not an achieved or predicted result.
 
 ## Known limitations
 

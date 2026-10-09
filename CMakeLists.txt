@@ -32,10 +32,19 @@ add_library(nbody_core
 target_include_directories(nbody_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_features(nbody_core PUBLIC cxx_std_17)
 
+add_library(nbody_astronomy
+    src/astronomy/catalog.cpp
+)
+target_include_directories(nbody_astronomy PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_features(nbody_astronomy PUBLIC cxx_std_17)
+target_link_libraries(nbody_astronomy PUBLIC nbody_core)
+
 if(MSVC)
     target_compile_options(nbody_core PRIVATE /W4 /permissive-)
+    target_compile_options(nbody_astronomy PRIVATE /W4 /permissive-)
 else()
     target_compile_options(nbody_core PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(nbody_astronomy PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 if(NBODY_ENABLE_CUDA)
@@ -274,6 +283,10 @@ if(BUILD_TESTING)
     target_compile_definitions(nbody_solar_system_tests PRIVATE NBODY_BUILD_CONFIGURATION="$<CONFIG>")
     nbody_embed_stage5_identity(nbody_solar_system_tests)
     add_test(NAME nbody_solar_system COMMAND nbody_solar_system_tests)
+
+    add_executable(nbody_astronomical_catalog_tests tests/test_astronomical_catalog.cpp)
+    target_link_libraries(nbody_astronomical_catalog_tests PRIVATE nbody_astronomy)
+    add_test(NAME nbody_astronomical_catalog COMMAND nbody_astronomical_catalog_tests)
 
     if(NBODY_ENABLE_OPENMP)
         add_executable(nbody_openmp_tests tests/test_openmp.cpp)
