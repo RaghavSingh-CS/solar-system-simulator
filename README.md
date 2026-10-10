@@ -67,12 +67,36 @@ error rather than a CPU fallback.
 
 The first visualization configure requires network access to fetch exact pinned revisions of GLFW 3.4, GLM 1.0.1, and Dear ImGui 1.92.9b. The generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, so Python, Jinja2, copied DLLs, and runtime asset discovery are not required. Shaders are embedded in the executable.
 
-The default is a nine-body Solar System demonstration at J2000.0. Planet positions come from JPL's published 1800--2050 approximate mean-element model; centered finite differences of that same model provide initial velocities, then the state is shifted to its center of mass. This is a deterministic educational approximation, not a Horizons ephemeris. The physical timestep remains fixed at six hours and named UI speed presets change only the number of physics steps per rendered frame. A deterministic seeded `Compute Experiment` remains available with `--scenario synthetic`.
+The default remains the unchanged nine-body Solar System demonstration at
+J2000.0. Planet positions come from JPL's published 1800--2050 approximate
+mean-element model; centered finite differences of that same model provide
+initial velocities, then the state is shifted to its center of mass. This is a
+deterministic educational approximation, not a Horizons ephemeris. Its physical
+timestep remains fixed at six hours.
+
+`--scenario catalog` selects the separate `jpl-ssd-j2000-60-v1` sandbox: 60
+individually identified, gravitationally active bodies initialized from the
+committed geometric SSB-centered ICRF snapshot at JD 2451545.0 TDB. Its initial
+fixed-step policy is a provisional 60 seconds. A one-day 300/150/75-second
+study rejected 300 seconds for fast satellites (Metis was the worst case); 60
+versus 30 seconds reduced the worst parent-relative final-position difference
+to about `1.07e-3`. This
+bounded convergence result is not long-horizon ephemeris validation. A
+deterministic seeded `Compute Experiment` remains available with
+`--scenario synthetic`.
 
 Controls:
 
 - The themed ImGui panel separates primary simulation/compute/health controls from collapsible technical details. Numerical health compares live drift against the unchanged `5e-6` energy and `5e-10` angular-momentum bounds.
-- `Overview`, `Inner System`, `Earth`, `Jupiter`, and `Saturn` provide deterministic demo framing without distorting physical positions.
+- Catalog composition checkboxes select gravitational inclusion; per-body and
+  body-class visibility controls affect rendering only. Excluded major sources
+  or parents produce explicit warnings.
+- `Overview`, `Inner System`, `Earth-Moon`, the four giant-planet subsystems,
+  `Pluto-Charon`, and `Asteroid Belt` use stable IDs and local double-precision
+  render origins without changing SSB physics coordinates.
+- Local subsystem trails subtract the matching historical parent position at
+  each sample; labels, picking, guides, rings, and bodies use the same view
+  transform.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
 - Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.

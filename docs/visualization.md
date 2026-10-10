@@ -38,6 +38,48 @@ committed one-Mercury-orbit check (352 six-hour steps) observed relative energy
 drift `6.46017e-09` and angular-momentum-vector drift `1.61093e-16` on the
 validation machine; those values validate this build and test case only.
 
+## Horizons-derived 60-body sandbox
+
+The viewer also exposes a distinct `jpl-ssd-j2000-60-v1` scenario. It never
+mixes the legacy mean-element state with catalog records. All included bodies
+come from the committed catalog's geometric SSB-centered J2000 ICRF Cartesian
+state at JD 2451545.0 TDB, with SI position/velocity, sourced positive radius,
+and mass derived from sourced GM using the project's unchanged gravitational
+constant. The dataset version and provenance contract are visible in the
+technical panel.
+
+The default extended composition contains all 60 records in deterministic
+parent-before-child order. The catalog panel can create a physical subset by
+stable ID; this explicitly rebuilds the solver state and reports missing major
+gravitational sources or catalog parents. A separate visibility mask controls
+individual and class-level rendering. Hiding a body never removes its force.
+Metadata also records the future curated counterfactual-removal eligibility,
+but this increment provides no removal experiment control.
+
+Effective render visibility is the intersection of three independent policies:
+membership in the active subsystem view, the body-class filter, and the
+individual body's visibility preference. Changing a class or individual
+preference never changes active-view membership, so re-enabling a class cannot
+reveal bodies outside the current subsystem. Returning to Overview restores
+full view membership while retaining the user's class and individual choices.
+None of these presentation policies changes solver composition.
+
+The extended scenario uses a provisional fixed timestep of 60 seconds. A
+one-day three-level check found worst parent-relative final-position differences
+of `2.661430167e-2` for 300 versus 150 seconds and `6.676367043e-3` for 150
+versus 75 seconds, so the earlier 300-second proposal was rejected. The
+selected 60-second policy differed from 30 seconds by `1.069240913e-3`
+(`138269.1228 m` worst absolute parent-relative difference); Metis was the
+worst normalized case at every refinement. During the one-day 60-second run,
+the closest center separation was Jupiter--Metis at `1.831596045` times their
+combined sourced radii, so no physical-radius contact occurred in that bounded
+check. This is not a general close-encounter safety result. The 300-second
+run's relative global energy drift was `5.050393981e-11`; that small global
+drift does not override the fast-moon phase error. The 60-second policy remains
+explicitly unvalidated for long horizons and against later Horizons states.
+Point-mass dynamics omit oblateness, tides, relativity, non-gravitational comet
+forces, adaptive steps, and close-encounter regularization.
+
 ## Dependency acquisition
 
 Visualization is guarded by `NBODY_BUILD_VISUALIZATION` and is `OFF` by
@@ -72,7 +114,7 @@ configure with `-DNBODY_ENABLE_CUDA=ON` and select it with
 `--backend cuda --device 0` or the enabled CUDA control. The viewer never
 silently substitutes a CPU backend.
 
-Options are `--scenario solar|synthetic`, `--backend sequential|openmp|cuda`,
+Options are `--scenario solar|catalog|synthetic`, `--backend sequential|openmp|cuda`,
 `--threads N`, `--device N`, `--bodies N`, `--seed N`, `--width N`, and
 `--height N`. Body count and seed apply to the synthetic scenario. CUDA is
 accepted only when support was compiled and the requested device is available;
@@ -94,21 +136,23 @@ upload/integration/download operation per requested frame batch. Host
 `SimulationState` remains authoritative at completed advancement boundaries;
 there is no CUDA/OpenGL interoperability or automatic backend selection.
 
-The Solar scenario uses a six-hour timestep. Named presets map to 1, 4, 16, or
+The legacy Solar scenario uses a six-hour timestep. Named presets map to 1, 4, 16, or
 64 steps per render: six hours, one day, four days, or sixteen days of simulated
 time. Trails are sampled every simulated day and retained in a bounded deque.
 The synthetic fixture uses its established deterministic generator and a
 10-second timestep.
 
-Positions, trails, orbit guides, labels, rings, and markers share one fixed
-linear render transform derived from the initial state. Body centers remain at
-their linearly transformed physical coordinates. Display radii are presentation
-only: the Sun uses a stable camera-dependent 20--36 px screen-space radius and
-other bodies use 3--13 px bounds. Planet positions never influence the Sun's
-displayed size. At distant scales, exaggerated Sun and Mercury glyphs may
-overlap; depth and the stable callout preserve association without moving either
-center. No position distortion is used and no display value mutates mass,
-position, velocity, force, or diagnostics.
+Positions, trails, orbit guides, labels, rings, picking, and markers share one
+linear render transform. Overview uses the SSB origin. Subsystem views first
+subtract a moving local origin in binary64 and only then convert the offset to
+render floats; their view scale is fixed when the preset is selected. Physics
+coordinates remain absolute SSB-centered SI values. Parent-relative trails
+subtract the matching historical parent position for every sample instead of
+subtracting the current parent from past child points. Display radii are
+presentation only: the Sun uses a stable camera-dependent 20--36 px screen-
+space radius and other bodies use 3--13 px bounds. No position distortion is
+used and no display value mutates mass, position, velocity, force, or
+diagnostics.
 
 ## Stage 6C presentation policy
 
@@ -128,7 +172,12 @@ and **NOT BENCHMARK EVIDENCE**.
 
 ### Camera and scale
 
-Five deterministic Solar compositions coexist with manual orbit/dolly:
+The legacy deterministic compositions coexist with manual orbit/dolly, and the
+catalog adds Earth-Moon, Galilean/Jovian, Saturnian, Uranian, Neptune-Triton,
+Pluto-Charon, and asteroid-belt profiles. All profile membership, focus, and
+local origins resolve through stable IDs rather than catalog indices.
+
+The legacy views are:
 
 - `Overview`: complete outer system at the established linear scale;
 - `Inner System`: Sun through Mars readable in one frame;
@@ -240,8 +289,8 @@ reconstructs state and dependent histories consistently.
 
 - Click near a visible body to select it; labels outside or behind the view are
   suppressed.
-- Use `Focus Selected` for any body or the five deterministic Solar camera
-  presets for repeatable live-demo and screenshot composition.
+- Use `Focus Selected` for any body or the stable-ID astronomical camera
+  profiles for repeatable live-demo and screenshot composition.
 - Left-drag, `A`/`D`, or arrow keys orbit; mouse wheel or `W`/`S` dollies.
 - `Space` pauses/resumes, `R` resets exactly, `C` returns to overview, and
   `Esc` exits. ImGui capture prevents camera shortcuts while editing the UI.

@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-10-09
+Last updated: 2026-10-10
 
 ## Stage status
 
@@ -27,6 +27,7 @@ Last updated: 2026-10-09
 | Stage 6D.3 inner-orbit shape verification | Complete | Elements, 700-day integrated extrema, reference guides, trails, projection, and Sun invariant verified; no defect or visual change |
 | CUDA visualizer integration | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Host-authoritative batched CUDA controller path; CPU-only 5/5 and OpenMP 6/6 CTests passed; CUDA compilation/runtime unverified on this AMD-only machine |
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
+| 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | Barnes--Hut large-N solver roadmap | **REQUIRED / UNIMPLEMENTED** | Sequential, OpenMP, and CUDA Barnes--Hut implementations, numerical verification against direct force, and controlled large-N performance evaluation are mandatory future work |
 
 ## Decisions and rationale
@@ -61,6 +62,14 @@ Last updated: 2026-10-09
   `SimulationState` remains authoritative at completed advancement boundaries;
   no CUDA/OpenGL interoperability, force-law change, or automatic selection is
   introduced.
+- The extended catalog scenario is separate from the byte-for-byte unchanged
+  legacy nine-body approximation. Physical inclusion rebuilds solver state;
+  visibility is render-only; future curated removal eligibility is metadata
+  only and no counterfactual controller is present.
+- The 60-body direct-force scenario starts with a provisional 60-second fixed
+  timestep. Bounded convergence rejected 300 seconds for fast satellites, but
+  neither conservation nor same-initial-state timestep convergence is evidence
+  of long-horizon agreement with JPL ephemerides.
 
 ## Assumptions and unresolved questions
 
@@ -1174,11 +1183,111 @@ or experimental evidence changed. Frozen Stage 5 remains unchanged. Sequential,
 OpenMP, and CUDA Barnes--Hut plus numerical verification and large-N performance
 evaluation remain mandatory and unimplemented.
 
+## 60-body scenario composition and visualization
+
+### Implementation record
+
+This uncommitted increment on `feature/cuda-visualizer` begins at
+`fb44b3537f3a3b7d7718ffc8e92f4db1022ccc5d`. It adds a second, strictly separate
+astronomical scenario backed by `jpl-ssd-j2000-60-v1`; the legacy approximate
+nine-body constructor, values, timestep, and reference paths remain unchanged.
+The default extended composition admits all 60 catalog records. Explicit
+stable-ID subsets are validated against the immutable catalog and emitted in
+deterministic catalog order, retaining parent relationships and complete
+catalog states. Unknown/duplicate IDs and fewer than two solver bodies are
+rejected. Excluded planets, the Sun, and included children whose parents are
+absent produce visible composition warnings.
+
+Solver inclusion, rendering visibility, and future curated counterfactual
+eligibility are distinct data. Applying a subset replaces the physical solver
+state; hiding an individual body or class changes only a `RenderBody` visibility
+flag. Effective visibility is the intersection of active subsystem membership,
+the user's class filters, and per-body preferences; these masks remain separate
+so changing a filter cannot reveal an out-of-profile body. Scenario and subset
+replacement preserve the controller's prior paused/running state while loading
+the replacement at time zero. The future eligibility flag currently identifies
+planets/dwarf planets; it does not expose removal controls or alter forces.
+
+Overview, Inner System, Earth-Moon, Jupiter/Galilean, Saturnian, Uranian,
+Neptune-Triton, Pluto-Charon, and asteroid-belt profiles resolve membership and
+focus from stable IDs. Local profiles subtract their moving origin in binary64
+before float conversion and freeze the view scale until another profile/focus
+operation. Bodies, trails, reference guides, labels, rings, picking, and
+markers use that transform. Local history trails subtract the matching parent
+history sample rather than a current parent position. Absolute simulation state
+remains SSB-centered SI. Physical radii remain metadata; screen-space radius
+exaggeration is explicitly presentation-only.
+
+The UI exposes legacy/catalog/synthetic scenario selection, the 60-record
+physical composition checklist, independent selected-body and class visibility,
+stable-ID focus and subsystem profiles, backend/solver identity, dataset
+provenance, fixed timestep, composition warnings, and scientific limitations.
+Sequential/OpenMP behavior remains available without CUDA. Existing optional
+CUDA selection and host-authoritative batched execution are reused unchanged;
+no kernel, force law, integrator, automatic backend selector, or CUDA/OpenGL
+interop was added.
+
+### Scientific timestep and risk record
+
+The initially proposed 300-second step was rejected. Over one simulated day,
+the worst final parent-relative difference was `2.661430167e-2` between 300 and
+150 seconds (`3448404.503 m`) and `6.676367043e-3` between 150 and 75 seconds
+(`863729.1314 m`). The approximately fourfold refinement is consistent with
+second-order convergence, but the 300-second fast-satellite phase error is not
+acceptable as the starting viewer policy. The implemented provisional policy
+is 60 seconds; its 60-versus-30-second one-day maximum parent-relative
+difference was `1.069240913e-3` (`138269.1228 m`). The 300-second global
+relative energy drift was `5.050393981e-11` and the 75-second drift was
+`3.137197214e-12`, demonstrating why global conservation alone cannot screen
+local moon-orbit accuracy. Metis was the worst normalized body at all three
+comparisons. The one-day 60-second run's closest center separation was the
+Jupiter--Metis pair at `1.831596045` combined sourced radii: no contact occurred
+in that bounded check, but it is not a general close-encounter guarantee.
+
+The 60-second step is **provisional**, not a claim of scientific validation.
+Later-Horizons reference disagreement was not measured because this dataset
+contains only the common initial epoch. Longer horizons, body-resolved error
+budgets, oblateness-sensitive moons, small-body solution uncertainty,
+close-encounter monitoring, and comparison with independent ephemeris states
+remain open. The model is still Newtonian point-mass Velocity Verlet without
+relativity, tides, multipoles, non-gravitational comet forces, adaptive steps,
+or singularity regularization.
+
+### Validation record
+
+Fresh GCC 15.1.0 Release configurations on the AMD Windows development machine
+completed as follows:
+
+- CPU-only viewer (`NBODY_ENABLE_OPENMP=OFF`, `NBODY_ENABLE_CUDA=OFF`):
+  configure/build passed; CTest passed `8/8`.
+- OpenMP viewer (`NBODY_ENABLE_OPENMP=ON`, `NBODY_ENABLE_CUDA=OFF`):
+  configure/build passed; CTest passed `9/9`, including OpenMP validation and
+  60-body Sequential/OpenMP mixed-tolerance comparison.
+- Focused visualization tests verify the unchanged legacy state, exactly 60
+  default bodies, deterministic stable-ID subset order, parent/warning/error
+  behavior, byte-identical catalog state transfer, stable-ID views, visibility
+  independence and composed profile/class/individual filtering, translation-
+  invariant local rendering, matching-history parent-relative trails, pause-
+  preserving scenario/subset replacement, explicit paused manual advancement,
+  running-state preservation, reset/time semantics, CPU/OpenMP agreement, and
+  300/150/75 plus 60/30-second convergence.
+- A CUDA request to the CPU-only executable exited `1` before OpenGL startup
+  with the explicit not-compiled diagnostic. GPU tests remain registered in a
+  CUDA build with skip return code `77`; a skip is not a CUDA pass.
+- CUDA compilation/runtime and the required RTX 4050 viewer checks remain
+  **UNVERIFIED** on this machine.
+
+No Stage 5 source, protocol, policy script, benchmark, or retained evidence
+changed. Frozen Stage 5 remains unchanged. Counterfactual experiments are still
+pending. Sequential/OpenMP/CUDA Barnes--Hut, direct-force numerical comparison,
+and controlled large-N evaluation remain mandatory and unimplemented.
+
 ## Known limitations
 
-- No ephemeris-grade planetary initial-condition dataset exists; Stage 6B uses
-  a bounded JPL mean-element approximation with the documented Earth--Moon
-  barycenter simplification.
+- A sourced common-epoch 60-body JPL initial-condition snapshot now exists,
+  while the default Stage 6B nine-body baseline remains the bounded mean-
+  element approximation. Neither scenario reproduces JPL's complete dynamical
+  model or establishes long-horizon ephemeris agreement.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - CUDA physics is T4-validated and the viewer has an opt-in batched CUDA path,
   but viewer CUDA compilation/runtime and a same-machine CPU/OpenMP/CUDA matrix
