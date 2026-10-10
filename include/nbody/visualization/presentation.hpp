@@ -6,6 +6,7 @@
 
 #include <glm/vec2.hpp>
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -32,9 +33,13 @@ NumericalHealth classify_numerical_health(
 enum class CameraPreset {
     overview,
     inner_system,
-    earth,
-    jupiter,
-    saturn,
+    earth_moon,
+    jupiter_system,
+    saturn_system,
+    uranus_system,
+    neptune_triton,
+    pluto_charon,
+    asteroid_belt,
 };
 
 struct CameraFraming {
@@ -43,11 +48,14 @@ struct CameraFraming {
     float distance{22.0F};
     glm::vec3 target{0.0F};
     std::optional<std::size_t> tracked_body;
+    std::optional<std::size_t> local_origin_body;
+    std::vector<std::size_t> visible_bodies;
+    bool parent_relative_trails{false};
 };
 
 CameraFraming camera_framing(
     CameraPreset preset,
-    ScenarioKind scenario,
+    const ScenarioDefinition& scenario,
     const std::vector<RenderBody>& bodies);
 
 void apply_camera_framing(OrbitCamera& camera, const CameraFraming& framing);
@@ -112,7 +120,27 @@ void apply_screen_space_body_sizing(
     std::vector<RenderBody>& bodies,
     const OrbitCamera& camera,
     float viewport_height_pixels,
-    bool solar_system);
+    std::optional<std::size_t> sun_index);
+
+inline constexpr std::size_t astronomical_body_class_count = 7;
+using BodyClassVisibility = std::array<bool, astronomical_body_class_count>;
+
+std::size_t body_class_visibility_index(
+    astronomy::AstronomicalBodyClass body_class) noexcept;
+
+bool effective_body_visibility(
+    const ScenarioDefinition& scenario,
+    std::size_t body_index,
+    const std::vector<bool>& profile_membership,
+    const std::vector<bool>& individual_visibility,
+    const BodyClassVisibility& class_visibility);
+
+void apply_effective_body_visibility(
+    const ScenarioDefinition& scenario,
+    const std::vector<bool>& profile_membership,
+    const std::vector<bool>& individual_visibility,
+    const BodyClassVisibility& class_visibility,
+    std::vector<RenderBody>& bodies);
 
 struct LabelCandidate {
     std::size_t body_index{0};

@@ -28,6 +28,7 @@ struct RenderBody {
     glm::vec3 color{1.0F};
     bool emissive{false};
     BodyMaterial material{BodyMaterial::generic};
+    bool visible{true};
 };
 
 struct RenderBodyStyle {
@@ -51,8 +52,16 @@ public:
         const SimulationState& state,
         std::vector<RenderBody>& snapshot) const;
     glm::vec3 to_render_position(const Vec3& position_m) const;
+    glm::vec3 to_render_offset(const Vec3& offset_m) const;
+    void configure_view(
+        const SimulationState& state,
+        const Vec3& origin_m,
+        const std::vector<std::size_t>& framing_body_indices,
+        float target_extent = 8.0F);
+    void set_origin_m(const Vec3& origin_m);
     void set_radius_multiplier(float multiplier);
     float position_scale() const noexcept;
+    const Vec3& origin_m() const noexcept;
     float radius_multiplier() const noexcept;
     float minimum_render_radius() const noexcept;
 
@@ -61,6 +70,7 @@ private:
     float maximum_mass_kg_{1.0F};
     float radius_multiplier_{1.0F};
     float minimum_render_radius_{0.035F};
+    Vec3 origin_m_{};
     std::vector<RenderBodyStyle> styles_;
 };
 

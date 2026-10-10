@@ -115,14 +115,32 @@ void test_cuda_controller() {
     const auto replacement = nbody::make_seeded_synthetic_system(16, 91);
     controller.select_backend(nbody::visualization::BackendKind::cuda, 1, 0);
     controller.replace_scenario(replacement, dt_s, 2);
-    require(controller.backend_kind() == nbody::visualization::BackendKind::cuda &&
+    require(!controller.paused() &&
+                controller.backend_kind() == nbody::visualization::BackendKind::cuda &&
                 same_state(replacement, controller.state()),
-            "different-size scenario replacement did not preserve CUDA selection and state");
+            "running CUDA scenario replacement changed run state, backend, or state");
     controller.advance_frame();
     compare_states(
         integrate_sequential(replacement, 2, dt_s),
         controller.state(),
         "replacement CUDA frame");
+
+    controller.set_paused(true);
+    const auto paused_replacement = nbody::make_seeded_synthetic_system(12, 92);
+    controller.replace_scenario(paused_replacement, dt_s, 4);
+    require(controller.paused() &&
+                controller.backend_kind() == nbody::visualization::BackendKind::cuda &&
+                same_state(paused_replacement, controller.state()),
+            "paused CUDA scenario replacement changed pause, backend, or initial state");
+    const auto paused_replacement_state = controller.state();
+    controller.advance_frame();
+    require(same_state(paused_replacement_state, controller.state()),
+            "paused CUDA replacement advanced through advance_frame");
+    controller.advance_steps(2);
+    compare_states(
+        integrate_sequential(paused_replacement, 2, dt_s),
+        controller.state(),
+        "paused replacement explicit CUDA steps");
 }
 
 void test_transactional_failures() {

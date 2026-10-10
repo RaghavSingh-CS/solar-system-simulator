@@ -62,4 +62,19 @@ const std::vector<std::deque<Vec3>>& TrailHistory::positions() const noexcept {
     return positions_;
 }
 
+std::vector<Vec3> parent_relative_trail(
+    const std::deque<Vec3>& body_positions,
+    const std::deque<Vec3>& parent_positions) {
+    if (body_positions.size() != parent_positions.size()) {
+        throw std::invalid_argument(
+            "parent-relative trail histories must contain matching samples");
+    }
+    std::vector<Vec3> result;
+    result.reserve(body_positions.size());
+    for (std::size_t index = 0; index < body_positions.size(); ++index) {
+        result.push_back(body_positions[index] - parent_positions[index]);
+    }
+    return result;
+}
+
 }  // namespace nbody::visualization

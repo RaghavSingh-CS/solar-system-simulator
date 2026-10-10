@@ -1,3 +1,4 @@
+#include "nbody/astronomy/solar_system_60.hpp"
 #include "nbody/scenarios.hpp"
 #include "nbody/solar_system.hpp"
 #include "nbody/visualization/camera.hpp"
@@ -13,9 +14,12 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/geometric.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <deque>
 #include <exception>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -45,6 +49,46 @@ bool same_state(const nbody::SimulationState& left, const nbody::SimulationState
         }
     }
     return true;
+}
+
+std::size_t required_index(
+    const nbody::visualization::ScenarioDefinition& scenario,
+    const std::string& stable_id) {
+    const auto index = nbody::visualization::find_body_index(scenario, stable_id);
+    require(index.has_value(), "missing required stable ID: " + stable_id);
+    return *index;
+}
+
+double maximum_parent_relative_difference(
+    const nbody::visualization::ScenarioDefinition& scenario,
+    const nbody::SimulationState& left,
+    const nbody::SimulationState& right,
+    double& maximum_absolute_m,
+    std::string* worst_stable_id = nullptr) {
+    maximum_absolute_m = 0.0;
+    double maximum_normalized = 0.0;
+    for (std::size_t index = 0; index < scenario.body_metadata.size(); ++index) {
+        const auto& parent_id = scenario.body_metadata[index].parent_stable_id;
+        if (!parent_id) {
+            continue;
+        }
+        const std::size_t parent = required_index(scenario, *parent_id);
+        const nbody::Vec3 left_relative =
+            left.bodies[index].position_m - left.bodies[parent].position_m;
+        const nbody::Vec3 right_relative =
+            right.bodies[index].position_m - right.bodies[parent].position_m;
+        const double difference = nbody::norm(left_relative - right_relative);
+        const double scale = std::max(
+            {nbody::norm(left_relative), nbody::norm(right_relative), 1.0});
+        if (difference / scale > maximum_normalized) {
+            maximum_normalized = difference / scale;
+            if (worst_stable_id != nullptr) {
+                *worst_stable_id = scenario.stable_ids[index];
+            }
+        }
+        maximum_absolute_m = std::max(maximum_absolute_m, difference);
+    }
+    return maximum_normalized;
 }
 
 void test_controller() {
@@ -134,7 +178,7 @@ void test_solar_screen_space_sizing() {
         transform.update_snapshot(state, snapshot);
         const auto original_positions = snapshot;
         nbody::visualization::apply_screen_space_body_sizing(
-            snapshot, camera, viewport_height, true);
+            snapshot, camera, viewport_height, std::size_t{0});
         require(same_state(state_before, state),
                 "presentation sizing mutated the physical simulation state");
         for (std::size_t index = 0; index < snapshot.size(); ++index) {
@@ -153,19 +197,26 @@ void test_solar_screen_space_sizing() {
         overview_camera,
         nbody::visualization::camera_framing(
             nbody::visualization::CameraPreset::overview,
-            nbody::visualization::ScenarioKind::solar_system,
+            solar,
             reference_snapshot));
     overview_camera.set_aspect_ratio(viewport_width / viewport_height);
+    const float overview_sun = evaluate(solar.initial_state, overview_camera);
+    const auto inner_request = nbody::visualization::camera_framing(
+        nbody::visualization::CameraPreset::inner_system, solar, reference_snapshot);
+    transform.configure_view(
+        solar.initial_state,
+        solar.initial_state.bodies[*inner_request.local_origin_body].position_m,
+        inner_request.visible_bodies,
+        8.0F);
+    transform.update_snapshot(solar.initial_state, reference_snapshot);
     nbody::visualization::OrbitCamera inner_camera;
     nbody::visualization::apply_camera_framing(
         inner_camera,
         nbody::visualization::camera_framing(
             nbody::visualization::CameraPreset::inner_system,
-            nbody::visualization::ScenarioKind::solar_system,
+            solar,
             reference_snapshot));
     inner_camera.set_aspect_ratio(viewport_width / viewport_height);
-
-    const float overview_sun = evaluate(solar.initial_state, overview_camera);
     const float inner_sun = evaluate(solar.initial_state, inner_camera);
     require(overview_sun >= nbody::visualization::sun_minimum_apparent_radius_pixels - 0.01F &&
                 overview_sun <= nbody::visualization::sun_maximum_apparent_radius_pixels + 0.01F &&
@@ -201,7 +252,7 @@ void test_solar_screen_space_sizing() {
     std::vector<nbody::visualization::RenderBody> bounded_snapshot;
     transform.update_snapshot(solar.initial_state, bounded_snapshot);
     nbody::visualization::apply_screen_space_body_sizing(
-        bounded_snapshot, overview_camera, viewport_height, true);
+        bounded_snapshot, overview_camera, viewport_height, std::size_t{0});
     for (std::size_t index = 1; index < bounded_snapshot.size(); ++index) {
         const float pixels = nbody::visualization::apparent_radius_pixels(
             bounded_snapshot[index].radius,
@@ -262,6 +313,380 @@ void test_scenario_switch_and_diagnostics() {
     require(tracker.drift().energy_relative == 0.0 &&
                 tracker.drift().maximum_angular_momentum_relative == 0.0,
             "conservation reset did not clear current/maximum drift");
+}
+
+void test_astronomical_catalog_composition() {
+    const auto legacy = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    const auto legacy_baseline = nbody::make_approximate_solar_system();
+    require(same_state(legacy.initial_state, legacy_baseline.initial_state),
+            "catalog integration changed the legacy nine-body initial state");
+
+    const auto catalog = nbody::astronomy::make_solar_system_60_catalog();
+    const auto full = nbody::visualization::make_astronomical_catalog_scenario();
+    require(full.initial_state.bodies.size() == 60U && full.stable_ids.size() == 60U &&
+                full.body_metadata.size() == 60U && full.styles.size() == 60U,
+            "default astronomical scenario does not contain exactly 60 complete bodies");
+    require(full.dt_s == nbody::visualization::astronomical_catalog_initial_dt_s &&
+                !full.timestep_validation_complete && full.reference_paths_m.empty(),
+            "catalog timestep status or reference-guide policy is misleading");
+    require(full.composition_warnings.empty(),
+            "complete catalog scenario unexpectedly reports missing-source warnings");
+    for (std::size_t index = 0; index < catalog.records().size(); ++index) {
+        const auto& record = catalog.records()[index];
+        const auto& body = full.initial_state.bodies[index];
+        require(full.stable_ids[index] == record.stable_id() &&
+                    full.body_metadata[index].stable_id == record.stable_id() &&
+                    full.body_metadata[index].parent_stable_id == record.parent_stable_id() &&
+                    body.name == record.display_name() && body.mass_kg == record.mass_kg() &&
+                    body.position_m.x == record.position_m().x &&
+                    body.position_m.y == record.position_m().y &&
+                    body.position_m.z == record.position_m().z &&
+                    body.velocity_m_s.x == record.velocity_m_s().x &&
+                    body.velocity_m_s.y == record.velocity_m_s().y &&
+                    body.velocity_m_s.z == record.velocity_m_s().z,
+                "catalog scenario changed record identity, ordering, or initial state");
+    }
+    nbody::visualization::RenderSpaceTransform catalog_transform(
+        full.initial_state, full.styles, 8.0F, full.default_radius_multiplier);
+    std::vector<nbody::visualization::RenderBody> catalog_snapshot;
+    catalog_transform.update_snapshot(full.initial_state, catalog_snapshot);
+    const std::array<std::pair<nbody::visualization::CameraPreset, const char*>, 7> views{{
+        {nbody::visualization::CameraPreset::earth_moon, "sol:earth"},
+        {nbody::visualization::CameraPreset::jupiter_system, "sol:jupiter"},
+        {nbody::visualization::CameraPreset::saturn_system, "sol:saturn"},
+        {nbody::visualization::CameraPreset::uranus_system, "sol:uranus"},
+        {nbody::visualization::CameraPreset::neptune_triton, "sol:neptune"},
+        {nbody::visualization::CameraPreset::pluto_charon, "sol:pluto"},
+        {nbody::visualization::CameraPreset::asteroid_belt, "sol:sun"},
+    }};
+    for (const auto& [preset, stable_id] : views) {
+        const auto framing = nbody::visualization::camera_framing(
+            preset, full, catalog_snapshot);
+        require(framing.tracked_body == required_index(full, stable_id) &&
+                    framing.local_origin_body == framing.tracked_body &&
+                    framing.visible_bodies.size() >= 2U,
+                "stable-ID subsystem view resolved the wrong body or incomplete composition");
+    }
+
+    const std::vector<std::string> selected{
+        "sol:sun", "sol:earth", "sol:moon", "sol:jupiter", "sol:io"};
+    const auto subset = nbody::visualization::make_astronomical_catalog_scenario(selected);
+    const auto repeated = nbody::visualization::make_astronomical_catalog_scenario(selected);
+    require(subset.stable_ids == repeated.stable_ids &&
+                same_state(subset.initial_state, repeated.initial_state),
+            "catalog subset composition is not deterministic");
+    const std::vector<std::string> expected_order{
+        "sol:sun", "sol:earth", "sol:jupiter", "sol:moon", "sol:io"};
+    require(subset.stable_ids == expected_order,
+            "catalog subset did not preserve parent-before-child catalog ordering");
+    require(!subset.composition_warnings.empty(),
+            "major gravitational-source exclusions were not disclosed");
+
+    const auto parentless = nbody::visualization::make_astronomical_catalog_scenario(
+        {"sol:sun", "sol:moon"});
+    require(std::any_of(
+                parentless.composition_warnings.begin(), parentless.composition_warnings.end(),
+                [](const std::string& warning) {
+                    return warning.find("sol:moon included without catalog parent sol:earth") !=
+                        std::string::npos;
+                }),
+            "including a satellite without its parent did not produce an explicit warning");
+
+    bool duplicate_rejected = false;
+    try {
+        static_cast<void>(nbody::visualization::make_astronomical_catalog_scenario(
+            {"sol:sun", "sol:sun"}));
+    } catch (const std::invalid_argument&) {
+        duplicate_rejected = true;
+    }
+    bool unknown_rejected = false;
+    try {
+        static_cast<void>(nbody::visualization::make_astronomical_catalog_scenario(
+            {"sol:sun", "sol:not-a-body"}));
+    } catch (const std::invalid_argument&) {
+        unknown_rejected = true;
+    }
+    require(duplicate_rejected && unknown_rejected,
+            "invalid stable-ID catalog selections were admitted");
+}
+
+void test_local_render_precision_and_visibility() {
+    nbody::SimulationState state;
+    state.bodies = {
+        {"Parent", 1.0e24, {1.0e16, -2.0e16, 3.0e16}, {}},
+        {"Child", 1.0e20, {1.0e16 + 4096.0, -2.0e16 + 2048.0, 3.0e16 - 1024.0}, {}},
+    };
+    const auto original = state;
+    nbody::visualization::RenderSpaceTransform transform(state);
+    transform.configure_view(state, state.bodies[0].position_m, {0U, 1U}, 8.0F);
+    std::vector<nbody::visualization::RenderBody> snapshot;
+    transform.update_snapshot(state, snapshot);
+    require(snapshot[0].position == glm::vec3(0.0F),
+            "local render origin did not map exactly to zero");
+    const glm::vec3 expected = transform.to_render_offset(
+        state.bodies[1].position_m - state.bodies[0].position_m);
+    require(snapshot[1].position == expected && glm::length(expected) > 0.0F,
+            "double-precision subtraction lost local child separation");
+    snapshot[1].visible = false;
+    require(!snapshot[1].visible && same_state(state, original),
+            "render visibility altered gravitational state");
+
+    nbody::SimulationState translated = state;
+    const nbody::Vec3 translation{8.0e15, 5.0e15, -9.0e15};
+    for (auto& body : translated.bodies) {
+        body.position_m += translation;
+    }
+    transform.configure_view(
+        translated, translated.bodies[0].position_m, {0U, 1U}, 8.0F);
+    std::vector<nbody::visualization::RenderBody> translated_snapshot;
+    transform.update_snapshot(translated, translated_snapshot);
+    require(glm::distance(translated_snapshot[1].position, expected) < 1.0e-6F,
+            "local render geometry changed under a common SSB translation");
+}
+
+void test_composed_visibility_policy() {
+    const auto scenario = nbody::visualization::make_astronomical_catalog_scenario();
+    const auto state_before = scenario.initial_state;
+    const std::size_t earth = required_index(scenario, "sol:earth");
+    const std::size_t moon = required_index(scenario, "sol:moon");
+    const std::size_t jupiter = required_index(scenario, "sol:jupiter");
+    const std::size_t io = required_index(scenario, "sol:io");
+    std::vector<bool> profile(scenario.initial_state.bodies.size(), false);
+    std::vector<bool> individual(scenario.initial_state.bodies.size(), true);
+    nbody::visualization::BodyClassVisibility classes;
+    classes.fill(true);
+
+    nbody::visualization::RenderSpaceTransform transform(
+        scenario.initial_state, scenario.styles);
+    std::vector<nbody::visualization::RenderBody> snapshot;
+    transform.update_snapshot(scenario.initial_state, snapshot);
+
+    profile[earth] = true;
+    profile[moon] = true;
+    nbody::visualization::apply_effective_body_visibility(
+        scenario, profile, individual, classes, snapshot);
+    require(snapshot[earth].visible && snapshot[moon].visible &&
+                !snapshot[jupiter].visible && !snapshot[io].visible,
+            "Earth-Moon profile did not restrict effective visibility");
+
+    const std::size_t satellite_class = nbody::visualization::body_class_visibility_index(
+        nbody::astronomy::AstronomicalBodyClass::natural_satellite);
+    classes[satellite_class] = false;
+    nbody::visualization::apply_effective_body_visibility(
+        scenario, profile, individual, classes, snapshot);
+    require(snapshot[earth].visible && !snapshot[moon].visible &&
+                !snapshot[io].visible,
+            "satellite class filter did not compose with subsystem membership");
+    classes[satellite_class] = true;
+    nbody::visualization::apply_effective_body_visibility(
+        scenario, profile, individual, classes, snapshot);
+    require(snapshot[moon].visible && !snapshot[io].visible,
+            "re-enabling a class revealed an out-of-profile body");
+
+    individual[moon] = false;
+    nbody::visualization::apply_effective_body_visibility(
+        scenario, profile, individual, classes, snapshot);
+    require(snapshot[earth].visible && !snapshot[moon].visible,
+            "individual visibility did not remain independent within the active profile");
+    individual[moon] = true;
+
+    std::fill(profile.begin(), profile.end(), false);
+    profile[jupiter] = true;
+    profile[io] = true;
+    nbody::visualization::apply_effective_body_visibility(
+        scenario, profile, individual, classes, snapshot);
+    require(!snapshot[earth].visible && !snapshot[moon].visible &&
+                snapshot[jupiter].visible && snapshot[io].visible,
+            "switching subsystem profiles retained stale profile membership");
+
+    std::fill(profile.begin(), profile.end(), true);
+    nbody::visualization::apply_effective_body_visibility(
+        scenario, profile, individual, classes, snapshot);
+    require(snapshot[earth].visible && snapshot[moon].visible &&
+                snapshot[jupiter].visible && snapshot[io].visible,
+            "overview profile did not restore bodies allowed by user filters");
+    require(same_state(state_before, scenario.initial_state) &&
+                scenario.initial_state.bodies.size() == 60U,
+            "visual filtering changed solver state or catalog body count");
+}
+
+void test_parent_relative_trails() {
+    std::deque<nbody::Vec3> parent{{100.0, 50.0, -20.0}, {105.0, 48.0, -19.0}};
+    std::deque<nbody::Vec3> child{{110.0, 47.0, -18.0}, {116.0, 44.0, -16.0}};
+    const auto relative = nbody::visualization::parent_relative_trail(child, parent);
+    require(relative.size() == 2U && relative[0].x == 10.0 && relative[0].y == -3.0 &&
+                relative[1].x == 11.0 && relative[1].y == -4.0,
+            "parent-relative trails did not subtract matching historical parent samples");
+    bool mismatch_rejected = false;
+    try {
+        parent.pop_back();
+        static_cast<void>(nbody::visualization::parent_relative_trail(child, parent));
+    } catch (const std::invalid_argument&) {
+        mismatch_rejected = true;
+    }
+    require(mismatch_rejected, "mismatched parent trail history was silently accepted");
+}
+
+void test_catalog_backend_equivalence_and_timestep_convergence() {
+    const auto scenario = nbody::visualization::make_astronomical_catalog_scenario();
+    nbody::visualization::SimulationController sequential(
+        scenario.initial_state,
+        {scenario.dt_s, 1, nbody::visualization::BackendKind::sequential, 1});
+    sequential.set_paused(true);
+    const auto paused = sequential.state();
+    sequential.advance_frame();
+    require(same_state(paused, sequential.state()),
+            "paused catalog scenario advanced unexpectedly");
+    sequential.advance_steps(1);
+    require(sequential.state().time_s == scenario.dt_s,
+            "manual catalog step did not advance exactly one fixed timestep");
+    sequential.reset();
+    require(same_state(scenario.initial_state, sequential.state()),
+            "catalog reset did not restore the exact sourced initial state");
+    sequential.advance_steps(24);
+    require(sequential.state().time_s == 24.0 * scenario.dt_s,
+            "catalog sequential batching advanced the wrong simulated duration");
+    if (nbody::visualization::SimulationController::openmp_available()) {
+        nbody::visualization::SimulationController openmp(
+            scenario.initial_state,
+            {scenario.dt_s, 1, nbody::visualization::BackendKind::openmp, 4});
+        openmp.advance_steps(24);
+        double maximum_position_m = 0.0;
+        const double maximum_scaled = maximum_parent_relative_difference(
+            scenario, sequential.state(), openmp.state(), maximum_position_m);
+        double maximum_velocity_m_s = 0.0;
+        double maximum_position_scale = 1.0;
+        double maximum_velocity_scale = 1.0;
+        double maximum_absolute_state_position_m = 0.0;
+        for (std::size_t index = 0; index < scenario.initial_state.bodies.size(); ++index) {
+            maximum_absolute_state_position_m = std::max(
+                maximum_absolute_state_position_m,
+                nbody::norm(sequential.state().bodies[index].position_m -
+                            openmp.state().bodies[index].position_m));
+            maximum_velocity_m_s = std::max(
+                maximum_velocity_m_s,
+                nbody::norm(sequential.state().bodies[index].velocity_m_s -
+                            openmp.state().bodies[index].velocity_m_s));
+            maximum_position_scale = std::max(
+                maximum_position_scale,
+                nbody::norm(sequential.state().bodies[index].position_m));
+            maximum_velocity_scale = std::max(
+                maximum_velocity_scale,
+                nbody::norm(sequential.state().bodies[index].velocity_m_s));
+        }
+        require(maximum_position_m <= 1.0e-5 || maximum_scaled <= 1.0e-13,
+                "catalog OpenMP state exceeded the established mixed position tolerance");
+        require(maximum_absolute_state_position_m <= 1.0e-6 ||
+                    maximum_absolute_state_position_m / maximum_position_scale <= 1.0e-13,
+                "catalog OpenMP absolute state position exceeded mixed tolerance");
+        require(maximum_velocity_m_s <= 1.0e-9 ||
+                    maximum_velocity_m_s / maximum_velocity_scale <= 1.0e-13,
+                "catalog OpenMP velocity exceeded mixed tolerance");
+    }
+
+    const auto subset = nbody::visualization::make_astronomical_catalog_scenario(
+        {"sol:sun", "sol:earth", "sol:moon"});
+    sequential.replace_scenario(subset.initial_state, subset.dt_s, 10);
+    require(sequential.paused() && sequential.state().bodies.size() == 3U &&
+                sequential.state().time_s == 0.0 && sequential.steps_per_frame() == 10U,
+            "paused catalog subset replacement changed pause state or controller state");
+    const auto paused_subset = sequential.state();
+    sequential.advance_frame();
+    require(same_state(paused_subset, sequential.state()),
+            "paused controller advanced after catalog subset replacement");
+    sequential.advance_steps(3);
+    require(sequential.state().time_s == 3.0 * subset.dt_s,
+            "explicit manual advancement while paused used incorrect step semantics");
+    sequential.reset();
+    require(sequential.paused() && same_state(subset.initial_state, sequential.state()),
+            "reset after catalog subset replacement lost pause or physical composition");
+
+    sequential.set_paused(false);
+    sequential.replace_scenario(scenario.initial_state, scenario.dt_s, 1);
+    require(!sequential.paused() && same_state(scenario.initial_state, sequential.state()) &&
+                sequential.state().time_s == 0.0,
+            "running scenario replacement changed run state or sourced initial state");
+
+    constexpr double horizon_s = 86400.0;
+    double minimum_clearance_ratio = std::numeric_limits<double>::infinity();
+    std::string minimum_clearance_pair;
+    const auto update_clearance = [&](const nbody::SimulationState& state) {
+        for (std::size_t left = 0; left < state.bodies.size(); ++left) {
+            for (std::size_t right = left + 1; right < state.bodies.size(); ++right) {
+                const double combined_radius = scenario.styles[left].physical_radius_m +
+                    scenario.styles[right].physical_radius_m;
+                const double ratio = nbody::norm(
+                    state.bodies[left].position_m - state.bodies[right].position_m) /
+                    combined_radius;
+                if (ratio < minimum_clearance_ratio) {
+                    minimum_clearance_ratio = ratio;
+                    minimum_clearance_pair = scenario.stable_ids[left] + "/" +
+                        scenario.stable_ids[right];
+                }
+            }
+        }
+    };
+    auto integrate = [&](double dt_s, bool track_clearance = false) {
+        auto state = scenario.initial_state;
+        const std::size_t steps = static_cast<std::size_t>(horizon_s / dt_s);
+        if (track_clearance) {
+            update_clearance(state);
+        }
+        for (std::size_t step = 0; step < steps; ++step) {
+            nbody::velocity_verlet_step(state, dt_s);
+            if (track_clearance) {
+                update_clearance(state);
+            }
+        }
+        return state;
+    };
+    const auto coarse = integrate(300.0);
+    const auto fine = integrate(150.0);
+    const auto finest = integrate(75.0);
+    const auto policy = integrate(60.0, true);
+    const auto policy_reference = integrate(30.0);
+    double coarse_absolute_m = 0.0;
+    double fine_absolute_m = 0.0;
+    std::string coarse_worst_body;
+    std::string fine_worst_body;
+    const double coarse_scaled = maximum_parent_relative_difference(
+        scenario, coarse, fine, coarse_absolute_m, &coarse_worst_body);
+    const double fine_scaled = maximum_parent_relative_difference(
+        scenario, fine, finest, fine_absolute_m, &fine_worst_body);
+    double policy_absolute_m = 0.0;
+    std::string policy_worst_body;
+    const double policy_scaled = maximum_parent_relative_difference(
+        scenario, policy, policy_reference, policy_absolute_m, &policy_worst_body);
+    nbody::visualization::ConservationTracker coarse_conservation(scenario.initial_state);
+    nbody::visualization::ConservationTracker finest_conservation(scenario.initial_state);
+    const auto coarse_drift = coarse_conservation.update(coarse);
+    const auto finest_drift = finest_conservation.update(finest);
+    std::cout << std::setprecision(10)
+              << "catalog timestep assessment horizon_s=" << horizon_s
+              << " coarse_300_vs_150_max_parent_relative=" << coarse_scaled
+              << " coarse_worst_body=" << coarse_worst_body
+              << " coarse_max_absolute_m=" << coarse_absolute_m
+              << " fine_150_vs_75_max_parent_relative=" << fine_scaled
+              << " fine_worst_body=" << fine_worst_body
+              << " fine_max_absolute_m=" << fine_absolute_m
+              << " policy_60_vs_30_max_parent_relative=" << policy_scaled
+              << " policy_worst_body=" << policy_worst_body
+              << " policy_max_absolute_m=" << policy_absolute_m
+              << " minimum_center_distance_over_combined_radii=" << minimum_clearance_ratio
+              << " minimum_clearance_pair=" << minimum_clearance_pair
+              << " energy_drift_300=" << coarse_drift.energy_relative
+              << " energy_drift_75=" << finest_drift.energy_relative << '\n';
+    require(std::isfinite(coarse_scaled) && std::isfinite(fine_scaled) &&
+                fine_scaled < coarse_scaled && fine_absolute_m < coarse_absolute_m,
+            "300/150/75 s catalog integrations did not exhibit timestep convergence");
+    require(policy_scaled < 2.0e-3 &&
+                minimum_clearance_ratio > 1.0 &&
+                std::isfinite(coarse_drift.energy_relative) &&
+                std::isfinite(finest_drift.energy_relative),
+            "one-day 60 s policy convergence or conservation result is not numerically usable");
+    require(!scenario.timestep_validation_complete,
+            "bounded convergence evidence was incorrectly promoted to ephemeris validation");
 }
 
 void test_trail_boundedness() {
@@ -363,12 +788,20 @@ void test_inner_system_guide_projection() {
         solar.initial_state, solar.styles, 9.0F, solar.default_radius_multiplier);
     std::vector<nbody::visualization::RenderBody> snapshot;
     transform.update_snapshot(solar.initial_state, snapshot);
+    const auto inner_request = nbody::visualization::camera_framing(
+        nbody::visualization::CameraPreset::inner_system, solar, snapshot);
+    transform.configure_view(
+        solar.initial_state,
+        solar.initial_state.bodies[*inner_request.local_origin_body].position_m,
+        inner_request.visible_bodies,
+        8.0F);
+    transform.update_snapshot(solar.initial_state, snapshot);
     nbody::visualization::OrbitCamera camera;
     nbody::visualization::apply_camera_framing(
         camera,
         nbody::visualization::camera_framing(
             nbody::visualization::CameraPreset::inner_system,
-            nbody::visualization::ScenarioKind::solar_system,
+            solar,
             snapshot));
     camera.set_aspect_ratio(scene_width / viewport_height);
 
@@ -483,8 +916,8 @@ void test_presentation_helpers() {
     std::vector<nbody::visualization::RenderBody> bodies;
     transform.update_snapshot(solar.initial_state, bodies);
     const auto earth = nbody::visualization::camera_framing(
-        nbody::visualization::CameraPreset::earth,
-        nbody::visualization::ScenarioKind::solar_system,
+        nbody::visualization::CameraPreset::earth_moon,
+        solar,
         bodies);
     require(earth.tracked_body == 3U && earth.target == bodies[3].position &&
                 earth.distance >= 2.0F,
@@ -640,6 +1073,11 @@ int main() {
         test_render_space_is_read_only();
         test_solar_screen_space_sizing();
         test_scenario_switch_and_diagnostics();
+        test_astronomical_catalog_composition();
+        test_local_render_precision_and_visibility();
+        test_composed_visibility_policy();
+        test_parent_relative_trails();
+        test_catalog_backend_equivalence_and_timestep_convergence();
         test_trail_boundedness();
         test_actual_sun_trail_and_barycentric_transform();
         test_planet_trail_geometry_fidelity();

@@ -27,4 +27,8 @@ private:
     std::vector<std::deque<Vec3>> positions_;
 };
 
+std::vector<Vec3> parent_relative_trail(
+    const std::deque<Vec3>& body_positions,
+    const std::deque<Vec3>& parent_positions);
+
 }  // namespace nbody::visualization

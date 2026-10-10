@@ -7,6 +7,14 @@
 
 namespace nbody::visualization {
 
+namespace {
+
+bool finite_vector(const Vec3& value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+}  // namespace
+
 RenderSpaceTransform::RenderSpaceTransform(
     const SimulationState& reference_state,
     std::vector<RenderBodyStyle> styles,
@@ -32,20 +40,22 @@ RenderSpaceTransform::RenderSpaceTransform(
             throw std::invalid_argument("render body visual scale must be finite and positive");
         }
     }
-    double maximum_distance = 0.0;
     double maximum_mass = 0.0;
     for (const auto& body : reference_state.bodies) {
-        maximum_distance = std::max(maximum_distance, norm(body.position_m));
         maximum_mass = std::max(maximum_mass, body.mass_kg);
     }
-    if (!(maximum_distance > 0.0) || !(maximum_mass > 0.0)) {
+    if (!(maximum_mass > 0.0)) {
         throw std::invalid_argument("render-space reference state has no usable scale");
     }
-    position_scale_ = target_extent / static_cast<float>(maximum_distance);
     maximum_mass_kg_ = static_cast<float>(maximum_mass);
     if (styles_.empty()) {
         styles_.resize(reference_state.bodies.size());
     }
+    std::vector<std::size_t> all_indices(reference_state.bodies.size());
+    for (std::size_t index = 0; index < all_indices.size(); ++index) {
+        all_indices[index] = index;
+    }
+    configure_view(reference_state, {}, all_indices, target_extent);
 }
 
 void RenderSpaceTransform::update_snapshot(
@@ -72,16 +82,53 @@ void RenderSpaceTransform::update_snapshot(
             style.color,
             style.emissive,
             style.material,
+            true,
         });
     }
 }
 
 glm::vec3 RenderSpaceTransform::to_render_position(const Vec3& position_m) const {
+    return to_render_offset(position_m - origin_m_);
+}
+
+glm::vec3 RenderSpaceTransform::to_render_offset(const Vec3& offset_m) const {
     return {
-        static_cast<float>(position_m.x) * position_scale_,
-        static_cast<float>(position_m.y) * position_scale_,
-        static_cast<float>(position_m.z) * position_scale_,
+        static_cast<float>(offset_m.x * static_cast<double>(position_scale_)),
+        static_cast<float>(offset_m.y * static_cast<double>(position_scale_)),
+        static_cast<float>(offset_m.z * static_cast<double>(position_scale_)),
     };
+}
+
+void RenderSpaceTransform::configure_view(
+    const SimulationState& state,
+    const Vec3& origin_m,
+    const std::vector<std::size_t>& framing_body_indices,
+    float target_extent) {
+    if (state.bodies.size() != styles_.size() || framing_body_indices.empty() ||
+        !(target_extent > 0.0F) || !std::isfinite(target_extent) ||
+        !finite_vector(origin_m)) {
+        throw std::invalid_argument("render-space view configuration is invalid");
+    }
+    double maximum_distance = 0.0;
+    for (const auto index : framing_body_indices) {
+        if (index >= state.bodies.size()) {
+            throw std::out_of_range("render-space framing body index is invalid");
+        }
+        maximum_distance = std::max(
+            maximum_distance, norm(state.bodies[index].position_m - origin_m));
+    }
+    if (!(maximum_distance > 0.0) || !std::isfinite(maximum_distance)) {
+        throw std::invalid_argument("render-space view has no usable spatial extent");
+    }
+    origin_m_ = origin_m;
+    position_scale_ = static_cast<float>(static_cast<double>(target_extent) / maximum_distance);
+}
+
+void RenderSpaceTransform::set_origin_m(const Vec3& origin_m) {
+    if (!finite_vector(origin_m)) {
+        throw std::invalid_argument("render-space origin must be finite");
+    }
+    origin_m_ = origin_m;
 }
 
 void RenderSpaceTransform::set_radius_multiplier(float multiplier) {
@@ -92,6 +139,7 @@ void RenderSpaceTransform::set_radius_multiplier(float multiplier) {
 }
 
 float RenderSpaceTransform::position_scale() const noexcept { return position_scale_; }
+const Vec3& RenderSpaceTransform::origin_m() const noexcept { return origin_m_; }
 float RenderSpaceTransform::radius_multiplier() const noexcept { return radius_multiplier_; }
 float RenderSpaceTransform::minimum_render_radius() const noexcept {
     return minimum_render_radius_;

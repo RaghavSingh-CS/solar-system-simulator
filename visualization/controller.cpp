@@ -116,7 +116,6 @@ void SimulationController::replace_scenario(
     state_ = initial_state_;
     config_.dt_s = dt_s;
     config_.steps_per_frame = steps_per_frame;
-    paused_ = false;
 #ifdef NBODY_VIS_HAS_CUDA
     if (replacement_cuda) {
         cuda_integrator_ = std::move(replacement_cuda);

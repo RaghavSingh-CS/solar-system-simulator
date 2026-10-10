@@ -649,7 +649,7 @@ void BodyRenderer::render(
         glDrawArrays(GL_LINE_STRIP, 0, static_cast<int>(trail.points.size()));
     }
 
-    if (selected_body && *selected_body < bodies.size()) {
+    if (selected_body && *selected_body < bodies.size() && bodies[*selected_body].visible) {
         constexpr int marker_segments = 64;
         constexpr float pi = 3.14159265358979323846F;
         const auto& body = bodies[*selected_body];
@@ -711,6 +711,9 @@ void BodyRenderer::render(
             points.reserve(bodies.size());
         }
         for (const auto& body : bodies) {
+            if (!body.visible) {
+                continue;
+            }
             points.push_back({
                 body.position,
                 body.color,
@@ -742,6 +745,9 @@ void BodyRenderer::render(
         glUniform3fv(sun_position_location_, 1, glm::value_ptr(sun_position));
         glBindVertexArray(vertex_array_);
         for (const auto& body : bodies) {
+            if (!body.visible) {
+                continue;
+            }
             glm::mat4 model(1.0F);
             model = glm::translate(model, body.position);
             model = glm::scale(model, glm::vec3(body.radius));
@@ -760,7 +766,7 @@ void BodyRenderer::render(
     glUniformMatrix4fv(ring_projection_location_, 1, GL_FALSE, glm::value_ptr(projection));
     glBindVertexArray(ring_vertex_array_);
     for (const auto& body : bodies) {
-        if (body.material != BodyMaterial::saturn) {
+        if (!body.visible || body.material != BodyMaterial::saturn) {
             continue;
         }
         glm::mat4 model(1.0F);

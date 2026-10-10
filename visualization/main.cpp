@@ -55,7 +55,7 @@ struct Options {
 
 void print_usage(const char* program) {
     std::cout << "Usage: " << program << " [options]\n"
-              << "  --scenario solar|synthetic        Default: solar\n"
+              << "  --scenario solar|catalog|synthetic Default: solar\n"
               << "  --backend sequential|openmp|cuda  CUDA is accepted only in CUDA-enabled viewers\n"
               << "  --threads N                        OpenMP threads (default 4)\n"
               << "  --device N                         CUDA device index (default 0)\n"
@@ -79,10 +79,12 @@ Options parse_options(int argc, char** argv) {
         if (argument == "--scenario") {
             if (value == "solar") {
                 options.scenario = ScenarioKind::solar_system;
+            } else if (value == "catalog" || value == "horizons") {
+                options.scenario = ScenarioKind::astronomical_catalog;
             } else if (value == "synthetic") {
                 options.scenario = ScenarioKind::synthetic;
             } else {
-                throw std::invalid_argument("scenario must be solar or synthetic");
+                throw std::invalid_argument("scenario must be solar, catalog, or synthetic");
             }
         } else if (argument == "--backend") {
             options.backend = value;
@@ -247,9 +249,19 @@ struct ApplicationModel {
     std::size_t speed_index{0};
     std::size_t selected_body{0};
     std::optional<std::size_t> focused_body;
+    std::optional<std::size_t> local_origin_body;
+    std::optional<std::size_t> trail_reference_body;
+    std::vector<bool> profile_visibility;
+    std::vector<bool> individual_visibility;
+    std::vector<std::string> catalog_roster_ids;
+    std::vector<std::string> catalog_roster_names;
+    std::vector<bool> catalog_inclusion_draft;
+    nbody::visualization::BodyClassVisibility class_visibility{{
+        true, true, true, true, true, true, true}};
     std::vector<nbody::visualization::LabelPlacement> label_layout;
     std::optional<nbody::visualization::LiveComputeComparison> live_comparison;
     std::string live_comparison_error;
+    std::string view_error;
     std::size_t synthetic_body_count{32};
     std::uint64_t synthetic_seed{24301};
     int preferred_cuda_device{0};
@@ -277,18 +289,31 @@ struct ApplicationModel {
               9.0F,
               scenario.default_radius_multiplier),
           speed_index(scenario.default_speed_index),
-          selected_body(scenario.kind == ScenarioKind::solar_system ? 3U : 0U),
+          selected_body(0U),
           synthetic_body_count(options.bodies),
           synthetic_seed(options.seed),
           preferred_cuda_device(options.cuda_device),
           cuda_device_available(
               nbody::visualization::SimulationController::cuda_available(options.cuda_device)) {
+        if (const auto earth = nbody::visualization::find_body_index(
+                scenario, scenario.kind == ScenarioKind::astronomical_catalog
+                    ? "sol:earth" : "earth")) {
+            selected_body = *earth;
+        }
+        profile_visibility.assign(scenario.initial_state.bodies.size(), true);
+        individual_visibility.assign(scenario.initial_state.bodies.size(), true);
+        const auto full_catalog = nbody::visualization::make_astronomical_catalog_scenario();
+        catalog_roster_ids = full_catalog.stable_ids;
+        catalog_inclusion_draft.assign(catalog_roster_ids.size(), true);
+        for (const auto& body : full_catalog.initial_state.bodies) {
+            catalog_roster_names.push_back(body.name);
+        }
         rebuild_optional_analysis();
         apply_workload_safety();
     }
 
     nbody::visualization::InteractiveWorkloadPolicy workload_policy() const noexcept {
-        if (scenario.kind == ScenarioKind::solar_system) {
+        if (scenario.kind != ScenarioKind::synthetic) {
             return {};
         }
         nbody::visualization::WorkloadBackend backend =
@@ -303,7 +328,7 @@ struct ApplicationModel {
     }
 
     void rebuild_optional_analysis() {
-        const bool full_analysis = scenario.kind == ScenarioKind::solar_system ||
+        const bool full_analysis = scenario.kind != ScenarioKind::synthetic ||
             synthetic_body_count <= 1024;
         if (full_analysis) {
             conservation = std::make_unique<nbody::visualization::ConservationTracker>(
@@ -324,8 +349,14 @@ struct ApplicationModel {
         }
     }
 
-    void switch_scenario(ScenarioKind kind, std::size_t bodies, std::uint64_t seed) {
-        auto next = nbody::visualization::make_visual_scenario(kind, bodies, seed);
+    void switch_scenario(
+        ScenarioKind kind,
+        std::size_t bodies,
+        std::uint64_t seed,
+        const std::vector<std::string>& catalog_subset = {}) {
+        auto next = kind == ScenarioKind::astronomical_catalog
+            ? nbody::visualization::make_astronomical_catalog_scenario(catalog_subset)
+            : nbody::visualization::make_visual_scenario(kind, bodies, seed);
         const std::size_t next_speed = next.default_speed_index;
         controller.replace_scenario(
             next.initial_state, next.dt_s, next.speed_presets[next_speed].steps_per_frame);
@@ -333,20 +364,51 @@ struct ApplicationModel {
         render_space = nbody::visualization::RenderSpaceTransform(
             scenario.initial_state, scenario.styles, 9.0F, scenario.default_radius_multiplier);
         speed_index = next_speed;
-        selected_body = scenario.kind == ScenarioKind::solar_system ? 3U : 0U;
+        selected_body = 0U;
+        if (const auto earth = nbody::visualization::find_body_index(
+                scenario, scenario.kind == ScenarioKind::astronomical_catalog
+                    ? "sol:earth" : "earth")) {
+            selected_body = *earth;
+        }
+        profile_visibility.assign(scenario.initial_state.bodies.size(), true);
+        individual_visibility.assign(scenario.initial_state.bodies.size(), true);
+        class_visibility.fill(true);
         if (scenario.kind == ScenarioKind::synthetic) {
             synthetic_body_count = bodies;
             synthetic_seed = seed;
+        } else if (scenario.kind == ScenarioKind::astronomical_catalog) {
+            for (std::size_t index = 0; index < catalog_roster_ids.size(); ++index) {
+                catalog_inclusion_draft[index] =
+                    nbody::visualization::find_body_index(
+                        scenario, catalog_roster_ids[index]).has_value();
+            }
         }
         show_labels = true;
         show_reference_orbits = scenario.kind == ScenarioKind::solar_system;
-        show_trails = scenario.kind == ScenarioKind::solar_system || bodies <= 1024;
+        show_trails = scenario.kind != ScenarioKind::synthetic || bodies <= 1024;
         rebuild_optional_analysis();
         apply_workload_safety();
         label_layout.clear();
         live_comparison.reset();
         live_comparison_error.clear();
+        view_error.clear();
         focused_body.reset();
+        local_origin_body.reset();
+        trail_reference_body.reset();
+    }
+
+    bool astronomical() const noexcept {
+        return scenario.kind != ScenarioKind::synthetic;
+    }
+
+    void apply_visibility(std::vector<nbody::visualization::RenderBody>& snapshot) const {
+        nbody::visualization::apply_effective_body_visibility(
+            scenario, profile_visibility, individual_visibility, class_visibility, snapshot);
+    }
+
+    bool body_visible(std::size_t index) const {
+        return nbody::visualization::effective_body_visibility(
+            scenario, index, profile_visibility, individual_visibility, class_visibility);
     }
 
     void reset() {
@@ -360,6 +422,95 @@ struct ApplicationModel {
         apply_workload_safety();
     }
 };
+
+void refresh_render_origin(ApplicationModel& app) {
+    if (app.local_origin_body && *app.local_origin_body < app.controller.state().bodies.size()) {
+        app.render_space.set_origin_m(
+            app.controller.state().bodies[*app.local_origin_body].position_m);
+    } else {
+        app.render_space.set_origin_m({});
+    }
+}
+
+void apply_view_preset(
+    ApplicationModel& app,
+    nbody::visualization::OrbitCamera& camera,
+    nbody::visualization::CameraPreset preset,
+    std::vector<nbody::visualization::RenderBody>& snapshot) {
+    app.render_space.update_snapshot(app.controller.state(), snapshot);
+    const auto requested = nbody::visualization::camera_framing(
+        preset, app.scenario, snapshot);
+    std::vector<bool> next_profile_visibility(
+        snapshot.size(), requested.visible_bodies.empty());
+    if (!requested.visible_bodies.empty()) {
+        for (const auto index : requested.visible_bodies) {
+            next_profile_visibility[index] = true;
+        }
+    }
+    const nbody::Vec3 origin = requested.local_origin_body
+        ? app.controller.state().bodies[*requested.local_origin_body].position_m
+        : nbody::Vec3{};
+    std::vector<std::size_t> framing_indices = requested.visible_bodies;
+    if (framing_indices.empty()) {
+        framing_indices.resize(snapshot.size());
+        for (std::size_t index = 0; index < framing_indices.size(); ++index) {
+            framing_indices[index] = index;
+        }
+    }
+    auto next_transform = app.render_space;
+    next_transform.configure_view(
+        app.controller.state(), origin, framing_indices, 8.0F);
+    std::vector<nbody::visualization::RenderBody> next_snapshot;
+    next_transform.update_snapshot(app.controller.state(), next_snapshot);
+    nbody::visualization::apply_effective_body_visibility(
+        app.scenario, next_profile_visibility, app.individual_visibility,
+        app.class_visibility, next_snapshot);
+    const auto framing = nbody::visualization::camera_framing(
+        preset, app.scenario, next_snapshot);
+    app.render_space = std::move(next_transform);
+    snapshot = std::move(next_snapshot);
+    app.profile_visibility = std::move(next_profile_visibility);
+    app.local_origin_body = requested.local_origin_body;
+    app.trail_reference_body = requested.parent_relative_trails
+        ? requested.local_origin_body : std::nullopt;
+    nbody::visualization::apply_camera_framing(camera, framing);
+    app.focused_body = framing.tracked_body;
+    if (framing.tracked_body) {
+        app.selected_body = *framing.tracked_body;
+    }
+}
+
+void focus_selected_body(
+    ApplicationModel& app,
+    nbody::visualization::OrbitCamera& camera,
+    std::vector<nbody::visualization::RenderBody>& snapshot) {
+    if (app.selected_body >= app.controller.state().bodies.size()) {
+        return;
+    }
+    std::vector<std::size_t> framing{app.selected_body};
+    const auto& metadata = app.scenario.body_metadata[app.selected_body];
+    if (metadata.parent_stable_id) {
+        if (const auto parent = nbody::visualization::find_body_index(
+                app.scenario, *metadata.parent_stable_id)) {
+            framing.push_back(*parent);
+        }
+    }
+    if (framing.size() == 1U && app.controller.state().bodies.size() > 1U) {
+        framing.push_back(app.selected_body == 0U ? 1U : 0U);
+    }
+    const auto origin = app.controller.state().bodies[app.selected_body].position_m;
+    app.render_space.configure_view(app.controller.state(), origin, framing, 5.5F);
+    app.local_origin_body = app.selected_body;
+    app.trail_reference_body = app.selected_body;
+    app.focused_body = app.selected_body;
+    app.profile_visibility.assign(app.controller.state().bodies.size(), false);
+    for (const auto index : framing) {
+        app.profile_visibility[index] = true;
+    }
+    app.render_space.update_snapshot(app.controller.state(), snapshot);
+    app.apply_visibility(snapshot);
+    camera.set_pose(camera.yaw_degrees(), camera.pitch_degrees(), 12.0F, glm::vec3(0.0F));
+}
 
 struct InteractionState {
     nbody::visualization::OrbitCamera* camera{nullptr};
@@ -416,6 +567,14 @@ void key_callback(GLFWwindow* window, int key, int, int action, int) {
             app.reset();
         } else if (key == GLFW_KEY_C && initial_press) {
             app.focused_body.reset();
+            app.local_origin_body.reset();
+            app.trail_reference_body.reset();
+            app.profile_visibility.assign(app.controller.state().bodies.size(), true);
+            std::vector<std::size_t> indices(app.controller.state().bodies.size());
+            for (std::size_t index = 0; index < indices.size(); ++index) {
+                indices[index] = index;
+            }
+            app.render_space.configure_view(app.controller.state(), {}, indices, 8.0F);
             input->camera->reset();
         } else if (key == GLFW_KEY_1 && initial_press) {
             app.controller.select_backend(BackendKind::sequential);
@@ -516,6 +675,9 @@ void select_nearest_body(
     float best_distance = 22.0F;
     std::optional<std::size_t> best;
     for (std::size_t index = 0; index < bodies.size(); ++index) {
+        if (!bodies[index].visible) {
+            continue;
+        }
         const auto screen = project_to_screen(bodies[index].position, camera, display, scene_left);
         if (!screen) {
             continue;
@@ -547,18 +709,35 @@ void update_render_trails(
             trail.alpha = 0.68F;
             trail.fade_with_age = true;
             trail.points.clear();
-            if (index == 0 && app.scenario.kind == ScenarioKind::solar_system &&
+            if (!app.body_visible(index)) {
+                continue;
+            }
+            const auto sun = nbody::visualization::find_body_index(app.scenario, "sun");
+            if (sun && index == *sun && app.scenario.kind == ScenarioKind::solar_system &&
                 app.show_barycentric_motion) {
                 continue;
             }
-            trail.points.reserve(physical[index].size());
-            for (const auto& point : physical[index]) {
-                trail.points.push_back(app.render_space.to_render_position(point));
+            if (app.trail_reference_body && *app.trail_reference_body < physical.size()) {
+                if (index == *app.trail_reference_body) {
+                    continue;
+                }
+                const auto relative = nbody::visualization::parent_relative_trail(
+                    physical[index], physical[*app.trail_reference_body]);
+                trail.points.reserve(relative.size());
+                for (const auto& offset : relative) {
+                    trail.points.push_back(app.render_space.to_render_offset(offset));
+                }
+            } else {
+                trail.points.reserve(physical[index].size());
+                for (const auto& point : physical[index]) {
+                    trail.points.push_back(app.render_space.to_render_position(point));
+                }
             }
         }
     }
     if (app.show_barycentric_motion &&
-        app.scenario.kind == ScenarioKind::solar_system && app.trails) {
+        app.scenario.kind == ScenarioKind::solar_system && app.trails &&
+        !app.trail_reference_body) {
         const auto& sun_history = app.trails->positions().front();
         nbody::visualization::RenderTrail sun_motion;
         sun_motion.color = {1.0F, 0.66F, 0.22F};
@@ -583,9 +762,19 @@ void update_render_trails(
             guide.alpha = 0.24F;
             guide.fade_with_age = false;
             guide.points.clear();
+            if (!app.body_visible(index)) {
+                continue;
+            }
             guide.points.reserve(app.scenario.reference_paths_m[index].size());
             for (const auto& point : app.scenario.reference_paths_m[index]) {
-                guide.points.push_back(app.render_space.to_render_position(point));
+                if (app.trail_reference_body) {
+                    const auto& reference_origin = app.scenario.initial_state
+                        .bodies[*app.trail_reference_body].position_m;
+                    guide.points.push_back(
+                        app.render_space.to_render_offset(point - reference_origin));
+                } else {
+                    guide.points.push_back(app.render_space.to_render_position(point));
+                }
             }
         }
     }
@@ -607,6 +796,7 @@ std::string human_time(double seconds) {
 struct UiActions {
     std::optional<ScenarioKind> scenario;
     std::optional<std::size_t> synthetic_body_count;
+    std::optional<std::vector<std::string>> catalog_subset;
     std::optional<nbody::visualization::CameraPreset> camera_preset;
     bool reset{false};
     bool advance_one_step{false};
@@ -676,11 +866,15 @@ UiActions draw_control_panel(
     ImGui::TextDisabled("Drag the right edge to resize this panel");
 
     section_heading("Simulation");
-    int scenario_index = app.scenario.kind == ScenarioKind::solar_system ? 0 : 1;
-    const char* scenarios[] = {"Solar System", "Compute Experiment"};
+    int scenario_index = app.scenario.kind == ScenarioKind::solar_system ? 0 :
+        app.scenario.kind == ScenarioKind::astronomical_catalog ? 1 : 2;
+    const char* scenarios[] = {
+        "Legacy Solar System (9)", "Horizons Solar System Sandbox (60)",
+        "Compute Experiment"};
     ImGui::SetNextItemWidth(-1.0F);
-    if (ImGui::Combo("Scenario", &scenario_index, scenarios, 2)) {
-        actions.scenario = scenario_index == 0 ? ScenarioKind::solar_system : ScenarioKind::synthetic;
+    if (ImGui::Combo("Scenario", &scenario_index, scenarios, 3)) {
+        actions.scenario = scenario_index == 0 ? ScenarioKind::solar_system :
+            scenario_index == 1 ? ScenarioKind::astronomical_catalog : ScenarioKind::synthetic;
     }
     help_for_last_item(nbody::visualization::HelpTopic::scenario);
     if (app.scenario.kind == ScenarioKind::synthetic) {
@@ -689,8 +883,51 @@ UiActions draw_control_panel(
             app.synthetic_body_count,
             static_cast<unsigned long long>(app.synthetic_seed));
     }
+    if (app.scenario.kind == ScenarioKind::astronomical_catalog &&
+        ImGui::CollapsingHeader("Physical solver composition")) {
+        std::size_t included_count = static_cast<std::size_t>(std::count(
+            app.catalog_inclusion_draft.begin(), app.catalog_inclusion_draft.end(), true));
+        ImGui::TextWrapped(
+            "%zu of 60 catalog bodies selected for gravitational integration. "
+            "This is distinct from rendering visibility.", included_count);
+        if (ImGui::Button("Select all")) {
+            std::fill(app.catalog_inclusion_draft.begin(),
+                      app.catalog_inclusion_draft.end(), true);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear all")) {
+            std::fill(app.catalog_inclusion_draft.begin(),
+                      app.catalog_inclusion_draft.end(), false);
+        }
+        ImGui::BeginChild("catalog_composition", {0.0F, 210.0F}, true);
+        for (std::size_t index = 0; index < app.catalog_roster_ids.size(); ++index) {
+            const std::string label = app.catalog_roster_names[index] + "##include_" +
+                app.catalog_roster_ids[index];
+            bool included = app.catalog_inclusion_draft[index];
+            if (ImGui::Checkbox(label.c_str(), &included)) {
+                app.catalog_inclusion_draft[index] = included;
+            }
+        }
+        ImGui::EndChild();
+        included_count = static_cast<std::size_t>(std::count(
+            app.catalog_inclusion_draft.begin(), app.catalog_inclusion_draft.end(), true));
+        ImGui::BeginDisabled(included_count < 2U);
+        if (ImGui::Button("Apply physical subset")) {
+            std::vector<std::string> selected_ids;
+            for (std::size_t index = 0; index < app.catalog_roster_ids.size(); ++index) {
+                if (app.catalog_inclusion_draft[index]) {
+                    selected_ids.push_back(app.catalog_roster_ids[index]);
+                }
+            }
+            actions.catalog_subset = std::move(selected_ids);
+        }
+        ImGui::EndDisabled();
+        for (const auto& warning : app.scenario.composition_warnings) {
+            ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F), "%s", warning.c_str());
+        }
+    }
     const auto workload_policy = app.workload_policy();
-    const bool continuous_controls = app.scenario.kind == ScenarioKind::solar_system ||
+    const bool continuous_controls = app.scenario.kind != ScenarioKind::synthetic ||
         workload_policy.continuous_advancement;
     ImGui::BeginDisabled(!continuous_controls);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16F, 0.38F, 0.42F, 1.0F));
@@ -780,9 +1017,10 @@ UiActions draw_control_panel(
         }
         help_for_last_item(nbody::visualization::HelpTopic::openmp_threads);
     }
-    if (app.scenario.kind == ScenarioKind::solar_system) {
+    if (app.astronomical()) {
         ImGui::TextWrapped(
-            "The physical Solar System contains only nine bodies; backend speedup is not meaningful at this scale.");
+            "This astronomical scenario uses direct O(N^2) Velocity Verlet. Backend speedup is not "
+            "research evidence at this small body count.");
     } else {
         const std::string current_count = std::to_string(app.synthetic_body_count);
         ImGui::SetNextItemWidth(-1.0F);
@@ -865,7 +1103,7 @@ UiActions draw_control_panel(
     }
 
     section_heading("Body Inspector");
-    if (app.scenario.kind == ScenarioKind::solar_system) {
+    if (app.astronomical()) {
         std::vector<const char*> body_names;
         for (const auto& candidate : app.controller.state().bodies) {
             body_names.push_back(candidate.name.c_str());
@@ -887,12 +1125,27 @@ UiActions draw_control_panel(
     help_for_last_item(nbody::visualization::HelpTopic::body_selector);
     const auto& body = app.controller.state().bodies[app.selected_body];
     const auto& style = app.scenario.styles[app.selected_body];
-    const char* distance_label = app.scenario.kind == ScenarioKind::solar_system
-        ? "Distance from Sun" : "Distance from body 0";
+    const auto sun_index = nbody::visualization::find_body_index(
+        app.scenario,
+        app.scenario.kind == ScenarioKind::astronomical_catalog ? "sol:sun" : "sun");
+    const std::size_t distance_reference = sun_index.value_or(0U);
+    const char* distance_label = app.astronomical() && sun_index
+        ? "Distance from Sun" : "Distance from solver body 0";
     if (begin_property_table("body_properties")) {
         property_row("Name", body.name);
+        property_row("Stable ID", app.scenario.stable_ids[app.selected_body]);
+        if (app.astronomical()) {
+            const auto& metadata = app.scenario.body_metadata[app.selected_body];
+            property_row("Class", nbody::visualization::astronomical_body_class_name(
+                metadata.body_class));
+            property_row("Catalog parent", metadata.parent_stable_id.value_or("None"));
+            property_row("Future removal eligibility",
+                metadata.counterfactual_removal_eligible
+                    ? "Curated major-body candidate" : "Not in initial curated list");
+        }
         property_row(distance_label, nbody::visualization::format_measurement(
-            nbody::norm(body.position_m - app.controller.state().bodies[0].position_m) /
+            nbody::norm(body.position_m -
+                app.controller.state().bodies[distance_reference].position_m) /
                 149597870700.0, "AU", 6));
         property_row("Speed", nbody::visualization::format_measurement(
             nbody::norm(body.velocity_m_s) / 1000.0, "km/s", 6));
@@ -902,6 +1155,33 @@ UiActions draw_control_panel(
             : "Not defined for this synthetic workload");
         ImGui::EndTable();
     }
+    if (app.astronomical()) {
+        bool visible = app.individual_visibility[app.selected_body];
+        if (ImGui::Checkbox("Visible (rendering only)", &visible)) {
+            app.individual_visibility[app.selected_body] = visible;
+        }
+        ImGui::TextDisabled(
+            "Effective visibility = active view + class filter + individual setting; forces are unchanged.");
+        if (ImGui::CollapsingHeader("Body-class visibility filters")) {
+            constexpr std::array<nbody::astronomy::AstronomicalBodyClass, 7> classes{{
+                nbody::astronomy::AstronomicalBodyClass::star,
+                nbody::astronomy::AstronomicalBodyClass::planet,
+                nbody::astronomy::AstronomicalBodyClass::dwarf_planet,
+                nbody::astronomy::AstronomicalBodyClass::natural_satellite,
+                nbody::astronomy::AstronomicalBodyClass::asteroid,
+                nbody::astronomy::AstronomicalBodyClass::comet,
+                nbody::astronomy::AstronomicalBodyClass::trans_neptunian_object,
+            }};
+            for (std::size_t class_index = 0; class_index < classes.size(); ++class_index) {
+                bool enabled = app.class_visibility[class_index];
+                if (ImGui::Checkbox(
+                        nbody::visualization::astronomical_body_class_name(classes[class_index]),
+                        &enabled)) {
+                    app.class_visibility[class_index] = enabled;
+                }
+            }
+        }
+    }
     if (ImGui::Button("Focus selected", {154.0F, 0.0F})) {
         app.focused_body = app.selected_body;
         actions.frame_focus = true;
@@ -909,6 +1189,12 @@ UiActions draw_control_panel(
     help_for_last_item(nbody::visualization::HelpTopic::focus_selected);
 
     section_heading("Numerical Accuracy");
+    if (!app.scenario.timestep_validation_complete) {
+        ImGui::TextColored(
+            ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
+            "Provisional 60 s timestep — bounded convergence tested locally, long-horizon "
+            "ephemeris accuracy not established.");
+    }
     const auto health_color = [](bool okay) {
         return okay ? ImVec4(0.38F, 0.90F, 0.61F, 1.0F)
                     : ImVec4(1.0F, 0.34F, 0.28F, 1.0F);
@@ -940,40 +1226,63 @@ UiActions draw_control_panel(
     }
 
     section_heading("Visualization & View");
+    if (!app.view_error.empty()) {
+        ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F), "%s", app.view_error.c_str());
+    }
     if (ImGui::Button("Overview")) {
         actions.camera_preset = nbody::visualization::CameraPreset::overview;
     }
     help_for_last_item(nbody::visualization::HelpTopic::camera_presets);
-    if (app.scenario.kind == ScenarioKind::solar_system) {
+    if (app.astronomical()) {
         ImGui::SameLine();
         if (ImGui::Button("Inner System")) {
             actions.camera_preset = nbody::visualization::CameraPreset::inner_system;
         }
         help_for_last_item(nbody::visualization::HelpTopic::camera_presets);
         ImGui::SameLine();
-        if (ImGui::Button("Earth")) {
-            actions.camera_preset = nbody::visualization::CameraPreset::earth;
+        if (ImGui::Button(
+                app.scenario.kind == ScenarioKind::astronomical_catalog
+                    ? "Earth-Moon" : "Earth")) {
+            actions.camera_preset = nbody::visualization::CameraPreset::earth_moon;
         }
         help_for_last_item(nbody::visualization::HelpTopic::camera_presets);
         if (ImGui::Button("Jupiter")) {
-            actions.camera_preset = nbody::visualization::CameraPreset::jupiter;
+            actions.camera_preset = nbody::visualization::CameraPreset::jupiter_system;
         }
         help_for_last_item(nbody::visualization::HelpTopic::camera_presets);
         ImGui::SameLine();
         if (ImGui::Button("Saturn")) {
-            actions.camera_preset = nbody::visualization::CameraPreset::saturn;
+            actions.camera_preset = nbody::visualization::CameraPreset::saturn_system;
         }
         help_for_last_item(nbody::visualization::HelpTopic::camera_presets);
+        if (app.scenario.kind == ScenarioKind::astronomical_catalog) {
+            if (ImGui::Button("Uranus")) {
+                actions.camera_preset = nbody::visualization::CameraPreset::uranus_system;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Neptune-Triton")) {
+                actions.camera_preset = nbody::visualization::CameraPreset::neptune_triton;
+            }
+            if (ImGui::Button("Pluto-Charon")) {
+                actions.camera_preset = nbody::visualization::CameraPreset::pluto_charon;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Asteroid Belt")) {
+                actions.camera_preset = nbody::visualization::CameraPreset::asteroid_belt;
+            }
+        }
     }
     ImGui::BeginDisabled(!app.trails);
     ImGui::Checkbox("Simulation history trails", &app.show_trails);
     help_for_last_item(nbody::visualization::HelpTopic::history_trails);
     ImGui::EndDisabled();
+    if (app.astronomical()) {
+        ImGui::Checkbox("SSB origin marker", &app.show_barycentric_motion);
+        help_for_last_item(nbody::visualization::HelpTopic::barycenter);
+    }
     if (app.scenario.kind == ScenarioKind::solar_system) {
         ImGui::Checkbox("Reference orbit guides", &app.show_reference_orbits);
         help_for_last_item(nbody::visualization::HelpTopic::reference_orbits);
-        ImGui::Checkbox("Barycenter and integrated Sun motion", &app.show_barycentric_motion);
-        help_for_last_item(nbody::visualization::HelpTopic::barycenter);
         if (app.show_barycentric_motion) {
             ImGui::SetNextItemWidth(-1.0F);
             ImGui::SliderFloat(
@@ -999,6 +1308,12 @@ UiActions draw_control_panel(
     if (ImGui::CollapsingHeader("Advanced / Technical Details")) {
         help_for_last_item(nbody::visualization::HelpTopic::advanced_details);
         ImGui::TextWrapped("%s", app.scenario.provenance.c_str());
+        ImGui::TextWrapped("Solver: direct O(N^2) point-mass Velocity Verlet (%s)",
+                           app.controller.backend_name());
+        if (!app.scenario.scientific_limitations.empty()) {
+            ImGui::TextWrapped("Scientific limitations: %s",
+                               app.scenario.scientific_limitations.c_str());
+        }
         ImGui::TextWrapped("Position: (%.6e, %.6e, %.6e) m",
                            body.position_m.x, body.position_m.y, body.position_m.z);
         ImGui::TextWrapped("Velocity: (%.6e, %.6e, %.6e) m/s",
@@ -1051,6 +1366,9 @@ void draw_labels(
     auto* draw_list = ImGui::GetForegroundDrawList();
     std::vector<nbody::visualization::LabelCandidate> candidates;
     const auto append_candidate = [&](std::size_t index) {
+        if (!bodies[index].visible) {
+            return;
+        }
         const auto screen = project_to_screen(bodies[index].position, camera, display, panel_right);
         if (!screen || screen->x < panel_right || screen->x > display.x ||
             screen->y < 0.0F || screen->y > display.y) {
@@ -1059,7 +1377,9 @@ void draw_labels(
         const char* label = app.controller.state().bodies[index].name.c_str();
         const ImVec2 size = ImGui::CalcTextSize(label);
         const bool selected = index == app.selected_body;
-        const int priority = selected ? 1000 : (index == 0 ? 900 : 700 - static_cast<int>(index));
+        const bool star = app.scenario.body_metadata[index].body_class ==
+            nbody::astronomy::AstronomicalBodyClass::star;
+        const int priority = selected ? 1000 : (star ? 900 : 700 - static_cast<int>(index));
         candidates.push_back({
             index,
             {screen->x, screen->y},
@@ -1199,7 +1519,9 @@ int main(int argc, char** argv) {
             if (app.conservation) {
                 app.conservation->update(app.controller.state());
             }
+            refresh_render_origin(app);
             app.render_space.update_snapshot(app.controller.state(), snapshot);
+            app.apply_visibility(snapshot);
             if (app.focused_body && *app.focused_body < snapshot.size()) {
                 camera.approach_target(snapshot[*app.focused_body].position, 0.14F);
             }
@@ -1236,6 +1558,14 @@ int main(int argc, char** argv) {
                     ScenarioKind::synthetic, *actions.synthetic_body_count, app.synthetic_seed);
                 camera.reset();
                 state_replaced = true;
+            } else if (actions.catalog_subset) {
+                app.switch_scenario(
+                    ScenarioKind::astronomical_catalog,
+                    app.synthetic_body_count,
+                    app.synthetic_seed,
+                    *actions.catalog_subset);
+                camera.reset();
+                state_replaced = true;
             } else if (actions.scenario) {
                 app.switch_scenario(
                     *actions.scenario, app.synthetic_body_count, app.synthetic_seed);
@@ -1243,22 +1573,22 @@ int main(int argc, char** argv) {
                 state_replaced = true;
             }
             if (state_replaced) {
+                refresh_render_origin(app);
                 app.render_space.update_snapshot(app.controller.state(), snapshot);
+                app.apply_visibility(snapshot);
                 update_render_trails(app, render_trails);
             }
             if (actions.camera_preset) {
-                const auto framing = nbody::visualization::camera_framing(
-                    *actions.camera_preset, app.scenario.kind, snapshot);
-                nbody::visualization::apply_camera_framing(camera, framing);
-                app.focused_body = framing.tracked_body;
-                if (framing.tracked_body) {
-                    app.selected_body = *framing.tracked_body;
+                try {
+                    apply_view_preset(app, camera, *actions.camera_preset, snapshot);
+                    app.view_error.clear();
+                } catch (const std::invalid_argument& error) {
+                    app.view_error = std::string("View unavailable: ") + error.what();
+                    std::cerr << app.view_error << '\n';
                 }
             }
             if (actions.frame_focus && app.selected_body < snapshot.size()) {
-                camera.set_pose(
-                    camera.yaw_degrees(), camera.pitch_degrees(), 2.35F,
-                    snapshot[app.selected_body].position);
+                focus_selected_body(app, camera, snapshot);
             }
 
             input.scene_left = actions.panel_right + 8.0F;
@@ -1267,13 +1597,16 @@ int main(int argc, char** argv) {
             camera.set_aspect_ratio(logical_scene_width / std::max(display.y, 1.0F));
             nbody::visualization::apply_screen_space_body_sizing(
                 snapshot, camera, display.y,
-                app.scenario.kind == ScenarioKind::solar_system);
+                nbody::visualization::find_body_index(
+                    app.scenario,
+                    app.scenario.kind == ScenarioKind::astronomical_catalog
+                        ? "sol:sun" : "sun"));
 
             draw_labels(app, snapshot, camera, actions.panel_right);
             ImGui::Render();
             std::optional<nbody::visualization::RenderMarker> barycenter_marker;
             if (app.show_barycentric_motion &&
-                app.scenario.kind == ScenarioKind::solar_system) {
+                app.astronomical()) {
                 barycenter_marker = nbody::visualization::RenderMarker{
                     app.render_space.to_render_position({}),
                     {0.96F, 0.78F, 0.30F},
