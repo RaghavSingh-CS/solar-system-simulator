@@ -1,29 +1,40 @@
 # Development setup
 
-## Windows CPU build
+## Canonical Windows builds
 
-Prerequisites: CMake 3.20+, a C++17 compiler (Visual Studio 2022 Build Tools recommended), and Git.
+Prerequisites: CMake with preset support, Ninja, a C++17 compiler, Python for
+the repository-layout and data tests, and Git. Ordinary CPU and OpenMP builds
+must use the tracked presets:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+.\scripts\test-local.ps1 -Configuration CPU
+.\scripts\test-local.ps1 -Configuration OpenMP
 ```
 
-CUDA, MPI, and graphics are not required for the default build. `NBODY_ENABLE_OPENMP`, `NBODY_ENABLE_CUDA`, `NBODY_ENABLE_MPI`, and `NBODY_BUILD_VISUALIZATION` are implemented and remain off by default. CUDA-enabled configuration requires a real NVIDIA toolkit and is documented in `docs/colab_cuda_workflow.md`. MPI requires an MPI C++ implementation; the validated Windows configuration uses Microsoft MPI through the MSYS2 UCRT64 `mpicxx` wrapper.
+These use `build/cpu-release/` and `build/openmp-release/`. CUDA is optional:
+
+```powershell
+.\scripts\test-local.ps1 -Configuration CUDA
+```
+
+The CUDA preset requires a compatible NVIDIA toolkit; runtime validation also
+requires an NVIDIA device. MPI remains outside the ordinary preset set and
+requires a separately approved `build/scratch/<purpose>/` configuration. Exact
+historical Stage 3--5 and MPI commands remain evidence records, not templates
+for new root-level build directories.
 
 ## Optional MPI build
 
 Install Microsoft MPI's runtime and SDK, then configure through an MPI-aware compiler wrapper:
 
 ```powershell
-& '.\.tools\cmake-4.4.3-windows-x86_64\bin\cmake.exe' -S . -B build-mpi -G Ninja `
+& '.\.tools\cmake-4.4.3-windows-x86_64\bin\cmake.exe' -S . -B build/scratch/mpi-release -G Ninja `
   -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/mpicxx.exe `
   -DCMAKE_MAKE_PROGRAM=C:/msys64/ucrt64/bin/ninja.exe `
   -DNBODY_ENABLE_MPI=ON -DNBODY_ENABLE_OPENMP=ON
-& '.\.tools\cmake-4.4.3-windows-x86_64\bin\cmake.exe' --build build-mpi
-ctest --test-dir build-mpi --output-on-failure
+& '.\.tools\cmake-4.4.3-windows-x86_64\bin\cmake.exe' --build build/scratch/mpi-release
+ctest --test-dir build/scratch/mpi-release --output-on-failure
 ```
 
 The test matrix launches one, two, and four MPI ranks plus a two-rank/two-thread hybrid case. Keep ranks multiplied by OpenMP threads within the available logical CPU count for local diagnostics. See `docs/mpi_and_large_n.md` for topology and evidence rules.
@@ -32,18 +43,17 @@ The test matrix launches one, two, and four MPI ranks plus a two-rank/two-thread
 
 At Stage 2, MSYS2 UCRT64 GCC 15.1.0, `libgomp`, and `mingw32-make` were present. GCC defines `_OPENMP=201511` (OpenMP 4.5). CMake was not installed or on `PATH`. Installing `mingw-w64-ucrt-x86_64-cmake 4.4.3-3` via pacman produced a dependency entry-point failure (`0xC0000139`) in this partially updated MSYS2 environment; a full MSYS2 upgrade was deliberately avoided.
 
-The safe fallback was Kitware's official portable CMake 4.4.3 ZIP, downloaded into ignored `.tools/`, verified against the official `cmake-4.4.3-SHA-256.txt`, and invoked by absolute path. No system-wide PATH was changed. General equivalent commands (when CMake and Ninja are on `PATH`) are:
+The safe fallback was Kitware's official portable CMake 4.4.3 ZIP, downloaded into ignored `.tools/`, verified against the official `cmake-4.4.3-SHA-256.txt`, and invoked by repository-relative path. No system-wide PATH was changed. The canonical equivalent commands (when CMake and Ninja are on `PATH`) are:
 
 ```powershell
-cmake -S . -B build-openmp -G Ninja `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/c++.exe `
-  -DNBODY_ENABLE_OPENMP=ON
-cmake --build build-openmp --config Release
-ctest --test-dir build-openmp -C Release --output-on-failure
+cmake --preset openmp-release
+cmake --build --preset openmp-release
+ctest --preset openmp-release
 ```
 
-For a guaranteed CPU-only build, set `-DNBODY_ENABLE_OPENMP=OFF`. Requesting the OpenMP backend from that benchmark binary returns a clear diagnostic rather than silently falling back.
+The CPU preset guarantees `NBODY_ENABLE_OPENMP=OFF`. Requesting the OpenMP
+backend from that binary returns a clear diagnostic rather than silently
+falling back.
 
 The validated run used Ninja 1.13.2 and the portable executable at `.tools/cmake-4.4.3-windows-x86_64/bin/cmake.exe`; substitute that path for `cmake` and the adjacent `ctest.exe` for `ctest` in the commands above when reproducing this exact environment.
 

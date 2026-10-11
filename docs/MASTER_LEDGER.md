@@ -1401,7 +1401,8 @@ Stage 5 remains unchanged.
 
 ### Implementation record
 
-This uncommitted increment on `feature/cuda-visualizer` starts from
+This increment was committed on `feature/cuda-visualizer` as implementation
+commit `e7632e5` and documentation commit `dade679`, starting from
 `163f41a071ee2931bdb795b3df9d892cb3cfd6f3`. The optional viewer now provides a
 dedicated counterfactual panel without changing the live simulation controller.
 It captures a value-owned current or initial astronomical snapshot, selects one
@@ -1479,6 +1480,83 @@ and RTX 4050 validation remain pending. Sequential/OpenMP/CUDA Barnes--Hut is
 still mandatory and unimplemented. Frozen Stage 5 source, protocols, policy,
 scripts, benchmarks, and evidence remain unchanged.
 
+## Canonical repository layout and build custody
+
+### Organization record
+
+The ordinary development workflow now has one ignored build root with three
+tracked presets: `build/cpu-release/`, `build/openmp-release/`, and optional
+`build/cuda-release/`. Temporary approved configurations belong only below
+`build/scratch/<purpose>/`. `AGENTS.md` makes this policy binding for automated
+agents and developers; `scripts/check_repository_layout.py` provides a
+read-only enforcement check, and ordinary CTest runs it when Python is
+available. The checker rejects new root `build-*` trees, tracked compiler
+binaries, root generator directories, and untracked generated validation
+artifacts outside approved locations. It never deletes or moves data.
+
+`scripts/test-local.ps1` runs the layout check, configures, builds, and tests a
+requested preset. It prefers the verified ignored portable CMake distribution
+under `.tools/` and otherwise uses `PATH`. Python temporary files are directed
+to the selected build tree. `scripts/run-visualizer.ps1` defaults explicitly to
+the Sequential backend in `build/cpu-release/`, supports explicit OpenMP and
+CUDA selections, forwards application arguments as an array, and refuses to
+substitute another backend when the requested executable is unavailable.
+Optional compiler, Ninja, and offline FetchContent paths remain local through
+the ignored `CMakeUserPresets.json` pattern demonstrated by
+`CMakeUserPresets.json.example`; tracked presets contain no machine-specific
+absolute paths.
+
+The inventory found 54 ignored historical root `build-*` directories. They are
+grandfathered by exact name in `tools/repository_layout_baseline.json` only
+until a separately approved cleanup. No historical directory was deleted or
+moved. Two directories contain potentially unique untracked evidence and must
+be retained and investigated: `build-stage3-pilot` and
+`build-stage6d-pilot-smoke`. `build-stage6c-visual` must also remain until
+canonical dependency acquisition no longer relies on its pinned GLFW, GLM,
+and ImGui source trees. The ignored `.tools/` tree remains the offline
+toolchain fallback. The grandfathered root source archive
+`solar-system-simulator.zip` is hash-bound in the baseline and requires a
+historical-value decision before deletion. The exact sizes, references,
+classifications, and safe cleanup sequence are recorded in
+`docs/repository_layout.md`.
+
+The development presets explicitly mark Stage 5 source/protocol identity as
+uncontrolled/non-evidence. They do not replace or reinterpret any frozen
+Stage 5 command, cleanroom, protocol, policy, script, benchmark, or retained
+evidence. Scientific output must not be placed in the disposable canonical
+build tree.
+
+### Canonical validation
+
+Fresh GCC 15.1.0/Ninja Release validation used only the canonical paths. Local
+one-time compiler/Ninja and pinned FetchContent source overrides were supplied
+at configure time because the machine's toolchain is not globally configured
+and network acquisition was not required:
+
+- CPU-only `build/cpu-release/`: configure and build passed; CTest passed
+  `11/11`, including the layout checker, legacy/catalog/dataset coverage, the
+  counterfactual engine, and asynchronous viewer worker.
+- OpenMP `build/openmp-release/`: configure and build passed; CTest passed
+  `12/12`, including the same coverage plus OpenMP-specific agreement.
+- Both builds produced the documented `nbody_visualizer.exe`. Launcher dry
+  inspection selected the CPU executable with `--backend sequential` and the
+  OpenMP executable with `--backend openmp`; `--help` launches returned zero
+  and exposed the `catalog` scenario and counterfactual-capable viewer options.
+- Requesting CUDA without `build/cuda-release/nbody_visualizer.exe` produced an
+  explicit error and no fallback. CUDA compilation/runtime and RTX 4050
+  validation remain pending.
+- The first canonical CPU test attempt exposed an unwritable host temporary
+  directory for a Python Stage 5 tooling test. The general wrapper was corrected
+  to use `build/<preset>/tmp`; the final complete CPU and OpenMP suites passed.
+  No Stage 5 implementation or evidence changed.
+- The native interactive GUI was not exercised in this non-interactive
+  closeout. Manual usability validation remains pending via
+  `.\scripts\run-visualizer.ps1` (or `-Backend OpenMP`).
+
+This organization work remains uncommitted pending review. Historical cleanup,
+CUDA paired execution, RTX 4050 validation, and mandatory Barnes--Hut work are
+not part of this increment.
+
 ## Known limitations
 
 - A sourced common-epoch 60-body JPL initial-condition snapshot now exists,
@@ -1528,3 +1606,8 @@ scripts, benchmarks, and evidence remain unchanged.
 - `45be2d3` — opt-in batched CUDA visualizer integration, transactional
   switching/resource management, explicit workload policy, and focused CPU/GPU
   test coverage.
+- `e7632e5` — asynchronous counterfactual experiment worker, immutable
+  publication/provenance model, generation gating, common-frame overlays, and
+  focused GUI/worker tests.
+- `dade679` — counterfactual GUI architecture, validation boundary, scientific
+  limitations, and ledger documentation.

@@ -103,15 +103,16 @@ FetchContent checkout/cache.
 From the repository root:
 
 ```powershell
-cmake -S . -B build-visual -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_BUILD_VISUALIZATION=ON -DNBODY_ENABLE_OPENMP=ON -DNBODY_ENABLE_CUDA=OFF
-cmake --build build-visual
-ctest --test-dir build-visual --output-on-failure
-./build-visual/nbody_visualizer.exe --backend sequential
+.\scripts\test-local.ps1 -Configuration CPU
+.\scripts\run-visualizer.ps1
+.\scripts\test-local.ps1 -Configuration OpenMP
+.\scripts\run-visualizer.ps1 -Backend OpenMP
 ```
 
 CUDA remains opt-in. On a system with a usable CUDA toolkit and NVIDIA device,
-configure with `-DNBODY_ENABLE_CUDA=ON` and select it with
-`--backend cuda --device 0` or the enabled CUDA control. The viewer never
+use `.\scripts\test-local.ps1 -Configuration CUDA` and then
+`.\scripts\run-visualizer.ps1 -Backend CUDA -ApplicationArguments
+'--device','0'`, or use the enabled CUDA control after launch. The viewer never
 silently substitutes a CPU backend.
 
 Options are `--scenario solar|catalog|synthetic`, `--backend sequential|openmp|cuda`,

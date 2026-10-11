@@ -35,35 +35,52 @@ rehearsal after pilot verification and manifest-bound approval.
 
 ## Build and test
 
-```powershell
-cmake -S . -B build
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
-```
-
-The default build remains CPU-only and does not require OpenMP. Enable the validated GCC/libgomp backend explicitly:
+All ordinary local builds use the tracked presets and the ignored `build/`
+tree. The CPU preset is the default on this AMD Ryzen laptop and has no NVIDIA
+dependency:
 
 ```powershell
-cmake -S . -B build-openmp -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_ENABLE_OPENMP=ON
-cmake --build build-openmp
-ctest --test-dir build-openmp --output-on-failure
+cd C:\Projects\PCAP\solar-system-simulator
+.\scripts\test-local.ps1 -Configuration CPU
 ```
+
+Build and test the validated GCC/libgomp configuration explicitly with:
+
+```powershell
+.\scripts\test-local.ps1 -Configuration OpenMP
+```
+
+These commands configure, build, and test `build/cpu-release/` and
+`build/openmp-release/`. For direct use, the equivalent commands are
+`cmake --preset <name>`, `cmake --build --preset <name>`, and
+`ctest --preset <name>`. The repository-local script prefers the verified
+portable CMake under `.tools/` when present and otherwise uses `PATH`.
 
 ### Optional interactive viewer
 
-The viewer is off by default, so headless builds do not fetch or require graphics dependencies. Configure a Release viewer with OpenMP support:
+The canonical presets build the viewer. After the CPU build, launch it with:
 
 ```powershell
-cmake -S . -B build-visual -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_BUILD_VISUALIZATION=ON -DNBODY_ENABLE_OPENMP=ON -DNBODY_ENABLE_CUDA=OFF
-cmake --build build-visual
-ctest --test-dir build-visual --output-on-failure
-./build-visual/nbody_visualizer.exe --backend sequential
+.\scripts\run-visualizer.ps1
 ```
 
-On a machine with a usable CUDA toolkit and NVIDIA device, add
-`-DNBODY_ENABLE_CUDA=ON` and launch with `--backend cuda --device 0`. CUDA is
-never selected automatically and an unavailable device produces an explicit
-error rather than a CPU fallback.
+OpenMP is never selected implicitly:
+
+```powershell
+.\scripts\run-visualizer.ps1 -Backend OpenMP
+```
+
+Forward application options as a string array, for example:
+
+```powershell
+.\scripts\run-visualizer.ps1 -Backend OpenMP -ApplicationArguments '--threads','4','--scenario','catalog'
+```
+
+On a machine with a compatible CUDA toolkit and NVIDIA device, run
+`.\scripts\test-local.ps1 -Configuration CUDA` and then
+`.\scripts\run-visualizer.ps1 -Backend CUDA -ApplicationArguments '--device','0'`.
+CUDA remains optional, is never selected automatically, and is never silently
+replaced by a CPU backend.
 
 The first visualization configure requires network access to fetch exact pinned revisions of GLFW 3.4, GLM 1.0.1, and Dear ImGui 1.92.9b. The generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, so Python, Jinja2, copied DLLs, and runtime asset discovery are not required. Shaders are embedded in the executable.
 
@@ -122,7 +139,7 @@ The panel is resizable from 380 px to the smaller of 680 px or 55% of the window
 Run (Visual Studio multi-config path shown):
 
 ```powershell
-./build/Release/nbody_headless.exe --steps 5000 --sample-every 50 --output orbit.csv
+./build/cpu-release/nbody_headless.exe --steps 5000 --sample-every 50 --output orbit.csv
 ```
 
 Use `--help` for options. CSV comment lines document scenario, units, integrator, gravitational constant, and time step; data columns are:
@@ -134,7 +151,7 @@ time_s,body_index,name,mass_kg,x_m,y_m,z_m,vx_m_s,vy_m_s,vz_m_s
 Run one reproducible benchmark configuration:
 
 ```powershell
-./build-openmp/nbody_benchmark.exe --backend openmp --threads 4 --bodies 512 --steps 50 --dt 10 --warmups 1 --repetitions 5 --seed 24301
+./build/openmp-release/nbody_benchmark.exe --backend openmp --threads 4 --bodies 512 --steps 50 --dt 10 --warmups 1 --repetitions 5 --seed 24301
 ```
 
 The benchmark writes one CSV header and row to standard output. Ad hoc output is disposable; only controlled datasets with protocol and environment provenance belong under `data/benchmarks/`.
@@ -149,24 +166,21 @@ The runner executes one untimed warm-up before each measured sample, counterbala
 
 CUDA remains opt-in and does not affect either CPU build. On an NVIDIA-equipped host:
 
-```bash
-cmake -S . -B build-cuda -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_ENABLE_CUDA=ON
-cmake --build build-cuda
-ctest --test-dir build-cuda --output-on-failure
+```powershell
+.\scripts\test-local.ps1 -Configuration CUDA
+.\scripts\run-visualizer.ps1 -Backend CUDA -ApplicationArguments '--device','0'
 ```
 
 Use `docs/colab_cuda_workflow.md` for the controlled pilot and full benchmark. Do not compare Colab CUDA timings directly with the Stage 3 Windows CPU dataset.
 
 ### Optional MPI and large-N pilot
 
-Build MPI separately; Microsoft MPI and an MPI-capable compiler wrapper are required on Windows:
-
-```powershell
-cmake -S . -B build-mpi -G Ninja -DCMAKE_BUILD_TYPE=Release -DNBODY_ENABLE_MPI=ON -DNBODY_ENABLE_OPENMP=ON
-cmake --build build-mpi
-ctest --test-dir build-mpi --output-on-failure
-mpiexec -n 4 ./build-mpi/nbody_mpi_benchmark.exe --bodies 512 --steps 50 --dt 10 --threads 1 --warmups 1 --repetitions 5 --seed 24301
-```
+MPI remains outside the three ordinary local presets. Frozen MPI and large-N
+evidence retains its recorded historical configuration. Any new approved MPI
+diagnostic must use a specifically justified directory under
+`build/scratch/`, never a new root-level `build-*` tree. Microsoft MPI and an
+MPI-capable compiler wrapper are required on Windows; see
+`docs/mpi_and_large_n.md` before constructing such a build.
 
 `nbody_mpi_benchmark` reports the maximum rank wall time plus local compute and collective-communication components. The replicated-state design uses O(N) memory per rank, O(N^2/P) local force work, and two O(N) acceleration exchanges per Velocity Verlet step. See [MPI and large-N notes](docs/mpi_and_large_n.md) before interpreting timings or running the budgeted pilot orchestrator.
 
@@ -188,6 +202,7 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/stage5_v2_protocol.md`: authoritative phase custody, policy, provenance, metrics, and gates.
 - `docs/stage5_rtx4050_runbook.md`: Windows RTX 4050 pilot-gated execution procedure.
 - `docs/visualization.md`: final viewer provenance, presentation policy, controls, and validation boundary.
+- `docs/repository_layout.md`: canonical build policy, historical-build inventory, and safe cleanup manifest.
 - `docs/mpi_and_large_n.md`: MPI/hybrid architecture, workload safety policy, and bounded pilot protocol.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.

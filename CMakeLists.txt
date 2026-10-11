@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.20)
 
 project(solar_system_simulator VERSION 0.1.0 LANGUAGES CXX)
 
+# Test fixtures use the platform temporary-directory APIs. Keep ordinary local
+# validation artifacts inside the selected build tree rather than at repo root.
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tmp")
+
 option(NBODY_ENABLE_OPENMP "Build the OpenMP force backend" OFF)
 option(NBODY_ENABLE_CUDA "Build the CUDA force backend" OFF)
 option(NBODY_ENABLE_MPI "Build the optional MPI distributed-memory backend" OFF)
@@ -287,6 +291,11 @@ include(CTest)
 if(BUILD_TESTING)
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        add_test(
+            NAME nbody_repository_layout
+            COMMAND ${Python3_EXECUTABLE} -B
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_repository_layout.py
+        )
         add_test(
             NAME nbody_stage5_v2_tools
             COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_stage5_v2_tools.py

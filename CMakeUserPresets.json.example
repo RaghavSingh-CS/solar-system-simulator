@@ -1,0 +1,17 @@
+{
+  "version": 4,
+  "include": ["CMakePresets.json"],
+  "configurePresets": [
+    {
+      "name": "cpu-release-local",
+      "inherits": "cpu-release",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "$env{NBODY_CXX_COMPILER}",
+        "CMAKE_MAKE_PROGRAM": "$env{NBODY_NINJA}",
+        "FETCHCONTENT_SOURCE_DIR_GLFW": "$env{NBODY_GLFW_SOURCE_DIR}",
+        "FETCHCONTENT_SOURCE_DIR_GLM": "$env{NBODY_GLM_SOURCE_DIR}",
+        "FETCHCONTENT_SOURCE_DIR_IMGUI": "$env{NBODY_IMGUI_SOURCE_DIR}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "release-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "NBODY_BUILD_VISUALIZATION": "ON",
+        "NBODY_ENABLE_MPI": "OFF",
+        "NBODY_STAGE5_SOURCE_SHA": "uncontrolled",
+        "NBODY_STAGE5_PROTOCOL_VERSION": "none"
+      }
+    },
+    {
+      "name": "cpu-release",
+      "displayName": "CPU-only viewer (Release)",
+      "description": "Sequential CPU build; no OpenMP, CUDA, MPI, or NVIDIA dependency.",
+      "inherits": "release-base",
+      "binaryDir": "${sourceDir}/build/cpu-release",
+      "cacheVariables": {
+        "NBODY_ENABLE_OPENMP": "OFF",
+        "NBODY_ENABLE_CUDA": "OFF"
+      }
+    },
+    {
+      "name": "openmp-release",
+      "displayName": "OpenMP viewer (Release)",
+      "description": "Sequential and OpenMP CPU backends; no CUDA or MPI dependency.",
+      "inherits": "release-base",
+      "binaryDir": "${sourceDir}/build/openmp-release",
+      "cacheVariables": {
+        "NBODY_ENABLE_OPENMP": "ON",
+        "NBODY_ENABLE_CUDA": "OFF"
+      }
+    },
+    {
+      "name": "cuda-release",
+      "displayName": "CUDA viewer (Release, optional)",
+      "description": "Sequential and CUDA backends; requires a compatible NVIDIA toolkit and device for runtime validation.",
+      "inherits": "release-base",
+      "binaryDir": "${sourceDir}/build/cuda-release",
+      "cacheVariables": {
+        "NBODY_ENABLE_OPENMP": "OFF",
+        "NBODY_ENABLE_CUDA": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "cpu-release",
+      "configurePreset": "cpu-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "openmp-release",
+      "configurePreset": "openmp-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "cuda-release",
+      "configurePreset": "cuda-release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "cpu-release",
+      "configurePreset": "cpu-release",
+      "configuration": "Release",
+      "environment": {
+        "TEMP": "${sourceDir}/build/cpu-release/tmp",
+        "TMP": "${sourceDir}/build/cpu-release/tmp",
+        "TMPDIR": "${sourceDir}/build/cpu-release/tmp"
+      },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "openmp-release",
+      "configurePreset": "openmp-release",
+      "configuration": "Release",
+      "environment": {
+        "TEMP": "${sourceDir}/build/openmp-release/tmp",
+        "TMP": "${sourceDir}/build/openmp-release/tmp",
+        "TMPDIR": "${sourceDir}/build/openmp-release/tmp"
+      },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "cuda-release",
+      "configurePreset": "cuda-release",
+      "configuration": "Release",
+      "environment": {
+        "TEMP": "${sourceDir}/build/cuda-release/tmp",
+        "TMP": "${sourceDir}/build/cuda-release/tmp",
+        "TMPDIR": "${sourceDir}/build/cuda-release/tmp"
+      },
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
