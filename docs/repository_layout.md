@@ -74,7 +74,7 @@ ignored 0.10 MiB
 SHA-256 `00fc9f3922ceb09647668a877a6193e10c7758338690fe945f16810e8e1b00fd`;
 its historical value must be investigated before deletion.
 
-## Historical root build inventory
+## Pre-cleanup historical root build inventory
 
 Sizes are approximate byte sums observed on 2026-10-12. “Regenerable” means
 the build products themselves can be reconstructed; it does not authorize
@@ -84,9 +84,9 @@ rewritten to pretend those runs used the new presets.
 
 The independent final audit classifications and exact byte counts are recorded
 in `tools/historical_build_cleanup_plan.json`. Its 48 `SAFE_TO_DELETE` entries
-total 1,362,737,959 bytes (1,299.61 MiB); this does not authorize deletion.
-The classifications below use that final audit, which supersedes the earlier
-provisional “delete candidate” language.
+total 1,362,737,959 bytes (1,299.61 MiB). The classifications below are the
+pre-cleanup audit record that supported the separately approved deletion on
+2026-10-12; they supersede the earlier provisional “delete candidate” language.
 
 | Directory | MiB | Regenerable | Tracked reference | Unique evidence found | Recommendation |
 |---|---:|---|---|---|---|
@@ -145,32 +145,62 @@ provisional “delete candidate” language.
 | `build-stage6d-pilot-smoke` | 0.01 | **No, as a whole** | Layout checker and ledger custody record | **Yes:** environment, raw results, and four backend logs | **ARCHIVE_FIRST** |
 | `build-stage6d-visual` | 13.78 | Yes | Historical visualization commands | No | **SAFE_TO_DELETE** after approval; retain documentation |
 
-## Evidence-sensitive cleanup procedure
+## Executed cleanup and protected remainder
 
-No directory in the table may be removed from this audit alone. A separately
-approved cleanup must:
+On 2026-10-12, after the separately approved safety gate verified the expected
+branch and commit, clean Git state, exact target sizes, immediate-child paths,
+absence of reparse points, dependency independence, and all protected recursive
+manifests, the 48 rows marked `SAFE_TO_DELETE` above were permanently removed.
+The exact removed names and byte counts remain immutable in
+`tools/historical_build_cleanup_plan.json`. The operation reclaimed exactly
+1,362,737,959 bytes (1,299.61 MiB); no wildcard or broad cleanup command was
+used.
+
+The active anti-clutter baseline now contains exactly these six retained
+directories:
+
+| Directory | Status | Reason |
+|---|---|---|
+| `build-stage3-pilot` | **ARCHIVE_FIRST** | Unique untracked Stage 3 pilot evidence; recorded recursive manifest still matches |
+| `build-stage6d-pilot-smoke` | **ARCHIVE_FIRST** | Unique untracked Stage 6D smoke evidence; recorded recursive manifest still matches |
+| `build-openmp` | **RETAIN_PROVENANCE** | Frozen Stage 3 evidence refers to this exact binary path |
+| `build-sequential` | **RETAIN_PROVENANCE** | Conservation-study provenance refers to this exact binary path |
+| `build-stage6d-mpi` | **RETAIN_PROVENANCE** | Stage 6D MPI documentation/evidence refers to this exact path |
+| `build-stage6d-openmp` | **RETAIN_PROVENANCE** | Stage 6D large-N documentation/evidence refers to this exact path |
+
+Post-cleanup verification passed the repository-layout checker, its negative
+unexpected-`build-*` probe, the pinned dependency-cache verifier, CPU Release
+CTest 12/12, OpenMP Release CTest 13/13, and CPU/OpenMP viewer discovery plus
+real `--help` launches. Canonical `build/cpu-release/` and
+`build/openmp-release/`, `.tools/`, versioned `data/`, `third_party/`, the
+grandfathered source archive, frozen Stage 5 custody, and JPL source/data
+custody were preserved.
+
+## Remaining evidence-sensitive cleanup procedure
+
+None of the six retained directories may be removed from this audit or from
+the completed safe-deletion approval. Any future cleanup must:
 
 1. Re-resolve each exact candidate path and confirm it is an immediate child of
    this repository; never use a broad `build-*` deletion glob.
 2. Re-scan for CSV, JSON, logs, manifests, environment records, benchmark
-   output, and files not produced by CMake.
+   output, and files not produced by CMake, and reproduce the recorded
+   recursive manifest before taking action.
 3. Preserve and review `build-stage3-pilot` and
    `build-stage6d-pilot-smoke`; archive their exact contents to the proposed
    external evidence root with the recorded file hashes before deletion is
    considered.
-4. Verify the persistent dependency cache and confirm canonical CMake caches no
-   longer reference `build-stage6c-visual` before approving its deletion.
-5. Preserve `.tools/`, versioned `data/`, external Stage 5 deployment/evidence
+4. Preserve `.tools/`, versioned `data/`, external Stage 5 deployment/evidence
    roots, sibling cleanrooms, and every frozen historical protocol.
-6. Remove only explicitly approved paths, then remove those names from
+5. Remove only explicitly approved paths, then remove those names from
    `tools/repository_layout_baseline.json` in the same reviewed change.
-7. Run the layout checker and canonical CPU/OpenMP suites afterward.
+6. Run the layout checker and canonical CPU/OpenMP suites afterward.
 
-The active baseline intentionally remains unchanged until cleanup actually
-occurs. `tools/historical_build_cleanup_plan.json` supplies the exact deletion
-list, planned baseline removals, archival destinations, checksums, and recovery
-instructions. `build-openmp`, `build-sequential`, `build-stage6d-mpi`, and
-`build-stage6d-openmp` remain in place as provenance; they are not part of the
-safe deletion total.
+`tools/historical_build_cleanup_plan.json` remains the historical audit record
+and supplies archival destinations, checksums, and recovery instructions.
+`build-openmp`, `build-sequential`, `build-stage6d-mpi`, and
+`build-stage6d-openmp` remain in place as provenance. The two `ARCHIVE_FIRST`
+directories remain in place pending separately approved, hash-verified external
+archival.
 
 The checker never deletes or moves data.

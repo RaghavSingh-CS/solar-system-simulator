@@ -1597,9 +1597,49 @@ name only `.tools/dependencies/` for GLFW, GLM, and ImGui and contain no
 `build-stage6c-visual` reference. Launcher inspection still maps CPU to
 `--backend sequential` and OpenMP to `--backend openmp` without substitution.
 
-This follow-up audit and migration remain uncommitted pending review. Frozen
-Stage 5, JPL data custody, force laws, integrators, and CUDA kernels remain
-unchanged.
+This follow-up audit and dependency migration were committed locally as
+`205770b` and were not pushed. Frozen Stage 5, JPL data custody, force laws,
+integrators, and CUDA kernels remained unchanged.
+
+### Approved historical-build cleanup
+
+On 2026-10-12, the separately approved cleanup consumed the exact 48-entry
+`SAFE_TO_DELETE` list in `tools/historical_build_cleanup_plan.json`. Before any
+removal, the gate verified branch `feature/cuda-visualizer`, exact HEAD
+`205770b7a434c06d88200314b4565e5f327ce5b8`, clean Git state, all 54 expected
+root historical build directories, literal immediate-child target paths,
+absence of reparse points, exact audited sizes, absence of new scientific
+evidence, canonical dependency independence, the pinned dependency cache, and
+the recorded recursive manifests of all six protected directories.
+
+All 48 approved directories were then removed individually by literal path.
+Their exact names are the `SAFE_TO_DELETE` entries retained in the cleanup
+plan; the operation reclaimed exactly 1,362,737,959 bytes (1,299.61 MiB).
+`tools/repository_layout_baseline.json` now contains exactly six historical
+root build names: `build-stage3-pilot`, `build-stage6d-pilot-smoke`,
+`build-openmp`, `build-sequential`, `build-stage6d-mpi`, and
+`build-stage6d-openmp`. The first two remain `ARCHIVE_FIRST`; the latter four
+remain `RETAIN_PROVENANCE`. All six still reproduce their recorded ordinal-path
+recursive SHA-256 manifests. No protected directory was deleted, moved,
+archived, or modified.
+
+Post-cleanup validation passed:
+
+- repository-layout checker with six grandfathered directories;
+- a controlled negative probe proving a new root `build-*` directory is
+  rejected, followed by probe removal and a clean positive rerun;
+- pinned dependency-cache verification for GLFW 3.4, GLM 1.0.1, and Dear ImGui
+  1.92.9b;
+- canonical CPU Release CTest 12/12 and OpenMP Release CTest 13/13;
+- CPU launcher discovery selecting `build/cpu-release/nbody_visualizer.exe`
+  with `--backend sequential`, and OpenMP discovery selecting
+  `build/openmp-release/nbody_visualizer.exe` with `--backend openmp`;
+- real CPU and OpenMP `--help` launches, both returning success.
+
+Canonical `build/`, `.tools/`, `data/`, `third_party/`, external evidence and
+cleanrooms, `solar-system-simulator.zip`, frozen Stage 5, and the JPL dataset
+remain preserved. No physics, integrator, CUDA-kernel, benchmark, protocol, or
+scientific-data source file changed in this cleanup milestone.
 
 ## Known limitations
 
