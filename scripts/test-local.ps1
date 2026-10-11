@@ -46,7 +46,33 @@ try {
     } else {
         Write-Warning 'Python was not found; the CTest layout check will be unavailable.'
     }
-    Invoke-Checked $cmakeProgram (@('--preset', $preset) + $ConfigureArguments)
+
+    $dependencyManifestPath = Join-Path $repositoryRoot 'tools/dependency_cache_manifest.json'
+    $dependencyManifest = Get-Content -Raw -LiteralPath $dependencyManifestPath | ConvertFrom-Json
+    $dependencyRoot = Join-Path $repositoryRoot $dependencyManifest.storage_root
+    $dependencyPresence = @(
+        $dependencyManifest.dependencies | ForEach-Object {
+            Test-Path -LiteralPath (Join-Path $dependencyRoot $_.cache_directory) -PathType Container
+        }
+    )
+    $dependencyOverrides = @()
+    if ($dependencyPresence -contains $true) {
+        if ($dependencyPresence -contains $false) {
+            throw "Persistent dependency cache under '$dependencyRoot' is incomplete. Restore all manifest entries or remove the incomplete cache."
+        }
+        if (-not $python) {
+            throw 'Python is required to verify the installed persistent dependency cache.'
+        }
+        Invoke-Checked $python.Source @('-B', 'scripts/verify_dependency_cache.py', '--require-present')
+        $dependencyOverrides = @(
+            $dependencyManifest.dependencies | ForEach-Object {
+                $path = (Join-Path $dependencyRoot $_.cache_directory).Replace('\', '/')
+                "-D$($_.cmake_override)=$path"
+            }
+        )
+    }
+
+    Invoke-Checked $cmakeProgram (@('--preset', $preset) + $dependencyOverrides + $ConfigureArguments)
     Invoke-Checked $cmakeProgram @('--build', '--preset', $preset)
     $testTemp = Join-Path $repositoryRoot "build/$preset/tmp"
     New-Item -ItemType Directory -Path $testTemp -Force | Out-Null

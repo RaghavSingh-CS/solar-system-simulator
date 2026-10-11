@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-10-12",
+  "repository_head_at_audit": "fce3f20",
+  "directory_count": 54,
+  "policy": {
+    "destructive_actions_performed": false,
+    "active_baseline_modified": false,
+    "safe_to_delete_requires_separate_approval": true,
+    "baseline_rule": "Remove a legacy name from repository_layout_baseline.json in the same reviewed change that deletes that exact directory, never before.",
+    "default_safe_findings": {
+      "tracked_or_unique_scientific_evidence": false,
+      "exact_frozen_path_dependency": false,
+      "canonical_build_imports_from_directory": false,
+      "only_available_dependency_copy": false,
+      "unique_non_generated_logs": false,
+      "reconstructible_from_tracked_sources": true
+    }
+  },
+  "safe_to_delete": {
+    "count": 48,
+    "bytes": 1362737959,
+    "mib": 1299.61,
+    "directories": [
+      {"path": "build-catalog-custody-cpu", "bytes": 8961416},
+      {"path": "build-catalog-custody-openmp", "bytes": 9398323},
+      {"path": "build-catalog-dataset-cpu", "bytes": 8953003},
+      {"path": "build-catalog-dataset-openmp", "bytes": 9384987},
+      {"path": "build-catalog-foundation-cpu", "bytes": 7929149},
+      {"path": "build-catalog-scenario-cpu", "bytes": 21462489},
+      {"path": "build-catalog-scenario-openmp", "bytes": 21878197},
+      {"path": "build-conservation-validation", "bytes": 1882378},
+      {"path": "build-counterfactual-commitgate-cpu", "bytes": 23567829},
+      {"path": "build-counterfactual-commitgate-openmp", "bytes": 22677707},
+      {"path": "build-counterfactual-cpu", "bytes": 8011157},
+      {"path": "build-counterfactual-full-cpu", "bytes": 22760152},
+      {"path": "build-counterfactual-full-openmp", "bytes": 7487041},
+      {"path": "build-counterfactual-gui-cpu", "bytes": 23866177},
+      {"path": "build-counterfactual-gui-openmp", "bytes": 24069693},
+      {"path": "build-counterfactual-openmp", "bytes": 8217049},
+      {"path": "build-counterfactual-p1-cpu", "bytes": 22201991},
+      {"path": "build-counterfactual-p1-openmp", "bytes": 22677857},
+      {"path": "build-counterfactual-remediation-cpu", "bytes": 23828024},
+      {"path": "build-counterfactual-remediation-openmp", "bytes": 24310225},
+      {"path": "build-counterfactual-safety-cpu", "bytes": 22209570},
+      {"path": "build-counterfactual-safety-openmp", "bytes": 22682487},
+      {"path": "build-cuda-local-probe", "bytes": 542168},
+      {"path": "build-cuda-visualizer-cpu", "bytes": 22330222},
+      {"path": "build-cuda-visualizer-cuda-probe", "bytes": 601479},
+      {"path": "build-cuda-visualizer-sequential", "bytes": 19410614},
+      {"path": "build-remediation-cpu", "bytes": 21454873},
+      {"path": "build-remediation-openmp", "bytes": 21922142},
+      {"path": "build-stage5a-cuda-probe", "bytes": 542009},
+      {"path": "build-stage5a-openmp", "bytes": 2315047},
+      {"path": "build-stage5a-sequential", "bytes": 1886933},
+      {"path": "build-stage5v2-cuda-unavailable", "bytes": 542356},
+      {"path": "build-stage5v2-dev", "bytes": 2943642},
+      {"path": "build-stage6a-cpu", "bytes": 1886285},
+      {"path": "build-stage6a-openmp", "bytes": 2315041},
+      {"path": "build-stage6a-vis", "bytes": 138457264, "dependency_sources": ["GLAD", "GLFW", "GLM"], "only_available_dependency_copy": false},
+      {"path": "build-stage6a-visual2", "bytes": 146193808, "dependency_sources": ["GLAD", "GLFW", "GLM"], "only_available_dependency_copy": false},
+      {"path": "build-stage6b-cpu", "bytes": 2097741},
+      {"path": "build-stage6b-openmp", "bytes": 2526408},
+      {"path": "build-stage6b-visual", "bytes": 282876722, "dependency_sources": ["GLFW", "GLM", "ImGui"], "only_available_dependency_copy": false},
+      {"path": "build-stage6c-cpu", "bytes": 2175684},
+      {"path": "build-stage6c-openmp", "bytes": 2600163},
+      {"path": "build-stage6c-visual", "bytes": 283114844, "dependency_sources": ["GLFW", "GLM", "ImGui"], "only_available_dependency_copy": false, "migration": "Exact clean pinned checkouts copied to and verified under .tools/dependencies; canonical caches must be reconfigured there before deletion approval."},
+      {"path": "build-stage6c1-cpu", "bytes": 2174952},
+      {"path": "build-stage6c1-openmp", "bytes": 2603634},
+      {"path": "build-stage6c1-visual", "bytes": 13841709, "historical_documentation_reference": true},
+      {"path": "build-stage6d-cpu", "bytes": 2516817},
+      {"path": "build-stage6d-visual", "bytes": 14448501, "historical_documentation_reference": true}
+    ]
+  },
+  "archive_first": [
+    {
+      "path": "build-stage3-pilot",
+      "bytes": 43304,
+      "classification": "ARCHIVE_FIRST",
+      "reason": "Contains unique untracked pilot evidence from a dirty historical source state; hashes differ from retained Stage 3 evidence.",
+      "proposed_archive": "C:/Projects/PCAP/solar-system-simulator-evidence-archive/historical-builds/fce3f20/build-stage3-pilot",
+      "source_must_remain_in_place": true,
+      "recursive_manifest": {
+        "format": "lowercase_sha256_two_spaces_posix_relative_path_newline_sorted_by_path_utf8",
+        "file_count": 4,
+        "sha256": "17ba0b7d5f4adeda2970119848b91aaa3d49b22830cad23a76062916c8cbed87"
+      },
+      "archive_contents": [
+        {"path": "affinity_probe.txt", "bytes": 2041, "sha256": "c4ff35ccd6656684fcf13f368b10b07fd2001bdfe101b8cb55322c0c52cf94a6"},
+        {"path": "environment.json", "bytes": 3595, "sha256": "644c8564c952862f96e8372f8bcea3c80d1dfe62d964fee0421e582f6674e627"},
+        {"path": "raw_timings.csv", "bytes": 29067, "sha256": "65f73c4040920b2c2e507a39810b171807b03c90cbd6c3ad9cc7b65c65ace379"},
+        {"path": "summary.csv", "bytes": 8601, "sha256": "3e64de4529fced6e86efa48fe09f6dedf3a74b8e5f8341bc98f1f597ee2bb8f9"}
+      ],
+      "recovery": "Copy the verified files back to an isolated analysis directory. Restore the original root name only in a reviewed recovery change that temporarily restores its baseline entry."
+    },
+    {
+      "path": "build-stage6d-pilot-smoke",
+      "bytes": 9189,
+      "classification": "ARCHIVE_FIRST",
+      "reason": "Contains unique untracked Stage 6D smoke evidence and logs from a dirty historical source state.",
+      "proposed_archive": "C:/Projects/PCAP/solar-system-simulator-evidence-archive/historical-builds/fce3f20/build-stage6d-pilot-smoke",
+      "source_must_remain_in_place": true,
+      "recursive_manifest": {
+        "format": "lowercase_sha256_two_spaces_posix_relative_path_newline_sorted_by_path_utf8",
+        "file_count": 6,
+        "sha256": "729469d8f0ab603266c0cdb76fcbaecc4f03f3b82fe50f7803b2f78b178280d4"
+      },
+      "archive_contents": [
+        {"path": "environment.json", "bytes": 4360, "sha256": "bb5e8224f2a51a422ce7a33ab2abf81cd105ff7f31774c7a29351490ab768874"},
+        {"path": "raw_results.csv", "bytes": 1091, "sha256": "f3cc2beafcf9b828dda5fec1308211b5f80b98960c8eff58276dbe5349d99ea9"},
+        {"path": "logs/c0001_sequential_n32.txt", "bytes": 1060, "sha256": "c387798884d6d3e09314109fb252f4e983b7a8ca139d4922eb00b33171a1ade8"},
+        {"path": "logs/c0002_openmp_n32.txt", "bytes": 1102, "sha256": "b127b3c8c3b9098840e514e1e42f2cc7d4a0569f1632186c341bc76d3cf69d04"},
+        {"path": "logs/c0003_mpi_n32.txt", "bytes": 791, "sha256": "608a6e34219fa232aa7e8c3080c668e92ec8fb9eb92af7ba8c70b97b38121e2f"},
+        {"path": "logs/c0004_mpi+openmp_n32.txt", "bytes": 785, "sha256": "ff03825534d95676670870aa63f92c58388dba3501be5b63054fab17d2609330"}
+      ],
+      "recovery": "Copy the verified files back to an isolated analysis directory. Restore the original root name only in a reviewed recovery change that temporarily restores its baseline entry."
+    }
+  ],
+  "retain_provenance": [
+    {
+      "path": "build-openmp",
+      "bytes": 1988167,
+      "classification": "RETAIN_PROVENANCE",
+      "reason": "Exact executable path is recorded by the frozen Stage 3 benchmark protocol and retained Stage 3 environment evidence.",
+      "proposed_archive": "C:/Projects/PCAP/solar-system-simulator-evidence-archive/historical-builds/fce3f20/build-openmp",
+      "archive_contents": "Complete directory, including executable, CMake cache, generated build metadata, and test logs.",
+      "recursive_manifest": {"format": "lowercase_sha256_two_spaces_posix_relative_path_newline_sorted_by_path_utf8", "file_count": 36, "sha256": "1f6454b7f495c32795600ad30a962240b85d35fadd6e5d502eb4198f9c0cf59d"},
+      "source_must_remain_in_place": true,
+      "recovery": "Verify the recursive manifest, then restore only to an isolated historical replay workspace. Restoring the root path requires a reviewed temporary baseline entry."
+    },
+    {
+      "path": "build-sequential",
+      "bytes": 1867178,
+      "classification": "RETAIN_PROVENANCE",
+      "reason": "Exact executable path is recorded by the retained conservation-study protocol and runner.",
+      "proposed_archive": "C:/Projects/PCAP/solar-system-simulator-evidence-archive/historical-builds/fce3f20/build-sequential",
+      "archive_contents": "Complete directory, including executable, CMake cache, generated build metadata, and test logs.",
+      "recursive_manifest": {"format": "lowercase_sha256_two_spaces_posix_relative_path_newline_sorted_by_path_utf8", "file_count": 33, "sha256": "440757c9973b78916a75b949ebce12e4ce2f31c08d7ad2bb5b908205601f842a"},
+      "source_must_remain_in_place": true,
+      "recovery": "Verify the recursive manifest, then restore only to an isolated historical replay workspace. Restoring the root path requires a reviewed temporary baseline entry."
+    },
+    {
+      "path": "build-stage6d-mpi",
+      "bytes": 3957029,
+      "classification": "RETAIN_PROVENANCE",
+      "reason": "Exact path is referenced by the Stage 6D MPI documentation and large-N pilot runner; it supports the unique smoke evidence.",
+      "proposed_archive": "C:/Projects/PCAP/solar-system-simulator-evidence-archive/historical-builds/fce3f20/build-stage6d-mpi",
+      "archive_contents": "Complete directory, including executable, CMake cache, generated build metadata, and test logs.",
+      "recursive_manifest": {"format": "lowercase_sha256_two_spaces_posix_relative_path_newline_sorted_by_path_utf8", "file_count": 48, "sha256": "8b44f16c2605779d2428a232b74b6c1e82bc53e94d322d2eb13ef5be04e6c397"},
+      "source_must_remain_in_place": true,
+      "recovery": "Verify the recursive manifest, then restore only to an isolated historical replay workspace. Restoring the root path requires a reviewed temporary baseline entry."
+    },
+    {
+      "path": "build-stage6d-openmp",
+      "bytes": 2925025,
+      "classification": "RETAIN_PROVENANCE",
+      "reason": "Exact path is referenced by the Stage 6D large-N pilot runner and supports the unique smoke evidence.",
+      "proposed_archive": "C:/Projects/PCAP/solar-system-simulator-evidence-archive/historical-builds/fce3f20/build-stage6d-openmp",
+      "archive_contents": "Complete directory, including executable, CMake cache, generated build metadata, and test logs.",
+      "recursive_manifest": {"format": "lowercase_sha256_two_spaces_posix_relative_path_newline_sorted_by_path_utf8", "file_count": 41, "sha256": "112a5702b63081dcab53a928aa063a607766eb03120fc37f0476a340cf4d85a3"},
+      "source_must_remain_in_place": true,
+      "recovery": "Verify the recursive manifest, then restore only to an isolated historical replay workspace. Restoring the root path requires a reviewed temporary baseline entry."
+    }
+  ],
+  "retain_dependency": [],
+  "needs_investigation": [],
+  "planned_baseline_update": {
+    "during_approved_safe_cleanup": "Remove exactly the 48 SAFE_TO_DELETE names after their directories have been deleted and verified absent.",
+    "after_verified_evidence_archival": "Remove ARCHIVE_FIRST names only after archive copies and SHA-256 manifests independently verify.",
+    "not_planned_for_removal": [
+      "build-openmp",
+      "build-sequential",
+      "build-stage6d-mpi",
+      "build-stage6d-openmp"
+    ]
+  }
+}

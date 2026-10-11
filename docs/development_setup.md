@@ -55,6 +55,20 @@ The CPU preset guarantees `NBODY_ENABLE_OPENMP=OFF`. Requesting the OpenMP
 backend from that binary returns a clear diagnostic rather than silently
 falling back.
 
+When the complete `.tools/dependencies/` cache is present,
+`scripts/test-local.ps1` verifies its clean Git revisions against
+`tools/dependency_cache_manifest.json` and supplies it to FetchContent. This
+keeps offline builds independent of historical `build-*` trees. With no local
+cache, CMake acquires the same pinned revisions normally; an incomplete or
+modified cache is rejected rather than mixed with downloaded sources.
+Because `.tools/` is intentionally ignored, a fresh clone on another machine
+does not contain this cache. Before an offline build there, provision all three
+manifest-named directories from a trusted copy of the verified cache, preserve
+their embedded Git metadata, and run
+`python -B scripts/verify_dependency_cache.py --require-present`. Without that
+separate provisioning step, the first configure requires network access for
+the pinned FetchContent repositories.
+
 The validated run used Ninja 1.13.2 and the portable executable at `.tools/cmake-4.4.3-windows-x86_64/bin/cmake.exe`; substitute that path for `cmake` and the adjacent `ctest.exe` for `ctest` in the commands above when reproducing this exact environment.
 
 ## Google Colab CUDA workflow

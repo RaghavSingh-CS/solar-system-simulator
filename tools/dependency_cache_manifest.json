@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "storage_root": ".tools/dependencies",
+  "purpose": "Optional persistent offline source cache for the exact visualization dependencies pinned by CMakeLists.txt.",
+  "dependencies": [
+    {
+      "name": "glfw",
+      "version": "3.4",
+      "cache_directory": "glfw-3.4",
+      "repository": "https://github.com/glfw/glfw.git",
+      "requested_git_tag": "a74efa0d5628b74adc0426af4c5710e287fa7c2c",
+      "resolved_commit": "7b6aead9fb88b3623e3b3725ebb42670cbe4c579",
+      "git_tree": "a432656fecfbbccee95dcf2e9fb0496475624a67",
+      "cmake_override": "FETCHCONTENT_SOURCE_DIR_GLFW"
+    },
+    {
+      "name": "glm",
+      "version": "1.0.1",
+      "cache_directory": "glm-1.0.1",
+      "repository": "https://github.com/g-truc/glm.git",
+      "requested_git_tag": "0af55ccecd98d4e5a8d1fad7de25ba429d60e863",
+      "resolved_commit": "0af55ccecd98d4e5a8d1fad7de25ba429d60e863",
+      "git_tree": "5ab920679b0ed95e2304c62dad3d7a0e61148f8b",
+      "cmake_override": "FETCHCONTENT_SOURCE_DIR_GLM"
+    },
+    {
+      "name": "imgui",
+      "version": "1.92.9b",
+      "cache_directory": "imgui-1.92.9b",
+      "repository": "https://github.com/ocornut/imgui.git",
+      "requested_git_tag": "f1cc2ae15e53a861a874c3034aae6798fde194ab",
+      "resolved_commit": "f1cc2ae15e53a861a874c3034aae6798fde194ab",
+      "git_tree": "be223b056c60057a1ff9788b2c2cc93154e412fe",
+      "cmake_override": "FETCHCONTENT_SOURCE_DIR_IMGUI"
+    }
+  ]
+}

@@ -1553,9 +1553,53 @@ and network acquisition was not required:
   closeout. Manual usability validation remains pending via
   `.\scripts\run-visualizer.ps1` (or `-Backend OpenMP`).
 
-This organization work remains uncommitted pending review. Historical cleanup,
-CUDA paired execution, RTX 4050 validation, and mandatory Barnes--Hut work are
-not part of this increment.
+This organization work was committed locally as `fce3f20` and was not pushed.
+Historical cleanup, CUDA paired execution, RTX 4050 validation, and mandatory
+Barnes--Hut work were not part of that commit.
+
+### Historical-build dependency and cleanup audit
+
+An independent audit then re-scanned every one of the 54 grandfathered root
+`build-*` directories for tracked path references, unique CSV/JSON/log/text
+outputs, CMake/test-only products, embedded dependency sources, and canonical
+cache imports. No directory was deleted, moved, or archived, and the active
+54-name baseline remains unchanged.
+
+The audit classifies 48 directories `SAFE_TO_DELETE` after separate approval,
+representing 1,362,737,959 bytes (1,299.61 MiB). Two evidence-only directories
+are `ARCHIVE_FIRST`: `build-stage3-pilot` and
+`build-stage6d-pilot-smoke`; exact file-level SHA-256 values and proposed
+external archive/recovery instructions are recorded in
+`tools/historical_build_cleanup_plan.json`. Four build trees remain
+`RETAIN_PROVENANCE` because retained protocols/evidence refer to their exact
+binary paths: `build-openmp`, `build-sequential`, `build-stage6d-mpi`, and
+`build-stage6d-openmp`. No directory remains `RETAIN_DEPENDENCY` after the
+dependency migration, and none remains `NEEDS_INVESTIGATION` within this
+bounded audit.
+
+Clean source checkouts for the exact pinned GLFW 3.4, GLM 1.0.1, and Dear ImGui
+1.92.9b revisions were copied without altering the originals from
+`build-stage6c-visual/_deps` to the persistent ignored
+`.tools/dependencies/` cache. `tools/dependency_cache_manifest.json` records
+repository URLs, requested tags, resolved commits, and Git tree identities;
+`scripts/verify_dependency_cache.py` rejects missing, partial, dirty, or
+mismatched caches. The local validation wrapper now uses this cache only after
+verification, so canonical builds no longer import from a historical build
+tree. Pinned FetchContent remains the fallback when the cache is entirely
+absent; no dependency version was downloaded or changed during migration.
+
+Post-migration canonical Release validation passed from the persistent cache:
+CPU-only CTest `12/12` and OpenMP CTest `13/13`. Both include the repository
+layout check, dependency-cache verification, Stage 5 tooling, legacy Solar,
+JPL catalog/dataset/snapshot, counterfactual engine/worker, and visualization
+model; OpenMP also includes backend agreement. Both canonical CMake caches now
+name only `.tools/dependencies/` for GLFW, GLM, and ImGui and contain no
+`build-stage6c-visual` reference. Launcher inspection still maps CPU to
+`--backend sequential` and OpenMP to `--backend openmp` without substitution.
+
+This follow-up audit and migration remain uncommitted pending review. Frozen
+Stage 5, JPL data custody, force laws, integrators, and CUDA kernels remain
+unchanged.
 
 ## Known limitations
 

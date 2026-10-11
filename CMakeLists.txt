@@ -297,6 +297,11 @@ if(BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_repository_layout.py
         )
         add_test(
+            NAME nbody_dependency_cache
+            COMMAND ${Python3_EXECUTABLE} -B
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_dependency_cache.py
+        )
+        add_test(
             NAME nbody_stage5_v2_tools
             COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_stage5_v2_tools.py
         )
