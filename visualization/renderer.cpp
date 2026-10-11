@@ -92,10 +92,12 @@ uniform mat4 projection;
 uniform int vertex_count;
 uniform int fade_with_age;
 out float age_alpha;
+out float path_fraction;
 void main() {
     gl_Position = projection * view * vec4(in_position, 1.0);
     float fraction = vertex_count > 1 ? float(gl_VertexID) / float(vertex_count - 1) : 1.0;
     age_alpha = fade_with_age != 0 ? mix(0.08, 1.0, fraction) : 1.0;
+    path_fraction = fraction;
 }
 )glsl";
 
@@ -103,9 +105,14 @@ constexpr const char* line_fragment_shader_source = R"glsl(
 #version 330 core
 uniform vec3 trail_color;
 uniform float base_alpha;
+uniform int dashed;
 in float age_alpha;
+in float path_fraction;
 out vec4 fragment_color;
 void main() {
+    if (dashed != 0 && fract(path_fraction * 24.0) < 0.38) {
+        discard;
+    }
     fragment_color = vec4(trail_color, base_alpha * age_alpha);
 }
 )glsl";
@@ -451,6 +458,7 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
         line_alpha_location_ = uniform_location(line_program_, "base_alpha");
         line_fade_location_ = uniform_location(line_program_, "fade_with_age");
         line_count_location_ = uniform_location(line_program_, "vertex_count");
+        line_style_location_ = uniform_location(line_program_, "dashed");
 
         std::vector<glm::vec3> ring_vertices;
         make_ring(ring_vertices);
@@ -646,6 +654,8 @@ void BodyRenderer::render(
         glUniform1f(line_alpha_location_, trail.alpha);
         glUniform1i(line_fade_location_, trail.fade_with_age ? 1 : 0);
         glUniform1i(line_count_location_, static_cast<int>(trail.points.size()));
+        glUniform1i(line_style_location_,
+            trail.line_style == RenderLineStyle::dashed ? 1 : 0);
         glDrawArrays(GL_LINE_STRIP, 0, static_cast<int>(trail.points.size()));
     }
 
@@ -676,6 +686,7 @@ void BodyRenderer::render(
         glUniform1f(line_alpha_location_, 0.92F);
         glUniform1i(line_fade_location_, 0);
         glUniform1i(line_count_location_, static_cast<int>(marker.size()));
+        glUniform1i(line_style_location_, 0);
         glDrawArrays(GL_LINE_STRIP, 0, static_cast<int>(marker.size()));
     }
     if (barycenter_marker) {
@@ -696,6 +707,7 @@ void BodyRenderer::render(
         glUniform1f(line_alpha_location_, 0.90F);
         glUniform1i(line_fade_location_, 0);
         glUniform1i(line_count_location_, static_cast<int>(diamond.size()));
+        glUniform1i(line_style_location_, 0);
         glDrawArrays(GL_LINE_LOOP, 0, static_cast<int>(diamond.size()));
     }
     glDepthMask(GL_TRUE);

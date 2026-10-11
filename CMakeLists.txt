@@ -234,6 +234,7 @@ if(NBODY_BUILD_VISUALIZATION)
         visualization/camera.cpp
         visualization/conservation.cpp
         visualization/compute_comparison.cpp
+        visualization/counterfactual_worker.cpp
         visualization/controller.cpp
         visualization/presentation.cpp
         visualization/render_space.cpp
@@ -243,7 +244,14 @@ if(NBODY_BUILD_VISUALIZATION)
     )
     target_include_directories(nbody_visualization_model PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_features(nbody_visualization_model PUBLIC cxx_std_17)
-    target_link_libraries(nbody_visualization_model PUBLIC nbody_core nbody_astronomy glm::glm)
+    find_package(Threads REQUIRED)
+    target_link_libraries(nbody_visualization_model PUBLIC
+        nbody_core
+        nbody_astronomy
+        nbody_experiments
+        glm::glm
+        Threads::Threads
+    )
     if(NBODY_ENABLE_OPENMP)
         target_compile_definitions(nbody_visualization_model PRIVATE NBODY_VIS_HAS_OPENMP=1)
         target_link_libraries(nbody_visualization_model PRIVATE nbody_openmp)
@@ -367,6 +375,18 @@ if(BUILD_TESTING)
         add_executable(nbody_visualization_tests tests/test_visualization.cpp)
         target_link_libraries(nbody_visualization_tests PRIVATE nbody_visualization_model)
         add_test(NAME nbody_visualization_model COMMAND nbody_visualization_tests)
+        add_executable(
+            nbody_counterfactual_worker_tests
+            tests/test_counterfactual_worker.cpp
+        )
+        target_link_libraries(
+            nbody_counterfactual_worker_tests
+            PRIVATE nbody_visualization_model
+        )
+        add_test(
+            NAME nbody_counterfactual_worker
+            COMMAND nbody_counterfactual_worker_tests
+        )
         if(NBODY_ENABLE_CUDA)
             add_executable(nbody_visualization_cuda_tests tests/test_visualization_cuda.cpp)
             target_link_libraries(nbody_visualization_cuda_tests PRIVATE nbody_visualization_model)

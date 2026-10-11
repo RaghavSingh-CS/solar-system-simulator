@@ -120,6 +120,7 @@ struct ExperimentLimits {
     double sample_cadence_s{0.0};
     std::size_t integration_steps_per_batch{1};
     std::size_t maximum_monitored_bodies{64};
+    std::size_t maximum_reference_bodies{4};
     std::size_t maximum_stored_samples{4096};
     std::size_t memory_budget_bytes{64U * 1024U * 1024U};
     std::uint64_t workload_budget_interactions{500000000ULL};
@@ -149,6 +150,7 @@ double linear_swept_minimum_distance(
 
 struct SignificancePolicy {
     double absolute_separation_threshold_m{1.0};
+    double normalized_deviation_threshold{0.0};
     std::size_t persistence_samples{1};
     double normalization_denominator_floor_m{1.0};
 };
@@ -166,6 +168,9 @@ struct CounterfactualExperimentConfiguration {
     SignificancePolicy significance;
     ScientificGuardPolicy guards;
     std::vector<std::string> monitored_body_stable_ids;
+    // Baseline-only positions retained for render-frame reconstruction. These
+    // IDs do not acquire deviation summaries or threshold metrics.
+    std::vector<std::string> retained_reference_body_stable_ids;
 };
 
 struct ExperimentIssue {
@@ -215,6 +220,7 @@ struct BodyTrajectorySample {
 struct ExperimentSample {
     double elapsed_time_s{0.0};
     std::vector<BodyTrajectorySample> bodies;
+    std::vector<Vec3> baseline_reference_positions_m;
 };
 
 struct BodyDeviationSummary {
@@ -243,6 +249,7 @@ struct CounterfactualExperimentResult {
     SimulationState counterfactual_state;
     std::vector<SurvivorMapping> survivor_mapping;
     std::vector<std::string> monitored_body_stable_ids;
+    std::vector<std::string> reference_body_stable_ids;
     std::vector<ExperimentSample> samples;
     std::vector<BodyDeviationSummary> summaries;
     BranchConservationDiagnostics baseline_conservation;
@@ -288,6 +295,7 @@ private:
     CounterfactualExperimentConfiguration configuration_;
     CounterfactualExperimentResult result_;
     std::vector<std::size_t> monitored_mapping_indices_;
+    std::vector<std::size_t> reference_mapping_indices_;
     std::vector<std::size_t> consecutive_threshold_samples_;
     bool cancellation_requested_{false};
     bool pause_requested_{false};

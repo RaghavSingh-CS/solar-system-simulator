@@ -2,6 +2,7 @@
 #include "nbody/visualization/conservation.hpp"
 #include "nbody/visualization/compute_comparison.hpp"
 #include "nbody/visualization/controller.hpp"
+#include "nbody/visualization/counterfactual_worker.hpp"
 #include "nbody/visualization/presentation.hpp"
 #include "nbody/visualization/render_space.hpp"
 #include "nbody/visualization/scenario.hpp"
@@ -241,11 +242,31 @@ private:
 };
 
 struct ApplicationModel {
+    struct ExperimentUiState {
+        bool capture_current_state{true};
+        int backend_index{0};
+        double observation_horizon_s{86400.0};
+        double sample_cadence_s{3600.0};
+        double absolute_threshold_m{1000.0};
+        double normalized_threshold{1.0e-6};
+        int persistence_samples{2};
+        std::string removed_body_stable_id;
+        std::vector<bool> monitored;
+        bool show_overlay{true};
+        bool show_significant{true};
+        std::string overlay_frame_error;
+        std::string error;
+    };
+
     nbody::visualization::ScenarioDefinition scenario;
     nbody::visualization::SimulationController controller;
     nbody::visualization::RenderSpaceTransform render_space;
     std::unique_ptr<nbody::visualization::ConservationTracker> conservation;
     std::unique_ptr<nbody::visualization::TrailHistory> trails;
+    nbody::visualization::CounterfactualPublicationGate experiment_gate;
+    nbody::visualization::CounterfactualExperimentWorker experiment_worker;
+    nbody::visualization::CounterfactualWorkerPublication experiment_publication;
+    ExperimentUiState experiment_ui;
     std::size_t speed_index{0};
     std::size_t selected_body{0};
     std::optional<std::size_t> focused_body;
@@ -310,6 +331,7 @@ struct ApplicationModel {
         }
         rebuild_optional_analysis();
         apply_workload_safety();
+        reset_experiment_ui();
     }
 
     nbody::visualization::InteractiveWorkloadPolicy workload_policy() const noexcept {
@@ -354,9 +376,12 @@ struct ApplicationModel {
         std::size_t bodies,
         std::uint64_t seed,
         const std::vector<std::string>& catalog_subset = {}) {
+        experiment_worker.request_cancel();
         auto next = kind == ScenarioKind::astronomical_catalog
             ? nbody::visualization::make_astronomical_catalog_scenario(catalog_subset)
             : nbody::visualization::make_visual_scenario(kind, bodies, seed);
+        experiment_gate.replace_scenario();
+        experiment_publication = {};
         const std::size_t next_speed = next.default_speed_index;
         controller.replace_scenario(
             next.initial_state, next.dt_s, next.speed_presets[next_speed].steps_per_frame);
@@ -395,10 +420,34 @@ struct ApplicationModel {
         focused_body.reset();
         local_origin_body.reset();
         trail_reference_body.reset();
+        reset_experiment_ui();
     }
 
     bool astronomical() const noexcept {
         return scenario.kind != ScenarioKind::synthetic;
+    }
+
+    void reset_experiment_ui() {
+        experiment_ui = {};
+        experiment_ui.observation_horizon_s =
+            scenario.kind == ScenarioKind::astronomical_catalog
+                ? 86400.0 : 30.0 * 86400.0;
+        experiment_ui.sample_cadence_s =
+            scenario.kind == ScenarioKind::astronomical_catalog
+                ? 3600.0 : 86400.0;
+        experiment_ui.monitored.assign(scenario.stable_ids.size(), true);
+        const auto candidates =
+            nbody::visualization::counterfactual_removal_candidates(scenario);
+        if (!candidates.empty()) {
+            experiment_ui.removed_body_stable_id = candidates.front();
+        }
+    }
+
+    void refresh_experiment_publication() {
+        auto next = experiment_worker.publication();
+        if (experiment_gate.accepts(next)) {
+            experiment_publication = std::move(next);
+        }
     }
 
     void apply_visibility(std::vector<nbody::visualization::RenderBody>& snapshot) const {
@@ -780,6 +829,80 @@ void update_render_trails(
     }
 }
 
+bool publication_matches_scenario(const ApplicationModel& app) {
+    const auto& publication = app.experiment_publication;
+    if (!app.experiment_gate.accepts(publication) || !publication.identities ||
+        publication.identities->size() != app.scenario.stable_ids.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < app.scenario.stable_ids.size(); ++index) {
+        if ((*publication.identities)[index].stable_id != app.scenario.stable_ids[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void append_counterfactual_trails(
+    ApplicationModel& app,
+    std::vector<nbody::visualization::RenderTrail>& output) {
+    app.experiment_ui.overlay_frame_error.clear();
+    if (!app.experiment_ui.show_overlay || !app.experiment_publication.result ||
+        !publication_matches_scenario(app)) {
+        return;
+    }
+    const auto& result = *app.experiment_publication.result;
+    std::vector<std::string> displayed;
+    if (app.selected_body < app.scenario.stable_ids.size()) {
+        displayed.push_back(app.scenario.stable_ids[app.selected_body]);
+    }
+    if (app.experiment_ui.show_significant) {
+        for (const auto& summary : result.summaries) {
+            if (summary.significant &&
+                std::find(displayed.begin(), displayed.end(), summary.stable_id) ==
+                    displayed.end()) {
+                displayed.push_back(summary.stable_id);
+            }
+        }
+    }
+    std::optional<std::string> common_origin;
+    if (app.trail_reference_body &&
+        *app.trail_reference_body < app.scenario.stable_ids.size()) {
+        common_origin = app.scenario.stable_ids[*app.trail_reference_body];
+    }
+    displayed = nbody::visualization::counterfactual_visible_overlay_ids(
+        app.scenario, app.profile_visibility, app.individual_visibility,
+        app.class_visibility, displayed, 12U);
+    const auto reconstructed =
+        nbody::visualization::build_counterfactual_render_paths(
+            app.experiment_publication, app.render_space, displayed,
+            common_origin, 12U);
+    app.experiment_ui.overlay_frame_error = reconstructed.frame_unavailable_reason;
+    for (const auto& path : reconstructed.paths) {
+        const auto index = nbody::visualization::find_body_index(
+            app.scenario, path.stable_id);
+        if (!index) {
+            continue;
+        }
+        nbody::visualization::RenderTrail trail;
+        trail.points = path.points;
+        const glm::vec3 body_color = app.scenario.styles[*index].color;
+        if (path.branch ==
+            nbody::visualization::CounterfactualPathBranch::baseline) {
+            trail.color = body_color;
+            trail.alpha = 0.95F;
+            trail.line_style = nbody::visualization::RenderLineStyle::solid;
+        } else {
+            trail.color = glm::vec3(1.0F, 0.28F, 0.72F) * 0.72F +
+                body_color * 0.28F;
+            trail.alpha = 0.92F;
+            trail.line_style = nbody::visualization::RenderLineStyle::dashed;
+        }
+        trail.fade_with_age = false;
+        output.push_back(std::move(trail));
+    }
+}
+
 std::string human_time(double seconds) {
     std::ostringstream text;
     const double days = seconds / 86400.0;
@@ -791,6 +914,76 @@ std::string human_time(double seconds) {
         text << std::fixed << std::setprecision(3) << days / 365.25 << " years";
     }
     return text.str();
+}
+
+std::string human_bytes(std::size_t bytes) {
+    std::ostringstream text;
+    const double mebibytes = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    text << std::fixed << std::setprecision(mebibytes < 10.0 ? 2 : 1)
+         << mebibytes << " MiB";
+    return text.str();
+}
+
+nbody::experiments::CounterfactualExperimentConfiguration
+make_experiment_configuration(
+    const ApplicationModel& app,
+    int preferred_openmp_threads) {
+    nbody::experiments::CounterfactualExperimentConfiguration configuration;
+    configuration.removed_body_stable_id =
+        app.experiment_ui.removed_body_stable_id;
+    configuration.backend = app.experiment_ui.backend_index == 0
+        ? nbody::experiments::ExperimentBackend::sequential
+        : nbody::experiments::ExperimentBackend::openmp;
+    configuration.openmp_threads = preferred_openmp_threads;
+    configuration.limits.observation_horizon_s =
+        app.experiment_ui.observation_horizon_s;
+    configuration.limits.sample_cadence_s = app.experiment_ui.sample_cadence_s;
+    configuration.limits.integration_steps_per_batch = 16U;
+    configuration.limits.maximum_monitored_bodies = 64U;
+    configuration.limits.maximum_reference_bodies = 4U;
+    configuration.limits.maximum_stored_samples = 4096U;
+    configuration.limits.memory_budget_bytes = 64U * 1024U * 1024U;
+    configuration.limits.workload_budget_interactions = 500000000ULL;
+    configuration.limits.maximum_issue_records = 256U;
+    configuration.limits.maximum_issue_message_bytes = 64U * 1024U;
+    configuration.significance.absolute_separation_threshold_m =
+        app.experiment_ui.absolute_threshold_m;
+    configuration.significance.normalized_deviation_threshold =
+        app.experiment_ui.normalized_threshold;
+    configuration.significance.persistence_samples = static_cast<std::size_t>(
+        std::max(1, app.experiment_ui.persistence_samples));
+    configuration.significance.normalization_denominator_floor_m = 1.0;
+    configuration.guards.dangerous_close_approach_radius_multiple = 3.0;
+    configuration.guards.maximum_relative_energy_drift = 1.0e-6;
+    for (std::size_t index = 0;
+         index < app.scenario.stable_ids.size() &&
+         index < app.experiment_ui.monitored.size(); ++index) {
+        if (app.experiment_ui.monitored[index] &&
+            app.scenario.stable_ids[index] !=
+                configuration.removed_body_stable_id) {
+            configuration.monitored_body_stable_ids.push_back(
+                app.scenario.stable_ids[index]);
+        }
+    }
+    if (app.trail_reference_body &&
+        *app.trail_reference_body < app.scenario.stable_ids.size()) {
+        const auto& reference_id = app.scenario.stable_ids[*app.trail_reference_body];
+        if (reference_id != configuration.removed_body_stable_id &&
+            std::find(configuration.monitored_body_stable_ids.begin(),
+                configuration.monitored_body_stable_ids.end(), reference_id) ==
+                configuration.monitored_body_stable_ids.end()) {
+            configuration.retained_reference_body_stable_ids.push_back(reference_id);
+        }
+    }
+    return configuration;
+}
+
+nbody::experiments::ExperimentSnapshot make_ui_experiment_snapshot(
+    const ApplicationModel& app) {
+    const auto& state = app.experiment_ui.capture_current_state
+        ? app.controller.state() : app.controller.initial_state();
+    return nbody::visualization::capture_counterfactual_snapshot(
+        app.scenario, state);
 }
 
 struct UiActions {
@@ -847,6 +1040,7 @@ UiActions draw_control_panel(
     ApplicationModel& app,
     int& preferred_openmp_threads) {
     UiActions actions;
+    app.refresh_experiment_publication();
     const auto width_policy = nbody::visualization::panel_width_policy(
         ImGui::GetIO().DisplaySize.x, app.panel_width);
     ImGui::SetNextWindowPos({16.0F, 16.0F}, ImGuiCond_FirstUseEver);
@@ -1225,6 +1419,336 @@ UiActions draw_control_panel(
             "The bounded benchmark runner retains correctness checks.");
     }
 
+    section_heading("Counterfactual Experiment");
+    ImGui::TextWrapped(
+        "Hypothetical gravitational counterfactual: one curated body is removed from a copied "
+        "state. Visibility controls do not affect this physical removal.");
+    if (!app.astronomical()) {
+        ImGui::TextDisabled(
+            "Counterfactual experiments are available only for astronomical scenarios.");
+    } else {
+        auto& experiment = app.experiment_ui;
+        ImGui::TextDisabled("Settings below configure the NEXT run.");
+        const auto candidates =
+            nbody::visualization::counterfactual_removal_candidates(app.scenario);
+        if (ImGui::RadioButton(
+                "Snapshot current simulation", experiment.capture_current_state)) {
+            experiment.capture_current_state = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton(
+                "Initial scenario", !experiment.capture_current_state)) {
+            experiment.capture_current_state = false;
+        }
+
+        int removal_index = 0;
+        std::vector<const char*> removal_names;
+        removal_names.reserve(candidates.size());
+        for (std::size_t index = 0; index < candidates.size(); ++index) {
+            const auto body_index = nbody::visualization::find_body_index(
+                app.scenario, candidates[index]);
+            removal_names.push_back(body_index
+                ? app.controller.state().bodies[*body_index].name.c_str()
+                : candidates[index].c_str());
+            if (candidates[index] == experiment.removed_body_stable_id) {
+                removal_index = static_cast<int>(index);
+            }
+        }
+        if (!removal_names.empty()) {
+            ImGui::SetNextItemWidth(-1.0F);
+            if (ImGui::Combo("Hypothetically remove", &removal_index,
+                    removal_names.data(), static_cast<int>(removal_names.size()))) {
+                experiment.removed_body_stable_id =
+                    candidates[static_cast<std::size_t>(removal_index)];
+            }
+        }
+        ImGui::TextDisabled("Sun and unapproved catalog bodies are not eligible.");
+
+        ImGui::RadioButton("Experiment Sequential", &experiment.backend_index, 0);
+        ImGui::SameLine();
+        const bool experiment_openmp_available =
+            nbody::experiments::CounterfactualExperimentRunner::openmp_supported();
+        ImGui::BeginDisabled(!experiment_openmp_available);
+        ImGui::RadioButton("Experiment OpenMP", &experiment.backend_index, 1);
+        ImGui::EndDisabled();
+        if (!experiment_openmp_available) {
+            experiment.backend_index = 0;
+        }
+
+        ImGui::SetNextItemWidth(-1.0F);
+        ImGui::InputDouble("Observation horizon (s)",
+            &experiment.observation_horizon_s, 0.0, 0.0, "%.0f");
+        ImGui::SetNextItemWidth(-1.0F);
+        ImGui::InputDouble("Sampling cadence (s)",
+            &experiment.sample_cadence_s, 0.0, 0.0, "%.0f");
+        ImGui::SetNextItemWidth(-1.0F);
+        ImGui::InputDouble("Absolute threshold (m)",
+            &experiment.absolute_threshold_m, 0.0, 0.0, "%.6g");
+        ImGui::SetNextItemWidth(-1.0F);
+        ImGui::InputDouble("Normalized threshold", &experiment.normalized_threshold,
+            0.0, 0.0, "%.6g");
+        ImGui::SetNextItemWidth(-1.0F);
+        ImGui::InputInt("Persistence samples", &experiment.persistence_samples);
+        experiment.persistence_samples = std::max(1, experiment.persistence_samples);
+
+        if (ImGui::CollapsingHeader("Monitored survivor bodies")) {
+            ImGui::BeginChild("experiment_monitored", {0.0F, 170.0F}, true);
+            for (std::size_t index = 0; index < app.scenario.stable_ids.size(); ++index) {
+                const bool removed = app.scenario.stable_ids[index] ==
+                    experiment.removed_body_stable_id;
+                ImGui::BeginDisabled(removed);
+                bool monitored = index < experiment.monitored.size() &&
+                    experiment.monitored[index] && !removed;
+                const std::string label = app.controller.state().bodies[index].name +
+                    "##experiment_monitor_" + app.scenario.stable_ids[index];
+                if (ImGui::Checkbox(label.c_str(), &monitored) &&
+                    index < experiment.monitored.size()) {
+                    experiment.monitored[index] = monitored;
+                }
+                ImGui::EndDisabled();
+            }
+            ImGui::EndChild();
+        }
+
+        std::optional<nbody::visualization::CounterfactualResourceEstimate> estimate;
+        std::string estimate_error;
+        try {
+            auto snapshot = make_ui_experiment_snapshot(app);
+            const auto configuration = make_experiment_configuration(
+                app, preferred_openmp_threads);
+            if (configuration.monitored_body_stable_ids.empty()) {
+                estimate_error = "Select at least one surviving monitored body.";
+            } else if (!(configuration.significance.absolute_separation_threshold_m > 0.0) ||
+                !std::isfinite(configuration.significance.absolute_separation_threshold_m)) {
+                estimate_error = "Absolute threshold must be finite and positive.";
+            } else if (configuration.significance.normalized_deviation_threshold < 0.0 ||
+                !std::isfinite(configuration.significance.normalized_deviation_threshold)) {
+                estimate_error = "Normalized threshold must be finite and non-negative.";
+            } else {
+                estimate = nbody::visualization::estimate_counterfactual_resources(
+                    snapshot, configuration);
+            }
+            if (estimate_error.empty() && configuration.limits.observation_horizon_s >
+                snapshot.maximum_supported_horizon_s()) {
+                estimate_error = "Observation horizon exceeds this snapshot's supported policy limit.";
+            } else if (estimate && estimate->retained_samples >
+                configuration.limits.maximum_stored_samples) {
+                estimate_error = "Sampling request exceeds the 4096-sample history limit.";
+            } else if (estimate && estimate->direct_force_interactions >
+                configuration.limits.workload_budget_interactions) {
+                estimate_error = "Direct-force estimate exceeds the worker workload budget.";
+            } else if (estimate && estimate->conservative_retained_bytes >
+                configuration.limits.memory_budget_bytes) {
+                estimate_error = "Conservative retained-history estimate exceeds 64 MiB.";
+            }
+        } catch (const std::exception& error) {
+            estimate_error = error.what();
+        }
+        if (estimate) {
+            ImGui::TextWrapped(
+                "Estimate: %zu steps, %zu retained samples, %zu monitored bodies, "
+                "%zu hidden frame references, "
+                "%llu direct interactions, %s conservative retained storage.",
+                estimate->integration_steps, estimate->retained_samples,
+                estimate->monitored_bodies,
+                estimate->retained_reference_bodies,
+                static_cast<unsigned long long>(estimate->direct_force_interactions),
+                human_bytes(estimate->conservative_retained_bytes).c_str());
+        }
+        if (!estimate_error.empty()) {
+            ImGui::TextColored(ImVec4(0.96F, 0.47F, 0.31F, 1.0F), "%s",
+                estimate_error.c_str());
+        }
+
+        const bool busy = app.experiment_worker.busy();
+        const bool start_allowed = !busy && !candidates.empty() &&
+            estimate_error.empty();
+        ImGui::BeginDisabled(!start_allowed);
+        if (ImGui::Button("Start counterfactual", {178.0F, 0.0F})) {
+            try {
+                auto snapshot = make_ui_experiment_snapshot(app);
+                auto configuration = make_experiment_configuration(
+                    app, preferred_openmp_threads);
+                const auto scenario_generation =
+                    app.experiment_gate.scenario_generation();
+                const auto worker_generation = app.experiment_worker.start(
+                    std::move(snapshot), std::move(configuration),
+                    {scenario_generation,
+                     experiment.capture_current_state
+                        ? nbody::visualization::CounterfactualSnapshotSource::current_state
+                        : nbody::visualization::CounterfactualSnapshotSource::initial_state});
+                app.experiment_gate.accept_job(
+                    worker_generation, scenario_generation);
+                experiment.error.clear();
+                app.refresh_experiment_publication();
+            } catch (const std::exception& error) {
+                experiment.error = error.what();
+            }
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!busy);
+        if (ImGui::Button("Cancel")) {
+            app.experiment_worker.request_cancel();
+        }
+        ImGui::EndDisabled();
+        if (!experiment.error.empty()) {
+            ImGui::TextColored(ImVec4(0.96F, 0.47F, 0.31F, 1.0F), "%s",
+                experiment.error.c_str());
+        }
+
+        const auto& publication = app.experiment_publication;
+        const auto raw_worker_publication = app.experiment_worker.publication();
+        const bool stale_worker_publication = raw_worker_publication.run &&
+            !app.experiment_gate.accepts(raw_worker_publication);
+        if (stale_worker_publication) {
+            ImGui::Text("Status: Stale (suppressed)");
+            ImGui::TextDisabled(
+                "A prior-scenario publication is not eligible for progress, metrics, warnings, or overlays.");
+        } else {
+            ImGui::Text("Status: %s",
+                nbody::visualization::counterfactual_worker_state_name(publication.state));
+        }
+        if (publication.total_steps > 0U) {
+            const float progress = static_cast<float>(publication.completed_steps) /
+                static_cast<float>(publication.total_steps);
+            ImGui::ProgressBar(std::clamp(progress, 0.0F, 1.0F), {-1.0F, 0.0F});
+            ImGui::TextDisabled("%zu / %zu paired steps published",
+                publication.completed_steps, publication.total_steps);
+        }
+        if (!publication.worker_error.empty()) {
+            ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
+                "Worker failure: %s", publication.worker_error.c_str());
+        }
+        if (publication.run) {
+            const auto& run = *publication.run;
+            ImGui::SeparatorText("Executed run (immutable)");
+            ImGui::Text("Scenario generation: %llu  Worker generation: %llu",
+                static_cast<unsigned long long>(run.scenario_generation),
+                static_cast<unsigned long long>(run.worker_generation));
+            ImGui::Text("Snapshot: %s at t=%.17g s",
+                nbody::visualization::counterfactual_snapshot_source_name(
+                    run.snapshot_source),
+                run.snapshot_time_s);
+            ImGui::TextWrapped("Scenario/dataset: %s", run.scenario_id.c_str());
+            ImGui::TextWrapped("Snapshot provenance: %s",
+                run.source_state_provenance.c_str());
+            ImGui::TextWrapped("Coordinate contract: %s", run.coordinate_frame.c_str());
+            if (run.backend == nbody::experiments::ExperimentBackend::openmp) {
+                ImGui::Text("Backend: %s (threads=%d)",
+                    nbody::experiments::experiment_backend_name(run.backend),
+                    run.openmp_threads);
+            } else {
+                ImGui::Text("Backend: %s",
+                    nbody::experiments::experiment_backend_name(run.backend));
+            }
+            ImGui::Text("Fixed timestep: %.17g s", run.physical_timestep_s);
+            ImGui::Text("Horizon: %.17g s (%zu accepted steps)",
+                run.observation_horizon_s, run.accepted_step_count);
+            ImGui::Text("Sample cadence: %.17g s", run.sample_cadence_s);
+            ImGui::Text("Monitored metrics: %zu  Hidden frame references: %zu",
+                run.monitored_body_stable_ids.size(),
+                run.retained_reference_body_stable_ids.size());
+            ImGui::Text("Absolute threshold: %.6e m", run.absolute_separation_threshold_m);
+            ImGui::Text("Normalized threshold: %.6e", run.normalized_deviation_threshold);
+            ImGui::TextWrapped(
+                "Significance requires BOTH thresholds for %zu consecutive retained samples.",
+                run.persistence_samples);
+            ImGui::Text("Estimated direct interactions: %llu",
+                static_cast<unsigned long long>(
+                    run.estimated_direct_force_interactions));
+            ImGui::Text("Estimated retained storage: %s",
+                human_bytes(run.estimated_retained_bytes).c_str());
+        }
+        const bool publication_is_current = publication_matches_scenario(app);
+        if (publication.result && !publication_is_current) {
+            ImGui::TextDisabled(
+                "Completed result belongs to a different physical scenario; overlay suppressed.");
+        }
+        if (publication.result && publication_is_current) {
+            const auto& result = *publication.result;
+            ImGui::Checkbox("Show trajectory comparison", &experiment.show_overlay);
+            ImGui::SameLine();
+            ImGui::Checkbox("Include significant bodies", &experiment.show_significant);
+            ImGui::TextColored(ImVec4(0.48F, 0.82F, 1.0F, 1.0F),
+                "Solid: baseline");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0F, 0.38F, 0.76F, 1.0F),
+                "Dashed: counterfactual");
+            ImGui::TextWrapped("Removed body: %s",
+                result.removed_body_stable_id.c_str());
+            const std::string selected_id = app.selected_body < app.scenario.stable_ids.size()
+                ? app.scenario.stable_ids[app.selected_body] : std::string{};
+            const auto summary = std::find_if(
+                result.summaries.begin(), result.summaries.end(),
+                [&](const auto& value) { return value.stable_id == selected_id; });
+            if (summary != result.summaries.end()) {
+                ImGui::TextWrapped("Selected survivor: %s", summary->stable_id.c_str());
+                ImGui::Text("Final separation: %.6e m", summary->final_absolute_separation_m);
+                ImGui::Text("Maximum separation: %.6e m", summary->maximum_absolute_separation_m);
+                ImGui::Text("Normalized deviation: %.6e", summary->final_normalized_deviation);
+                ImGui::Text("Fixed normalization scale: %.6e m",
+                    summary->fixed_normalization_scale_m);
+                ImGui::Text("Velocity difference: %.6e m/s",
+                    summary->final_velocity_difference_m_s);
+                if (summary->final_parent_relative_separation_m) {
+                    ImGui::Text("Parent-relative difference: %.6e m",
+                        *summary->final_parent_relative_separation_m);
+                } else {
+                    ImGui::TextDisabled("Parent-relative difference unavailable");
+                }
+                if (summary->first_threshold_crossing_time_s) {
+                    ImGui::Text("First threshold crossing: %.6e s",
+                        *summary->first_threshold_crossing_time_s);
+                } else {
+                    ImGui::TextDisabled("Threshold not crossed at retained samples");
+                }
+                ImGui::Text("Persistent significance: %s",
+                    summary->significant ? "yes" : "no");
+                if (summary->persistent_threshold_time_s) {
+                    ImGui::Text("Persistent threshold reached: %.6e s",
+                        *summary->persistent_threshold_time_s);
+                } else {
+                    ImGui::TextDisabled("Persistent threshold not reached");
+                }
+            }
+            ImGui::Text("Baseline relative energy drift: %.6e",
+                result.baseline_conservation.relative_energy_drift);
+            ImGui::Text("Baseline momentum drift: %.6e kg m/s",
+                result.baseline_conservation.linear_momentum_drift_kg_m_s);
+            ImGui::Text("Baseline angular-momentum drift: %.6e kg m^2/s",
+                result.baseline_conservation.angular_momentum_drift_kg_m2_s);
+            ImGui::Text("Counterfactual relative energy drift: %.6e",
+                result.counterfactual_conservation.relative_energy_drift);
+            ImGui::Text("Counterfactual momentum drift: %.6e kg m/s",
+                result.counterfactual_conservation.linear_momentum_drift_kg_m_s);
+            ImGui::Text("Counterfactual angular-momentum drift: %.6e kg m^2/s",
+                result.counterfactual_conservation.angular_momentum_drift_kg_m2_s);
+            for (const auto& issue : result.issues) {
+                ImGui::TextWrapped("Warning: %s", issue.message.c_str());
+            }
+            if (result.dropped_issue_count > 0U) {
+                ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
+                    "%zu warnings omitted by configured storage bounds",
+                    result.dropped_issue_count);
+            }
+            if (result.terminal_failure) {
+                ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
+                    "Terminal failure: %.*s",
+                    static_cast<int>(result.terminal_failure->message_text().size()),
+                    result.terminal_failure->message_text().data());
+            }
+        }
+        if (!experiment.overlay_frame_error.empty()) {
+            ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F), "%s",
+                experiment.overlay_frame_error.c_str());
+        }
+        ImGui::TextWrapped(
+            "This experiment is hypothetical. Large separation is not escape or ejection. "
+            "The catalog timestep is provisional; close encounters remain point-mass and "
+            "linear swept-step screened, not collision-resolved.");
+    }
+
     section_heading("Visualization & View");
     if (!app.view_error.empty()) {
         ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F), "%s", app.view_error.c_str());
@@ -1526,6 +2050,7 @@ int main(int argc, char** argv) {
                 camera.approach_target(snapshot[*app.focused_body].position, 0.14F);
             }
             update_render_trails(app, render_trails);
+            append_counterfactual_trails(app, render_trails);
 
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
@@ -1577,6 +2102,7 @@ int main(int argc, char** argv) {
                 app.render_space.update_snapshot(app.controller.state(), snapshot);
                 app.apply_visibility(snapshot);
                 update_render_trails(app, render_trails);
+                append_counterfactual_trails(app, render_trails);
             }
             if (actions.camera_preset) {
                 try {

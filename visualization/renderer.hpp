@@ -11,11 +11,17 @@
 
 namespace nbody::visualization {
 
+enum class RenderLineStyle {
+    solid,
+    dashed,
+};
+
 struct RenderTrail {
     std::vector<glm::vec3> points;
     glm::vec3 color{1.0F};
     float alpha{0.58F};
     bool fade_with_age{true};
+    RenderLineStyle line_style{RenderLineStyle::solid};
 };
 
 struct RenderMarker {
@@ -79,6 +85,7 @@ private:
     int line_alpha_location_{-1};
     int line_fade_location_{-1};
     int line_count_location_{-1};
+    int line_style_location_{-1};
     int ring_model_location_{-1};
     int ring_view_location_{-1};
     int ring_projection_location_{-1};

@@ -589,11 +589,13 @@ void append_sample(
     const ExperimentSnapshot& snapshot,
     const CounterfactualExperimentConfiguration& configuration,
     const std::vector<std::size_t>& monitored_mapping_indices,
+    const std::vector<std::size_t>& reference_mapping_indices,
     std::vector<std::size_t>& consecutive_threshold_samples) {
     ExperimentSample sample;
     sample.elapsed_time_s = checked_elapsed_time(
         result.completed_steps, snapshot.fixed_timestep_s());
     sample.bodies.reserve(monitored_mapping_indices.size());
+    sample.baseline_reference_positions_m.reserve(reference_mapping_indices.size());
 
     for (std::size_t monitored = 0; monitored < monitored_mapping_indices.size(); ++monitored) {
         const auto& mapping = result.survivor_mapping[monitored_mapping_indices[monitored]];
@@ -646,7 +648,9 @@ void append_sample(
         }
 
         if (body_sample.absolute_separation_m >=
-            configuration.significance.absolute_separation_threshold_m) {
+                configuration.significance.absolute_separation_threshold_m &&
+            body_sample.normalized_deviation >=
+                configuration.significance.normalized_deviation_threshold) {
             if (!summary.first_threshold_crossing_time_s) {
                 summary.first_threshold_crossing_time_s = sample.elapsed_time_s;
             }
@@ -660,6 +664,11 @@ void append_sample(
             consecutive_threshold_samples[monitored] = 0U;
         }
         sample.bodies.push_back(body_sample);
+    }
+    for (const std::size_t mapping_index : reference_mapping_indices) {
+        const auto& mapping = result.survivor_mapping[mapping_index];
+        sample.baseline_reference_positions_m.push_back(
+            result.baseline_state.bodies[mapping.baseline_index].position_m);
     }
     result.samples.push_back(std::move(sample));
 }
@@ -862,6 +871,7 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
     }
     if (configuration_.limits.integration_steps_per_batch == 0U ||
         configuration_.limits.maximum_monitored_bodies == 0U ||
+        configuration_.limits.maximum_reference_bodies == 0U ||
         configuration_.limits.maximum_stored_samples == 0U ||
         configuration_.limits.memory_budget_bytes == 0U ||
         configuration_.limits.workload_budget_interactions == 0U ||
@@ -871,6 +881,8 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
     }
     if (!(configuration_.significance.absolute_separation_threshold_m > 0.0) ||
         !std::isfinite(configuration_.significance.absolute_separation_threshold_m) ||
+        configuration_.significance.normalized_deviation_threshold < 0.0 ||
+        !std::isfinite(configuration_.significance.normalized_deviation_threshold) ||
         configuration_.significance.persistence_samples == 0U ||
         !(configuration_.significance.normalization_denominator_floor_m > 0.0) ||
         !std::isfinite(configuration_.significance.normalization_denominator_floor_m)) {
@@ -987,12 +999,46 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
     if (monitored_mapping_indices_.size() > configuration_.limits.maximum_monitored_bodies) {
         throw std::invalid_argument("experiment exceeds the monitored-body limit");
     }
+    std::unordered_set<std::string> reference_ids;
+    for (const auto& id : configuration_.retained_reference_body_stable_ids) {
+        if (!reference_ids.insert(id).second) {
+            throw std::invalid_argument("reference body stable IDs must be unique");
+        }
+        if (id == configuration_.removed_body_stable_id) {
+            throw std::invalid_argument("the removed body cannot be a retained reference");
+        }
+        if (monitored_ids.count(id) != 0U) {
+            throw std::invalid_argument(
+                "reference bodies must be distinct from monitored metric bodies");
+        }
+    }
+    for (std::size_t mapping_index = 0;
+         mapping_index < result_.survivor_mapping.size(); ++mapping_index) {
+        if (reference_ids.count(result_.survivor_mapping[mapping_index].stable_id) != 0U) {
+            reference_mapping_indices_.push_back(mapping_index);
+            result_.reference_body_stable_ids.push_back(
+                result_.survivor_mapping[mapping_index].stable_id);
+        }
+    }
+    if (reference_mapping_indices_.size() != reference_ids.size()) {
+        throw std::invalid_argument("a reference stable ID is absent from the survivor mapping");
+    }
+    if (reference_mapping_indices_.size() >
+        configuration_.limits.maximum_reference_bodies) {
+        throw std::invalid_argument("experiment exceeds the reference-body limit");
+    }
     const std::size_t per_sample_body_bytes = checked_multiply(
         monitored_mapping_indices_.size(), conservative_bytes_per_body_sample,
         "retained per-body sample memory estimate");
+    const std::size_t per_sample_reference_bytes = checked_multiply(
+        reference_mapping_indices_.size(),
+        sizeof(Vec3) + conservative_allocation_overhead_bytes,
+        "retained reference sample memory estimate");
     const std::size_t per_sample_bytes = checked_add(
-        checked_add(sizeof(ExperimentSample), per_sample_body_bytes,
-            "retained sample memory estimate"),
+        checked_add(
+            checked_add(sizeof(ExperimentSample), per_sample_body_bytes,
+                "retained sample memory estimate"),
+            per_sample_reference_bytes, "retained sample memory estimate"),
         conservative_allocation_overhead_bytes,
         "retained sample allocation estimate");
     const std::size_t history_bytes = checked_multiply(
@@ -1124,7 +1170,7 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
     }
     consecutive_threshold_samples_.assign(monitored_mapping_indices_.size(), 0U);
     append_sample(result_, snapshot_, configuration_, monitored_mapping_indices_,
-        consecutive_threshold_samples_);
+        reference_mapping_indices_, consecutive_threshold_samples_);
 }
 
 bool CounterfactualExperimentRunner::openmp_supported() noexcept {
@@ -1238,7 +1284,7 @@ bool CounterfactualExperimentRunner::advance_batch() {
             if (next.completed_steps % sample_steps == 0U ||
                 next.completed_steps == total_steps) {
                 append_sample(next, snapshot_, configuration_, monitored_mapping_indices_,
-                    next_threshold_counts);
+                    reference_mapping_indices_, next_threshold_counts);
             }
         }
         next.baseline_conservation = conservation(
