@@ -134,6 +134,22 @@ if(NBODY_ENABLE_OPENMP)
     endif()
 endif()
 
+add_library(nbody_experiments
+    src/experiments/counterfactual.cpp
+)
+target_include_directories(nbody_experiments PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_features(nbody_experiments PUBLIC cxx_std_17)
+target_link_libraries(nbody_experiments PUBLIC nbody_core nbody_astronomy)
+if(NBODY_ENABLE_OPENMP)
+    target_compile_definitions(nbody_experiments PRIVATE NBODY_EXPERIMENT_HAS_OPENMP=1)
+    target_link_libraries(nbody_experiments PRIVATE nbody_openmp)
+endif()
+if(MSVC)
+    target_compile_options(nbody_experiments PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(nbody_experiments PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 if(NBODY_ENABLE_MPI)
     find_package(MPI REQUIRED COMPONENTS CXX)
     add_library(nbody_mpi backends/mpi/mpi_backend.cpp)
@@ -292,6 +308,13 @@ if(BUILD_TESTING)
     add_executable(nbody_astronomical_dataset_tests tests/test_astronomical_dataset.cpp)
     target_link_libraries(nbody_astronomical_dataset_tests PRIVATE nbody_astronomy)
     add_test(NAME nbody_astronomical_dataset COMMAND nbody_astronomical_dataset_tests)
+
+    add_executable(nbody_counterfactual_tests tests/test_counterfactual.cpp)
+    target_link_libraries(nbody_counterfactual_tests PRIVATE nbody_experiments)
+    if(NBODY_ENABLE_OPENMP)
+        target_compile_definitions(nbody_counterfactual_tests PRIVATE NBODY_TEST_HAS_OPENMP=1)
+    endif()
+    add_test(NAME nbody_counterfactual COMMAND nbody_counterfactual_tests)
 
     if(Python3_Interpreter_FOUND)
         add_test(
