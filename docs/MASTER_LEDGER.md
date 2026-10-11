@@ -1282,6 +1282,121 @@ changed. Frozen Stage 5 remains unchanged. Counterfactual experiments are still
 pending. Sequential/OpenMP/CUDA Barnes--Hut, direct-force numerical comparison,
 and controlled large-N evaluation remain mandatory and unimplemented.
 
+## CPU counterfactual gravitational experiment engine
+
+### Implementation record
+
+This uncommitted increment on `feature/cuda-visualizer` begins at
+`b131c86ad9d6d41724649c3893dbb268b36fb8f5`. It adds a headless
+`nbody_experiments` library without changing the viewer controller or live
+simulation state. Immutable snapshots copy stable identity, parent/radius
+metadata, scenario/catalog identity, source provenance and simulation time,
+the original coordinate-frame contract, and a shared fixed Velocity Verlet
+timestep. Capture adapters validate the unchanged legacy nine-body state and
+deterministic full/subset `jpl-ssd-j2000-60-v1` state rather than guessing from
+body names or indices.
+
+`CounterfactualExperimentRunner` owns independent baseline and one-body-removed
+branches. Every survivor begins byte-for-byte equal and is mapped by stable ID
+after counterfactual vector compaction. Initial removal policy admits only
+snapshot-marked planets and dwarf planets; Sun, uncurated, massless, and
+multiple-body removals remain unsupported. Both branches retain the captured
+inertial/SSB origin and call the existing direct-force and Velocity Verlet APIs.
+Sequential and optional OpenMP execution are explicit; an unavailable OpenMP
+request fails instead of falling back. Batches publish paired state, time,
+metrics, and bounded samples transactionally, with pause/cancel at publication
+boundaries and rollback after either branch fails.
+
+Stored metrics include baseline/counterfactual trajectory points, absolute and
+parent-relative separation, fixed-scale normalized deviation with a positive
+floor, velocity difference, final/max values and times, first threshold
+crossing, and configurable persistence. A removed/absent parent makes
+parent-relative metrics explicitly unavailable. Energy, momentum, and angular
+momentum diagnostics are computed per branch against that branch's own initial
+values; cross-branch energy difference is not treated as numerical error.
+Escape classification remains explicitly unsupported.
+
+Resource gates bound horizon, cadence, batch size, monitored bodies, retained
+samples, issue records/message bytes, checked conservative memory admission,
+and direct-force interactions. The memory value covers major histories,
+transactional copies, state/identity/string/map/metric storage, and bounded
+diagnostics but is an admission estimate rather than an allocator-exact upper
+bound. Durations use checked integral-step conversion, the binary64 exact-
+integer ceiling, and a stricter 100,000,000-step operational limit; sample,
+memory, issue, and workload arithmetic is checked before iteration/allocation.
+State and step guards cover non-finite values, invalid or duplicate
+mappings/physical metadata, coincidence, branch-specific close approach and
+sourced-radius overlap, non-advancing or mismatched paired time, conservation
+drift, provisional timestep evidence, and unsupported horizons. Each accepted
+step screens the linear relative segment between pre/post positions. This
+detects endpoint-safe crossings but does not prove minimum distance along the
+curved gravitational path. Scientific/model warnings remain distinct from
+numerical invalidity and threshold significance.
+
+Experiment elapsed time is derived from completed integer steps, not subtraction
+of large absolute timestamps. Failed time progression or either branch's
+integration failure rolls back state, metrics, histories, and progress to the
+last paired publication. Warning deduplication includes branch identity, and
+bounded storage exposes a dropped-issue count. Terminal failures use a separate
+fixed 512-byte message record with truncation status; reporting a failed batch
+cannot evict a committed warning or change its dropped-warning count. Swept
+distance screening uses commonly scaled binary64 relative endpoints, a clamped
+projection, fused interpolation, and stable norms. It does not rely on an
+extended-range `long double`, and nonrepresentable relative geometry is an
+explicit numerical failure rather than a silent no-encounter result. The runner
+is explicitly single-thread-owned: advancement, result access, pause, and
+cancellation APIs must not be called concurrently. Future GUI work requires
+worker ownership plus immutable result publication or explicit synchronization.
+
+### Validation and scientific boundary
+
+Fresh GCC 15.1.0 Release configurations
+(`build-counterfactual-p1-cpu` and
+`build-counterfactual-p1-openmp`) with the complete optional viewer model
+completed on the AMD Windows development machine:
+
+- CPU-only (`NBODY_ENABLE_OPENMP=OFF`, `NBODY_ENABLE_CUDA=OFF`): build passed;
+  CTest passed `9/9` after directing Python temporary files to the writable
+  fresh-build directory.
+- OpenMP (`NBODY_ENABLE_OPENMP=ON`, `NBODY_ENABLE_CUDA=OFF`): build passed;
+  CTest passed `10/10`, including Sequential/OpenMP paired-run agreement.
+- Focused adversarial coverage verifies exact initial survivors, physical force
+  removal against a one-step analytic acceleration term, compacted stable-ID
+  mapping, no branch recentering, initial zero deviation, paired time, threshold
+  persistence, pause/cancel boundaries, atomic guard rollback, memory/workload
+  limits, conservation diagnostics, non-finite/coincident/close-approach
+  handling, deterministic Sequential repeatability, OpenMP gating/agreement,
+  source-state isolation, legacy preservation, and full 60-body compatibility.
+- Targeted remediation adds endpoint-safe swept-crossing, zero-relative,
+  parallel, tangential, initial-overlap, receding, branch-divergent and
+  non-finite proximity cases; branch-aware warning retention; integral-step
+  boundary/NaN/infinity/representability and checked workload/memory overflow
+  cases; non-integral timesteps; multi-batch step-derived elapsed time; large-
+  timestamp stagnation after a committed batch; second-branch failure rollback;
+  issue record/message caps with dropped-count reporting; full-warning-buffer
+  rollback with exact preservation of committed histories/metrics/conservation;
+  independent terminal reporting with an empty or full warning buffer; repeated
+  failed-result inspection; and binary64-range swept geometry through finite
+  near-limit endpoint crossings, parallel/receding/degenerate/grazing paths,
+  ordinary astronomical scales, and explicit rejection of unrepresentable
+  relative coordinates.
+
+These tests verify the CPU engine contract, not the physical plausibility of an
+instantaneous body removal or long-horizon Solar System prediction. The catalog
+adapter retains the explicitly **provisional** 60-second timestep and an
+initial one-day policy ceiling; neither the prior one-day refinement check nor
+this engine establishes general counterfactual convergence. Point masses still
+omit collision physics, close-encounter regularization, oblateness, relativity,
+tides, and non-gravitational comet forces. Large separation is not escape.
+
+GUI controls/worker execution and CUDA paired integration remain pending. CUDA
+compilation/runtime was not attempted and NVIDIA validation is not claimed.
+Sequential/OpenMP/CUDA Barnes--Hut, numerical verification, and controlled
+large-N performance evaluation remain mandatory and unimplemented. No physics
+equation, integrator, CUDA kernel, astronomical source record, Stage 5 source,
+protocol, policy, script, benchmark, or retained evidence changed. Frozen
+Stage 5 remains unchanged.
+
 ## Known limitations
 
 - A sourced common-epoch 60-body JPL initial-condition snapshot now exists,

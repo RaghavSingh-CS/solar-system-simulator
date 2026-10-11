@@ -24,6 +24,8 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  +-- CUDA (validated on Tesla T4)
                         |                  +-- MPI / MPI+OpenMP (implemented, optional)
                         +-> diagnostics -> CSV/headless benchmark
+                        +-> immutable counterfactual snapshot
+                              -> paired CPU runner -> bounded published metrics
                         +-> immutable snapshots -> OpenGL viewer
 ```
 
@@ -34,6 +36,19 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 - `backends/mpi`: optional replicated-state MPI implementation with an OpenMP local-work mode.
 - `visualization`: optional application controller, camera, render-space conversion, and OpenGL renderer; it links the simulation library but simulation code never depends on OpenGL.
 - `tests`: physics invariants and regression tests.
+
+The headless `nbody_experiments` library owns counterfactual snapshots and a
+paired Sequential/OpenMP runner. It copies source state, removes exactly one
+curated non-Sun body from only the counterfactual branch, and reuses the shared
+Velocity Verlet/force APIs. Completed pairs are published transactionally with
+bounded trajectory samples; it has no OpenGL dependency and no live-viewer
+state alias. The runner is single-thread-owned; future GUI execution must keep
+it on one worker and publish immutable completed snapshots (or add explicit
+synchronization), rather than racing result/control calls. Per-step proximity
+screening is a branch-specific linear swept-segment test and is not a curved-
+trajectory minimum-distance proof. See
+[counterfactual_experiments.md](counterfactual_experiments.md) for metrics,
+resource policies, scientific guards, and deferred GUI/CUDA work.
 
 ## Shared representation and determinism
 
@@ -70,6 +85,15 @@ SimulationState + ForceBackend
 ```
 
 `SimulationController` calls the existing CPU `velocity_verlet_step` for Sequential/OpenMP and the existing batched `CudaVelocityVerlet` executor for CUDA; no gravitational calculation exists in renderer code. CUDA allocations are reused while the body count is unchanged, and each requested frame batch completes its device integration and returns an authoritative host state before diagnostics or rendering. There is no CUDA/OpenGL interoperability. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii/materials/rings never feed back into physics. Static orbit guides are sampled from the same documented JPL mean-element model but never drive body motion. Camera presets, label decluttering, health mapping, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
+
+The headless CPU counterfactual runner owns two private Sequential/OpenMP
+branches and publishes only complete paired batches. Failed-batch metadata uses
+a separate fixed-capacity terminal record, leaving the last committed states,
+metrics, histories, conservation values, warnings, and warning-drop count
+unchanged. Its between-step close-approach screen uses common-scale binary64
+relative endpoints and stable norms, rejecting nonrepresentable geometry; the
+straight swept segment remains only an approximation to curved gravitational
+motion. The runner is single-owner and is not yet connected to the viewer.
 
 The viewer uses the existing bounded physical trail store for the Sun's actual
 barycentric trajectory and applies optional amplification only to its rendered
