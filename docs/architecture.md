@@ -42,13 +42,26 @@ paired Sequential/OpenMP runner. It copies source state, removes exactly one
 curated non-Sun body from only the counterfactual branch, and reuses the shared
 Velocity Verlet/force APIs. Completed pairs are published transactionally with
 bounded trajectory samples; it has no OpenGL dependency and no live-viewer
-state alias. The runner is single-thread-owned; future GUI execution must keep
-it on one worker and publish immutable completed snapshots (or add explicit
-synchronization), rather than racing result/control calls. Per-step proximity
+state alias. The optional viewer transfers exclusive runner ownership to one
+persistent worker thread. The render thread submits a value-owned snapshot,
+requests cancellation through an atomic flag, and reads mutex-protected
+immutable publications only at paired batch boundaries. Progress publications
+contain lightweight counters; the bounded full result is published once at a
+terminal boundary through immutable shared ownership. Window destruction joins
+the worker, and scenario changes
+request cancellation without mutating either paired branch. At the application
+boundary, independent monotonic scenario and worker generations gate every
+publication; stable IDs remain a secondary composition check. Each publication
+shares a value-owned immutable descriptor of the executed snapshot,
+configuration, and admission estimates, so editable controls are not result
+metadata. Local comparison views retain bounded, baseline-only matched-time
+origin samples separately from monitored metrics and use that one origin for
+both paths; unavailable origins explicitly suppress rather than reframe the
+overlay. Per-step proximity
 screening is a branch-specific linear swept-segment test and is not a curved-
 trajectory minimum-distance proof. See
 [counterfactual_experiments.md](counterfactual_experiments.md) for metrics,
-resource policies, scientific guards, and deferred GUI/CUDA work.
+resource policies, scientific guards, viewer ownership, and deferred CUDA work.
 
 ## Shared representation and determinism
 
@@ -93,7 +106,8 @@ metrics, histories, conservation values, warnings, and warning-drop count
 unchanged. Its between-step close-approach screen uses common-scale binary64
 relative endpoints and stable norms, rejecting nonrepresentable geometry; the
 straight swept segment remains only an approximation to curved gravitational
-motion. The runner is single-owner and is not yet connected to the viewer.
+motion. The runner remains single-owner and is transferred exclusively to the
+viewer worker described above; the render thread never calls runner methods.
 
 The viewer uses the existing bounded physical trail store for the Sun's actual
 barycentric trajectory and applies optional amplification only to its rendered

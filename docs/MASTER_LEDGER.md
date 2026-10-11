@@ -1389,13 +1389,95 @@ this engine establishes general counterfactual convergence. Point masses still
 omit collision physics, close-encounter regularization, oblateness, relativity,
 tides, and non-gravitational comet forces. Large separation is not escape.
 
-GUI controls/worker execution and CUDA paired integration remain pending. CUDA
-compilation/runtime was not attempted and NVIDIA validation is not claimed.
+CUDA paired integration remains pending. CUDA compilation/runtime was not
+attempted and NVIDIA validation is not claimed.
 Sequential/OpenMP/CUDA Barnes--Hut, numerical verification, and controlled
 large-N performance evaluation remain mandatory and unimplemented. No physics
 equation, integrator, CUDA kernel, astronomical source record, Stage 5 source,
 protocol, policy, script, benchmark, or retained evidence changed. Frozen
 Stage 5 remains unchanged.
+
+## Counterfactual viewer and asynchronous CPU worker
+
+### Implementation record
+
+This uncommitted increment on `feature/cuda-visualizer` starts from
+`163f41a071ee2931bdb795b3df9d892cb3cfd6f3`. The optional viewer now provides a
+dedicated counterfactual panel without changing the live simulation controller.
+It captures a value-owned current or initial astronomical snapshot, selects one
+curated non-Sun removal by stable ID, configures Sequential or OpenMP execution,
+horizon, cadence, absolute and normalized thresholds, persistence, and a
+bounded monitored-body set, then displays checked work/memory estimates before
+launch.
+
+A persistent joinable worker exclusively owns each runner. The render thread
+submits immutable job data, makes an atomic cancellation request, and consumes
+mutex-protected immutable publications. Lightweight progress is published only
+after synchronized paired batches; a bounded full result is exposed once at a
+terminal boundary. Exceptions are contained in separate bounded worker-failure
+metadata. Scenario switching requests cancellation and advances an
+application-owned scenario generation on every replacement, including a
+same-ID replacement. A publication is current only when both its immutable
+scenario and worker generations match the accepted job; exact stable-ID order
+is an additional composition check. Overflow is rejected before replacement,
+and window shutdown cancels and joins the worker. The live controller is never
+advanced or mutated by the experiment.
+
+Pending, progress, cancellation, failure, and completion publications share a
+bounded immutable executed-run descriptor: snapshot source/time/provenance and
+coordinate contract, scenario/dataset identity, removal, backend/thread count,
+timestep, horizon/steps, cadence, monitored/reference IDs, thresholds,
+persistence, and admission estimates. The editable panel is labeled for the
+next run and cannot rewrite active or historical metadata.
+
+The completed overlay uses only stored samples. It draws a solid baseline and
+dashed counterfactual path in the same inertial or common baseline-parent frame,
+with double-precision subtraction before float conversion. An unmonitored
+surviving local origin is retained as a bounded baseline-only reference at each
+matching sample time, separately from monitored metrics and included in memory
+admission. Removed, missing, unretained, or incomplete origins explicitly
+suppress the local overlay; neither branch silently changes frames. Visible
+paths are bounded and must pass profile, class, and individual visibility. The
+results panel
+reports sampled absolute, normalized, velocity, and available parent-relative
+deviation; first/persistent threshold crossings; per-branch energy and momentum
+drift; warnings, dropped warnings, and terminal failures. It makes no escape
+classification.
+
+The significance policy now requires both the configured absolute and
+fixed-scale normalized thresholds. This is a metric-policy correction only;
+the Newtonian force law, Velocity Verlet implementation, physical timestep,
+CUDA kernels, astronomical records, and legacy nine-body initialization are
+unchanged.
+
+### Validation and risk record
+
+Focused worker tests cover value-owned capture, eligibility, stable identities,
+immutable publications, progress and completion, cancellation, restart/new
+generation, same-ID replacement, away/back replacement, late stale completion,
+generation overflow, active destruction/join, engine and worker failure
+containment, immutable metadata despite during-run and post-completion editor
+changes, scenario switching without live-controller mutation,
+estimate/admission bounds, normalized threshold behavior, hidden matched-time
+origin retention, unavailable-origin suppression, common-frame numerical
+transforms, overlay visibility masks, and CPU-only OpenMP rejection or built
+OpenMP execution. Fresh Release suite totals were recorded from independent
+Ninja/GCC 15.1.0 configurations with the full optional viewer enabled:
+CPU-only `build-counterfactual-remediation-cpu` passed `10/10` CTest tests, and
+OpenMP `build-counterfactual-remediation-openmp` passed `11/11`. The focused
+worker, counterfactual-engine, and visualization executables also passed
+directly in both configurations. CUDA was disabled in both configurations; no
+NVIDIA runtime result is claimed.
+
+The UI is not a proof of physical accuracy. Instantaneous removal remains a
+hypothetical intervention; large separation is not escape. The catalog timestep
+remains explicitly provisional, the one-day engine ceiling is operational, and
+point masses omit collision response, close-encounter regularization,
+oblateness, relativity, tides, and non-gravitational comet forces. Memory
+admission is conservative rather than allocator-exact. CUDA paired execution
+and RTX 4050 validation remain pending. Sequential/OpenMP/CUDA Barnes--Hut is
+still mandatory and unimplemented. Frozen Stage 5 source, protocols, policy,
+scripts, benchmarks, and evidence remain unchanged.
 
 ## Known limitations
 

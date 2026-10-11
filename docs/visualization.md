@@ -301,6 +301,54 @@ scenario initialization/reset through the existing diagnostics API. FPS and
 frame time are labeled **NOT BENCHMARK EVIDENCE**; controlled Stage 3/4/5
 protocols remain the only performance evidence.
 
+### Counterfactual experiment panel
+
+Astronomical scenarios expose a separate `Counterfactual Experiment` panel.
+The panel captures an immutable current or initial state, permits exactly one
+curated non-Sun physical removal, and runs an independent paired Sequential or
+OpenMP experiment on a persistent worker. The live controller is never used as
+an experiment branch and remains responsive. Scenario replacement requests
+cancellation, window shutdown joins the worker, and restart uses a new worker
+generation. A separate application-owned scenario generation advances on every
+replacement, even an identical stable-ID composition. Progress, results, and
+overlays require both generations plus the full stable-ID composition to
+match, so late completion cannot revive stale work after switching away and
+back. Pending, running, cancelled, failed, and completed states are distinct;
+an invalidated prior-scenario publication is labeled stale and suppressed
+without exposing its progress, diagnostics, or overlay as current.
+
+Controls are labeled for the next run. Every publication instead carries an
+immutable executed-run descriptor containing snapshot source/time/provenance
+and frame, scenario/dataset identity, removal, backend, timestep, horizon and
+accepted steps, cadence, monitored/reference IDs, thresholds, persistence, and
+checked work/memory estimates. Cancelled and failed runs retain the same
+descriptor; displayed historical values never come from subsequently edited
+controls.
+
+The panel shows checked steps, retained samples, direct-force work, and a
+conservative memory estimate before launch. Horizon, cadence, monitored-body,
+history, and engine work limits remain authoritative. Progress is published
+only at synchronized paired batch boundaries. Terminal publication contains
+the bounded result, per-branch conservation diagnostics, warnings and dropped-
+warning count, or a separate bounded worker failure message.
+
+Completed overlays use retained samples only. Baseline paths are solid and
+counterfactual paths dashed; both use the same inertial origin or the matching
+historical baseline-parent origin. If that surviving origin is not monitored,
+bounded baseline-only reference positions are retained at the same sample
+times, separately from metric bodies and included in memory admission. Removed,
+missing, unretained, or incomplete origins suppress the local overlay with an
+explicit explanation; there is no live-origin fallback. The viewer does not
+independently recenter the two branches. At most the selected body plus a
+bounded set of significant bodies is drawn, and each path must also pass the
+active-profile, class, and individual visibility masks. Displayed separation,
+its fixed normalization scale, the rule requiring both thresholds, and first
+and persistent sampled crossing times are counterfactual metrics, not an escape
+or stability claim.
+Instantaneous removal remains hypothetical, and the provisional catalog
+60-second timestep, point-mass model, linear swept-step warning, and one-day
+engine ceiling do not establish ephemeris accuracy.
+
 ## Validation boundary and deferred work
 
 Headless tests cover exact Solar construction, finite sampled reference paths,

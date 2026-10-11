@@ -2,8 +2,8 @@
 
 ## Implemented CPU engine
 
-The counterfactual engine is a headless model component. It is not part of the
-viewer loop and does not retain references to `SimulationController` state. An
+The counterfactual engine is a headless model component. It has no graphics
+dependency and does not retain references to `SimulationController` state. An
 `ExperimentSnapshot` copies one physical `SimulationState`, its stable IDs,
 parent relationships, sourced radii, scenario/catalog identity, coordinate
 frame description, provenance, capture timestamp, fixed timestep, integrator,
@@ -42,9 +42,63 @@ failure reporting itself does not allocate or evict prior warnings. Pause and
 cancellation are honored at these valid
 publication boundaries. A runner is deliberately single-thread-owned: callers
 must not invoke advancement, `result()`, pause, or cancellation APIs
-concurrently. A future GUI must transfer runner ownership to one worker and
-publish immutable completed-result snapshots, or add explicit synchronization;
-no GUI control or worker is implemented here.
+concurrently. The viewer transfers runner ownership to one persistent worker
+and never calls it from the render thread. GUI cancellation is an atomic
+request observed at paired batch boundaries. Mutex-protected publications are
+immutable to the GUI: running updates contain bounded progress and shared
+identity metadata, while one bounded full result is published at completion,
+cancellation, or engine failure. Worker exceptions are contained as bounded
+terminal worker metadata; window shutdown joins the thread.
+
+## Viewer experiment interface
+
+The graphical panel is available only for the legacy and catalog astronomical
+scenarios. It captures a value-owned snapshot from either the scenario's
+initial state or the current synchronized controller state. It exposes one
+curated non-Sun removal, Sequential/OpenMP selection, horizon, sampling cadence,
+absolute and fixed-scale normalized thresholds, persistence, and monitored
+stable IDs. Preflight displays the same checked step/sample/direct-work and
+conservative retained-memory estimates used for admission. Invalid or excessive
+requests cannot start.
+
+The viewer remains responsive while the worker advances. Scenario replacement
+requests cancellation and increments an application-owned scenario generation,
+including for a replacement having the same stable-ID composition. Progress,
+terminal results, and overlays are accepted only when both that scenario
+generation and the accepted worker generation match; the full stable-ID list
+is an additional composition check. Generation overflow is rejected before a
+scenario or job is replaced. Thus late cancellation or completion cannot make
+old work current after switching away and back. The panel distinguishes the
+normal worker states and labels an invalidated prior-scenario publication as
+stale/suppressed without presenting its progress, diagnostics, or overlay as
+current.
+
+Every pending, running, cancelled, failed, or completed publication carries one
+shared immutable run descriptor. It records both generations, current/initial
+snapshot choice, captured absolute time, provenance and coordinate contract,
+scenario/dataset identity, removed stable ID, backend/thread request, physical
+timestep, horizon and accepted step count, cadence, monitored and hidden-frame
+IDs, both thresholds, persistence, and checked work/memory estimates. Mutable
+controls are explicitly settings for the next run; historical labels are read
+only from this descriptor.
+
+Overlays use only retained completed samples: the baseline path is solid and
+the altered path dashed. Both are transformed in the same inertial or common
+baseline-parent frame, so branches are never independently recentered. The UI
+reports trajectory/velocity/normalized deviations, parent-relative values when
+defined, threshold sampling semantics, per-branch conservation, warnings,
+dropped-warning counts, and terminal failures. It does not infer escape.
+
+When a local view origin survives but is not monitored, its baseline position
+is retained separately at every trajectory sample time. These hidden reference
+samples receive no deviation summary or significance metric, are capped and
+included in memory admission, and are used as one common historical origin for
+both paths. Changing to an origin not retained by that run, removing the
+origin, or encountering incomplete reference samples suppresses the overlay
+with an explicit frame-unavailable message; there is no fallback to the live
+camera origin or another coordinate frame. Overlay membership additionally
+requires active-profile, class-filter, and individual-body visibility, none of
+which changes gravitational inclusion.
 
 ## Metrics and interpretation
 
@@ -134,9 +188,8 @@ an ejection, instability, or physically realizable removal event.
 
 ## Deferred boundaries
 
-The engine has no GUI integration and no CUDA paired executor. A future viewer
-layer may capture an immutable snapshot, run/cancel it outside the render
-thread, and visualize only completed published samples. CUDA support requires
+The asynchronous CPU viewer interface is implemented; there is no CUDA paired
+executor. CUDA support requires
 separate paired-resource ownership, transactional synchronization, numerical
 agreement tests, and RTX 4050 validation; it must not silently report CPU work
 as CUDA. Barnes--Hut remains mandatory future work for Sequential, OpenMP, and

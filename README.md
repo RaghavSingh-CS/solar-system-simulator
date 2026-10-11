@@ -97,6 +97,16 @@ Controls:
 - Local subsystem trails subtract the matching historical parent position at
   each sample; labels, picking, guides, rings, and bodies use the same view
   transform.
+- The `Counterfactual Experiment` panel captures either the current or initial
+  astronomical state, removes one explicitly eligible non-Sun body from an
+  independent paired CPU run, and publishes bounded baseline/counterfactual
+  trajectories from a dedicated worker. Visibility never changes solver
+  inclusion. Scenario and worker generations suppress stale publications, and
+  every publication retains the immutable executed configuration rather than
+  later editor values. The overlay uses a solid baseline and dashed altered
+  path in one common frame; unmonitored local origins use separately retained
+  matched-time baseline references, while unavailable origins suppress the
+  overlay explicitly. Separation is not labeled as escape.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
 - Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.
