@@ -306,8 +306,10 @@ protocols remain the only performance evidence.
 
 Astronomical scenarios expose a separate `Counterfactual Experiment` panel.
 The panel captures an immutable current or initial state, permits exactly one
-curated non-Sun physical removal, and runs an independent paired Sequential or
-OpenMP experiment on a persistent worker. The live controller is never used as
+curated non-Sun physical removal, and runs an independent paired Sequential,
+OpenMP, or explicitly selected CUDA experiment on a persistent worker. CUDA is
+shown only in a CUDA-enabled application and remains unavailable without the
+selected NVIDIA device; it never falls back to CPU. The live controller is never used as
 an experiment branch and remains responsive. Scenario replacement requests
 cancellation, window shutdown joins the worker, and restart uses a new worker
 generation. A separate application-owned scenario generation advances on every
@@ -320,7 +322,7 @@ without exposing its progress, diagnostics, or overlay as current.
 
 Controls are labeled for the next run. Every publication instead carries an
 immutable executed-run descriptor containing snapshot source/time/provenance
-and frame, scenario/dataset identity, removal, backend, timestep, horizon and
+and frame, scenario/dataset identity, removal, backend/thread/device, timestep, horizon and
 accepted steps, cadence, monitored/reference IDs, thresholds, persistence, and
 checked work/memory estimates. Cancelled and failed runs retain the same
 descriptor; displayed historical values never come from subsequently edited
@@ -330,8 +332,8 @@ The input layout uses visible labels with units and separate hidden widget IDs,
 instead of trailing ImGui labels that can be clipped by full-width numeric
 fields. At narrow content widths controls stack vertically; wider panels use a
 bounded label/value table. Current-snapshot and initial-state sources, curated
-physical removal, and Sequential/OpenMP execution are presented as distinct
-choices. Inline explanations define horizon, retained-sample cadence, the two
+physical removal, and Sequential/OpenMP/CUDA execution are presented as distinct
+choices when compiled and available. Inline explanations define horizon, retained-sample cadence, the two
 thresholds, and persistence, while disabled launch/OpenMP states identify the
 reason they are unavailable.
 
@@ -374,6 +376,15 @@ or stability claim.
 Instantaneous removal remains hypothetical, and the provisional catalog
 60-second timestep, point-mass model, linear swept-step warning, and one-day
 engine ceiling do not establish ephemeris accuracy.
+
+CUDA counterfactual execution uses two independent persistent
+`CudaVelocityVerlet` contexts sized to the baseline and compacted branches.
+Both host results must complete before a paired boundary is published. Any CUDA
+or later scientific validation failure invalidates both CUDA executors while
+retaining the last committed host result and bounded terminal failure record.
+No OpenGL operation occurs on the worker and no concurrent CUDA-stream
+optimization is claimed. RTX 4050 compilation, execution, visual confirmation,
+and CPU/CUDA numerical agreement remain a separate validation gate.
 
 Full-system catalog labels retain collision rejection and hysteresis while
 prioritizing the selected body, star, planets, dwarf planets, and then smaller

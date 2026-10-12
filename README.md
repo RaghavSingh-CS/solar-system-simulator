@@ -116,7 +116,7 @@ Controls:
   transform.
 - The `Counterfactual Experiment` panel captures either the current or initial
   astronomical state, removes one explicitly eligible non-Sun body from an
-  independent paired CPU run, and publishes bounded baseline/counterfactual
+  independent paired direct-force run, and publishes bounded baseline/counterfactual
   trajectories from a dedicated worker. Visibility never changes solver
   inclusion. Scenario and worker generations suppress stale publications, and
   every publication retains the immutable executed configuration rather than
@@ -128,7 +128,10 @@ Controls:
   sortable stable-ID per-body table, grouped expandable scientific warnings,
   independent per-branch conservation diagnostics, and collapsible immutable
   provenance. Missing metrics are shown as `N/A`; terminal failures remain
-  prominent. Separation is not labeled as escape.
+  prominent. Sequential and OpenMP are available in their corresponding CPU
+  builds. CUDA appears only in a CUDA-enabled build with an available device;
+  it owns separate persistent baseline/counterfactual allocations and never
+  silently falls back to CPU. Separation is not labeled as escape.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
 - Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.

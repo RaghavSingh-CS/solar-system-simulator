@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-10-10
+Last updated: 2026-10-13
 
 ## Stage status
 
@@ -28,6 +28,7 @@ Last updated: 2026-10-10
 | CUDA visualizer integration | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Host-authoritative batched CUDA controller path; CPU-only 5/5 and OpenMP 6/6 CTests passed; CUDA compilation/runtime unverified on this AMD-only machine |
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
+| CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
 | Barnes--Hut large-N solver roadmap | **REQUIRED / UNIMPLEMENTED** | Sequential, OpenMP, and CUDA Barnes--Hut implementations, numerical verification against direct force, and controlled large-N performance evaluation are mandatory future work |
 
 ## Decisions and rationale
@@ -62,6 +63,10 @@ Last updated: 2026-10-10
   `SimulationState` remains authoritative at completed advancement boundaries;
   no CUDA/OpenGL interoperability, force-law change, or automatic selection is
   introduced.
+- CUDA counterfactual execution reuses that same wrapper without modifying its
+  kernels. Separate baseline/counterfactual objects own persistent allocations;
+  both synchronized host results must exist before a candidate pair can be
+  committed. Failure invalidates both CUDA executors and never retries on CPU.
 - The extended catalog scenario is separate from the byte-for-byte unchanged
   legacy nine-body approximation. Physical inclusion rebuilds solver state;
   visibility is render-only; future curated removal eligibility is metadata
@@ -1524,6 +1529,93 @@ OpenMP CTest `13/13`. Focused visualization-model and counterfactual-worker
 tests passed `2/2` in each configuration. Both complete suites also passed the
 repository-layout checker and pinned dependency-cache verifier. CUDA paired
 execution and NVIDIA runtime validation were not performed or claimed.
+
+### CUDA paired counterfactual execution increment
+
+This uncommitted increment on `feature/cuda-visualizer` starts from
+`65d429032dc3efaa6f6357a8a1d89d20a4902582`. `ExperimentBackend` now includes
+an explicit CUDA choice and device index. A CUDA-enabled
+`CounterfactualExperimentRunner` constructs two existing
+`CudaVelocityVerlet` executors after all host admission checks: one sized to the
+complete baseline and one to the one-body-compacted counterfactual. The
+executors have independent streams, pinned staging, and persistent device
+allocations; calls remain serialized. No CUDA kernel, force law, integration
+equation, timestep, precision, sampling cadence, or coordinate-frame rule was
+changed.
+
+Each physical step starts from the transactional candidate host pair. Both CUDA
+executors must finish and download finite states before either state is applied
+to that candidate. Existing per-step time, endpoint, swept-proximity, sample,
+threshold, and conservation logic then runs unchanged on host. Only a complete
+validated batch replaces the committed result. If either CUDA call or any later
+scientific check fails, RAII destroys both CUDA executors and the runner
+becomes terminal: committed states, metrics, histories, warnings, dropped-
+warning count, conservation values, and completed steps remain unchanged while
+the existing bounded terminal-failure record remains visible. There is no CPU
+retry or fallback.
+
+CUDA teardown preserves every stream-referenced event, device allocation, and
+pinned staging buffer until an explicit owning-stream synchronization succeeds.
+After success, stream/events/buffers are released in safe order. A failed device
+selection or synchronization is not treated as proof of quiescence: the stream
+is retired where possible and the bounded per-executor resources are
+quarantined until CUDA context/process teardown. No device-wide reset is used,
+because the live viewer and other executors may share the primary context. A
+genuine runtime/device failure therefore makes the runner terminal and does not
+carry a fresh-executor recovery guarantee. Every non-quiescent executor can
+retain another full device/pinned allocation set; repeated fatal errors may
+therefore accumulate unreleased storage until teardown. The safe operational
+response is to record diagnostics, stop further GPU experimentation, and restart
+the application process.
+
+The asynchronous worker remains the sole runner owner and performs no OpenGL
+work. Immutable run descriptors now retain the selected CUDA device. The GUI
+shows CUDA for experiments only when CUDA was compiled; it disables the choice
+when the selected device is unavailable and reports explicit rejection rather
+than relabeling CPU work. Scenario/worker generation gating, cancellation at a
+completed paired boundary, stale suppression, overlay frames, and bounded
+publication ownership are unchanged.
+
+Focused coverage added CPU-only CUDA rejection, negative device gating,
+immutable device metadata, worker failure without fallback, exact initial
+survivor equality and compacted branch size, paired batch boundaries,
+cancellation, repeated executor lifetimes, failed-batch rollback/resource
+invalidation, a recoverable host-side failure injected after real CUDA work and
+readback are enqueued, fresh-executor execution after that safe teardown,
+stable-ID metric mapping, and mixed-tolerance Sequential/CUDA agreement. The
+injection does not simulate or claim recovery from a runtime/device failure.
+The device-dependent tests use strict throwing device enumeration. Skip return
+code `77` is emitted only when enumeration succeeds with a zero device count;
+runtime/driver enumeration errors fail, and a positive count requires genuine
+CUDA execution. Skipped execution is not a pass. A host-only decision test
+covers the zero/positive/exception paths without pretending to execute CUDA.
+
+Local AMD-only validation on 2026-10-13 passed canonical CPU Release CTest
+`12/12` and OpenMP Release CTest `13/13`, including Stage 5/tooling regressions,
+catalog/dataset reconstruction, counterfactual engine, visualization model, and
+worker tests. Layout and pinned dependency verification passed. `nvcc` was not
+on PATH; canonical `cuda-release` configuration stopped with the intended
+`NBODY_ENABLE_CUDA=ON, but no usable CUDA compiler was found` error. Therefore
+CUDA compilation, linkage, the new skip behavior, device cleanup, numerical
+agreement, runtime correctness, and performance are **UNVERIFIED** locally.
+
+The RTX 4050 gate must configure the portable `cuda-release` preset with
+`-DCMAKE_CUDA_ARCHITECTURES=89`, verify that exact cache value plus compatible
+nvcc/MSVC/driver selection, record toolkit/driver/device identity, build every
+CUDA target, run the full CTest matrix, and confirm no CUDA test returns skip
+77. It must repeat start/cancel/failure cycles, compare
+both final branches and retained metrics with Sequential under established
+mixed tolerances, construct fresh executors after the recoverable injected
+host-side post-enqueue failure, inspect GUI backend/device metadata, and run
+the CUDA viewer backend concurrently with complete/cancel/restart cycles of a
+CUDA counterfactual worker to verify shared-process coexistence without reset,
+fallback, corruption, or deadlock. No GPU performance or scientific-accuracy
+claim is authorized by this implementation. The
+provisional catalog 60-second timestep, one-day operational ceiling, point-mass
+and linear swept-screening limitations, and unsupported escape classification
+remain unchanged. Frozen Stage 5 source/protocols/policy/evidence and the JPL
+dataset are untouched. Sequential/OpenMP/CUDA Barnes--Hut remains mandatory and
+unimplemented.
 
 ## Canonical repository layout and build custody
 

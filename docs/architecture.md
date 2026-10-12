@@ -25,7 +25,8 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  +-- MPI / MPI+OpenMP (implemented, optional)
                         +-> diagnostics -> CSV/headless benchmark
                         +-> immutable counterfactual snapshot
-                              -> paired CPU runner -> bounded published metrics
+                              -> paired Sequential/OpenMP/CUDA runner
+                              -> bounded published metrics
                         +-> immutable snapshots -> OpenGL viewer
 ```
 
@@ -38,7 +39,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
 - `tests`: physics invariants and regression tests.
 
 The headless `nbody_experiments` library owns counterfactual snapshots and a
-paired Sequential/OpenMP runner. It copies source state, removes exactly one
+paired Sequential/OpenMP/optional-CUDA runner. It copies source state, removes exactly one
 curated non-Sun body from only the counterfactual branch, and reuses the shared
 Velocity Verlet/force APIs. Completed pairs are published transactionally with
 bounded trajectory samples; it has no OpenGL dependency and no live-viewer
@@ -61,7 +62,7 @@ overlay. Per-step proximity
 screening is a branch-specific linear swept-segment test and is not a curved-
 trajectory minimum-distance proof. See
 [counterfactual_experiments.md](counterfactual_experiments.md) for metrics,
-resource policies, scientific guards, viewer ownership, and deferred CUDA work.
+resource policies, scientific guards, viewer ownership, and CUDA validation work.
 
 ## Shared representation and determinism
 
@@ -99,8 +100,21 @@ SimulationState + ForceBackend
 
 `SimulationController` calls the existing CPU `velocity_verlet_step` for Sequential/OpenMP and the existing batched `CudaVelocityVerlet` executor for CUDA; no gravitational calculation exists in renderer code. CUDA allocations are reused while the body count is unchanged, and each requested frame batch completes its device integration and returns an authoritative host state before diagnostics or rendering. There is no CUDA/OpenGL interoperability. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii/materials/rings never feed back into physics. Static orbit guides are sampled from the same documented JPL mean-element model but never drive body motion. Camera presets, label decluttering, health mapping, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
 
-The headless CPU counterfactual runner owns two private Sequential/OpenMP
-branches and publishes only complete paired batches. Failed-batch metadata uses
+The headless counterfactual runner owns two private branches and publishes only
+complete paired batches. Sequential/OpenMP use the existing force backend;
+optional CUDA owns two separate `CudaVelocityVerlet` objects with persistent
+full/compacted allocations. Each CUDA step returns both synchronized host
+states before either enters the candidate result. CUDA calls are serialized,
+not placed in simultaneous streams. Failed CUDA or post-integration scientific
+validation invalidates both CUDA executors so the runner cannot resume from a
+speculative branch. Destruction synchronizes each owning stream before freeing
+stream-referenced storage. A failed synchronization does not prove quiescence,
+so storage is conservatively quarantined until context/process teardown rather
+than forcing a device reset shared with the live viewer. Every non-quiescent
+executor can retain another complete device/pinned allocation set, so repeated
+fatal failures can accumulate memory until teardown. GPU experimentation must
+stop after a genuine unrecoverable CUDA error; record diagnostics and restart
+the application process rather than assuming recovery. Failed-batch metadata uses
 a separate fixed-capacity terminal record, leaving the last committed states,
 metrics, histories, conservation values, warnings, and warning-drop count
 unchanged. Its between-step close-approach screen uses common-scale binary64
@@ -139,6 +153,10 @@ fallback; no runtime font download is required.
 - Default CMake project declares only C++ and succeeds without a CUDA toolkit.
 - `NBODY_ENABLE_CUDA=ON` uses `check_language(CUDA)` and `enable_language(CUDA)` only when requested, and fails with a targeted message if no toolkit is usable.
 - CUDA uses `double` throughout, direct O(N²) interactions, reusable allocations, explicit error checking, and no mixed precision or approximate algorithm.
+- CUDA-enabled builds link the headless counterfactual runner to the same
+  `nbody_cuda` wrapper; CPU-only builds neither link CUDA nor advertise the
+  backend. Device-dependent counterfactual tests explicitly skip with code 77
+  when no usable NVIDIA device exists.
 - Colab must validate compilation and correctness against the sequential reference; its performance numbers are reported only for that Colab environment.
 - Final crossover calibration is rerun end-to-end on the RTX 4050. No local CPU/Colab GPU timing mixture is permitted.
 

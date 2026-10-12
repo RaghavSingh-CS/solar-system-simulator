@@ -1,6 +1,6 @@
 # Counterfactual gravitational experiments
 
-## Implemented CPU engine
+## Implemented direct-force engine
 
 The counterfactual engine is a headless model component. It has no graphics
 dependency and does not retain references to `SimulationController` state. An
@@ -29,9 +29,16 @@ removal, and massless stand-ins are rejected. Removal is physical: the erased
 body is absent from both direct-force evaluations in the counterfactual branch.
 
 Sequential and optional OpenMP modes call the existing `ForceBackend` and
-`velocity_verlet_step` APIs. Both branches use the same fixed timestep and
-Velocity Verlet configuration. OpenMP requests are rejected in CPU-only builds;
-there is no silent backend fallback. Each bounded batch advances private copies,
+`velocity_verlet_step` APIs. Optional CUDA mode owns two independent existing
+`CudaVelocityVerlet` executors, with persistent allocations sized separately
+for the full baseline and compacted counterfactual branches. It invokes the
+unchanged double-precision direct-force and Velocity Verlet kernels, downloads
+both completed branch states, and only then applies either to the transactional
+candidate result. The two CUDA streams are used sequentially; this increment
+does not introduce concurrent-stream scheduling or CUDA/OpenGL interoperability.
+All three modes use the same fixed timestep and Velocity Verlet configuration.
+OpenMP and CUDA requests are rejected when their support or selected device is
+unavailable; there is no silent backend fallback. Each bounded batch advances private copies,
 checks both branches, and publishes states, metrics, histories, and completed
 step count only after the pair succeeds. A failed batch leaves the last
 published pair, conservation diagnostics, warnings, dropped-warning count, and
@@ -50,16 +57,39 @@ identity metadata, while one bounded full result is published at completion,
 cancellation, or engine failure. Worker exceptions are contained as bounded
 terminal worker metadata; window shutdown joins the thread.
 
+If either CUDA branch, a subsequent synchronized-time check, or a scientific
+guard fails, both CUDA executors are destroyed. The last committed host pair,
+metrics, histories, warnings, conservation diagnostics, and counters remain
+unchanged; only the existing bounded terminal-failure metadata/status is
+published. A failed runner cannot resume from speculative device state. A new
+experiment constructs fresh resources through RAII. Teardown first synchronizes
+each owning stream while all referenced host/device storage remains alive. If
+that synchronization succeeds, stream, events, device buffers, and pinned
+staging are released in safe order. If device selection or synchronization
+fails, quiescence is treated as unknown: the stream is retired where possible
+and its bounded per-instance storage is quarantined until CUDA context/process
+teardown rather than risk use-after-free. No implicit device reset is attempted,
+because the viewer and other executors may share the primary context; recovery
+after a genuine runtime/device failure is not claimed. Each non-quiescent
+executor contributes another retained device/pinned allocation set, so repeated
+fatal failures can accumulate unreleased memory until teardown. After recording
+diagnostics for a genuine unrecoverable CUDA error, stop GPU experimentation and
+restart the application process.
+
 ## Viewer experiment interface
 
 The graphical panel is available only for the legacy and catalog astronomical
 scenarios. It captures a value-owned snapshot from either the scenario's
 initial state or the current synchronized controller state. It exposes one
-curated non-Sun removal, Sequential/OpenMP selection, horizon, sampling cadence,
+curated non-Sun removal, Sequential/OpenMP/CUDA selection when available,
+horizon, sampling cadence,
 absolute and fixed-scale normalized thresholds, persistence, and monitored
 stable IDs. Preflight displays the same checked step/sample/direct-work and
 conservative retained-memory estimates used for admission. Invalid or excessive
 requests cannot start.
+CUDA is displayed only by CUDA-enabled applications. It remains disabled when
+the selected device is unavailable, and immutable run metadata records the
+actual CUDA backend and device index.
 
 The viewer remains responsive while the worker advances. Scenario replacement
 requests cancellation and increments an application-owned scenario generation,
@@ -76,7 +106,7 @@ current.
 Every pending, running, cancelled, failed, or completed publication carries one
 shared immutable run descriptor. It records both generations, current/initial
 snapshot choice, captured absolute time, provenance and coordinate contract,
-scenario/dataset identity, removed stable ID, backend/thread request, physical
+scenario/dataset identity, removed stable ID, backend/thread/device request, physical
 timestep, horizon and accepted step count, cadence, monitored and hidden-frame
 IDs, both thresholds, persistence, and checked work/memory estimates. Mutable
 controls are explicitly settings for the next run; historical labels are read
@@ -186,13 +216,46 @@ relativity, tides, non-gravitational comet forces, collision physics, adaptive
 steps, and close-encounter regularization. A large separation is not by itself
 an ejection, instability, or physically realizable removal event.
 
-## Deferred boundaries
+## Validation and deferred boundaries
 
-The asynchronous CPU viewer interface is implemented; there is no CUDA paired
-executor. CUDA support requires
-separate paired-resource ownership, transactional synchronization, numerical
-agreement tests, and RTX 4050 validation; it must not silently report CPU work
-as CUDA. Barnes--Hut remains mandatory future work for Sequential, OpenMP, and
+The asynchronous viewer interface and paired CUDA ownership are implemented,
+but CUDA compilation and runtime are unverified on the AMD-only development
+machine. CUDA-dependent CTests are registered with skip return code `77`; a
+skip is permitted only when successful CUDA device enumeration returns zero. A
+driver/runtime enumeration error is a test failure, and a positive count
+requires genuine CUDA execution. A skip is not a CUDA pass.
+
+### RTX 4050 validation gate
+
+Keep the portable `cuda-release` preset architecture-neutral. On the RTX 4050
+validation host, configure it explicitly for Ada SM 89:
+
+```powershell
+.\scripts\test-local.ps1 -Configuration CUDA `
+  -ConfigureArguments @('-DCMAKE_CUDA_ARCHITECTURES=89')
+```
+
+Before accepting results, record `nvidia-smi`, `nvcc --version`, the MSVC/Visual
+Studio toolset, Windows SDK, CMake, Ninja, and driver versions. Confirm
+`CMAKE_CUDA_ARCHITECTURES:STRING=89` (or the equivalent typed cache entry) and
+the selected CUDA/host compiler paths in `build/cuda-release/CMakeCache.txt`.
+The build must include every CUDA target, including `nbody_cuda_tests`,
+`nbody_visualization_cuda_tests`, and `nbody_counterfactual_cuda_tests`.
+
+The full CTest run must show all CUDA tests executed with no skip-77 result. It
+must cover CPU/CUDA mixed-tolerance agreement for both paired branches,
+repeated executor lifetimes, cancellation, rollback/failure invalidation, and
+construction of fresh executors after the injected **host-side** post-enqueue
+failure. Inspect immutable GUI backend/device metadata as well. The injection
+validates safe synchronized teardown only; it does not simulate or establish
+recovery from a fatal CUDA device error. With the CUDA viewer backend active,
+also launch, complete, cancel, and restart a CUDA counterfactual worker to
+verify that their separate streams/allocations coexist in the shared process
+without fallback, context reset, state corruption, or deadlock. Archive the
+configure cache, complete test output, executable/source identity, and
+hardware/toolchain provenance with the validation record. No GPU accuracy or
+performance claim exists until that gate passes.
+Barnes--Hut remains mandatory future work for Sequential, OpenMP, and
 CUDA with direct-force verification and controlled large-N evaluation.
 
 Frozen Stage 5 benchmark code, protocols, policy, scripts, and evidence are not
