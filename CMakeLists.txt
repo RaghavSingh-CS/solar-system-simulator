@@ -148,6 +148,10 @@ if(NBODY_ENABLE_OPENMP)
     target_compile_definitions(nbody_experiments PRIVATE NBODY_EXPERIMENT_HAS_OPENMP=1)
     target_link_libraries(nbody_experiments PRIVATE nbody_openmp)
 endif()
+if(NBODY_ENABLE_CUDA)
+    target_compile_definitions(nbody_experiments PRIVATE NBODY_EXPERIMENT_HAS_CUDA=1)
+    target_link_libraries(nbody_experiments PRIVATE nbody_cuda)
+endif()
 if(MSVC)
     target_compile_options(nbody_experiments PRIVATE /W4 /permissive-)
 else()
@@ -336,6 +340,9 @@ if(BUILD_TESTING)
     if(NBODY_ENABLE_OPENMP)
         target_compile_definitions(nbody_counterfactual_tests PRIVATE NBODY_TEST_HAS_OPENMP=1)
     endif()
+    if(NBODY_ENABLE_CUDA)
+        target_compile_definitions(nbody_counterfactual_tests PRIVATE NBODY_TEST_HAS_CUDA=1)
+    endif()
     add_test(NAME nbody_counterfactual COMMAND nbody_counterfactual_tests)
 
     if(Python3_Interpreter_FOUND)
@@ -361,6 +368,20 @@ if(BUILD_TESTING)
         nbody_embed_stage5_identity(nbody_cuda_tests)
         add_test(NAME nbody_cuda_validation COMMAND nbody_cuda_tests)
         set_tests_properties(nbody_cuda_validation PROPERTIES SKIP_RETURN_CODE 77)
+
+        add_executable(
+            nbody_counterfactual_cuda_tests
+            tests/test_counterfactual_cuda.cpp
+        )
+        target_link_libraries(
+            nbody_counterfactual_cuda_tests
+            PRIVATE nbody_experiments
+        )
+        add_test(
+            NAME nbody_counterfactual_cuda
+            COMMAND nbody_counterfactual_cuda_tests
+        )
+        set_tests_properties(nbody_counterfactual_cuda PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 
     if(NBODY_ENABLE_MPI)

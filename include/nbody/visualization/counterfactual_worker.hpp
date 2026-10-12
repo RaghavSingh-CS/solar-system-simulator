@@ -60,6 +60,7 @@ struct CounterfactualRunDescriptor {
     experiments::ExperimentBackend backend{
         experiments::ExperimentBackend::sequential};
     int openmp_threads{1};
+    int cuda_device{0};
     double physical_timestep_s{0.0};
     double observation_horizon_s{0.0};
     std::size_t accepted_step_count{0};

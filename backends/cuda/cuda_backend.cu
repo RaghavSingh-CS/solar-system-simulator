@@ -336,22 +336,64 @@ public:
     ~Impl() { release(); }
 
     void release() noexcept {
-        (void)cudaSetDevice(device_index_);
-        cudaFreeHost(host_invalid_position_);
-        cudaFreeHost(host_velocities_);
-        cudaFreeHost(host_positions_);
-        cudaFreeHost(host_masses_);
-        cudaFree(invalid_position_);
-        cudaFree(new_accelerations_);
-        cudaFree(old_accelerations_);
-        cudaFree(velocities_);
-        cudaFree(positions_);
-        cudaFree(masses_);
-        cudaEventDestroy(after_d2h_);
-        cudaEventDestroy(after_compute_);
-        cudaEventDestroy(after_h2d_);
-        cudaEventDestroy(total_start_);
-        cudaStreamDestroy(stream_);
+        // Every asynchronous operation owned by this object uses stream_. Keep
+        // every event and host/device allocation alive until that stream is
+        // known to be quiescent. In particular, cudaStreamDestroy is
+        // asynchronous and cudaFree/cudaFreeHost are not used as substitutes
+        // for an explicit successful synchronization.
+        bool storage_may_be_released = stream_ == nullptr;
+        if (stream_ != nullptr) {
+            const cudaError_t selected = cudaSetDevice(device_index_);
+            if (selected == cudaSuccess) {
+                const cudaError_t synchronized = cudaStreamSynchronize(stream_);
+                storage_may_be_released = synchronized == cudaSuccess;
+                // Retire the stream in either case. If synchronization failed,
+                // destruction may finish asynchronously, so the referenced
+                // storage below is deliberately quarantined rather than freed.
+                (void)cudaStreamDestroy(stream_);
+                stream_ = nullptr;
+            }
+        }
+
+        if (!storage_may_be_released) {
+            // A failed device selection or synchronization does not prove that
+            // queued work has stopped. There is no safe per-stream forced reset,
+            // and resetting the shared device would disrupt other executors.
+            // Leak these bounded per-instance resources until process/context
+            // teardown instead of risking use-after-free. The owning runner is
+            // terminal and cannot reuse this object.
+            host_invalid_position_ = nullptr;
+            host_velocities_ = nullptr;
+            host_positions_ = nullptr;
+            host_masses_ = nullptr;
+            invalid_position_ = nullptr;
+            new_accelerations_ = nullptr;
+            old_accelerations_ = nullptr;
+            velocities_ = nullptr;
+            positions_ = nullptr;
+            masses_ = nullptr;
+            after_d2h_ = nullptr;
+            after_compute_ = nullptr;
+            after_h2d_ = nullptr;
+            total_start_ = nullptr;
+            stream_ = nullptr;
+            return;
+        }
+
+        (void)cudaEventDestroy(after_d2h_);
+        (void)cudaEventDestroy(after_compute_);
+        (void)cudaEventDestroy(after_h2d_);
+        (void)cudaEventDestroy(total_start_);
+        (void)cudaFree(invalid_position_);
+        (void)cudaFree(new_accelerations_);
+        (void)cudaFree(old_accelerations_);
+        (void)cudaFree(velocities_);
+        (void)cudaFree(positions_);
+        (void)cudaFree(masses_);
+        (void)cudaFreeHost(host_invalid_position_);
+        (void)cudaFreeHost(host_velocities_);
+        (void)cudaFreeHost(host_positions_);
+        (void)cudaFreeHost(host_masses_);
         host_invalid_position_ = nullptr;
         host_velocities_ = nullptr;
         host_positions_ = nullptr;
@@ -366,7 +408,6 @@ public:
         after_compute_ = nullptr;
         after_h2d_ = nullptr;
         total_start_ = nullptr;
-        stream_ = nullptr;
     }
 
     std::size_t body_count_{0};
@@ -400,7 +441,8 @@ CudaIntegrationResult CudaVelocityVerlet::run(
     const SimulationState& initial_state,
     std::size_t steps,
     double dt_s,
-    double gravitational_constant_value) {
+    double gravitational_constant_value,
+    CudaHostFailureInjection failure_injection) {
     validate_parameters(gravitational_constant_value);
     validate_state(initial_state);
     if (initial_state.bodies.size() != impl_->body_count_) {
@@ -478,6 +520,11 @@ CudaIntegrationResult CudaVelocityVerlet::run(
                         cudaMemcpyDeviceToHost, impl_->stream_),
         "cudaMemcpyAsync invalid flag D2H");
     check_cuda(cudaEventRecord(impl_->after_d2h_, impl_->stream_), "cudaEventRecord after_d2h");
+    if (failure_injection ==
+        CudaHostFailureInjection::after_enqueue_before_synchronize) {
+        throw std::runtime_error(
+            "injected host-side failure after CUDA work enqueue; no device failure was simulated");
+    }
     check_cuda(cudaEventSynchronize(impl_->after_d2h_), "cudaEventSynchronize after_d2h");
     check_cuda(cudaStreamSynchronize(impl_->stream_), "cudaStreamSynchronize integration");
     if (*impl_->host_invalid_position_ != 0) {

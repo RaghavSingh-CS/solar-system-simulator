@@ -2,6 +2,9 @@
 
 #include "nbody/astronomy/solar_system_60.hpp"
 #include "nbody/solar_system.hpp"
+#ifdef NBODY_EXPERIMENT_HAS_CUDA
+#include "nbody/cuda_backend.hpp"
+#endif
 #ifdef NBODY_EXPERIMENT_HAS_OPENMP
 #include "nbody/openmp_backend.hpp"
 #endif
@@ -675,6 +678,87 @@ void append_sample(
 
 }  // namespace
 
+class CounterfactualExperimentRunner::CudaPairExecutor {
+public:
+#ifdef NBODY_EXPERIMENT_HAS_CUDA
+    struct PairResult {
+        SimulationState baseline;
+        SimulationState counterfactual;
+    };
+
+    CudaPairExecutor(
+        std::size_t baseline_body_count,
+        std::size_t counterfactual_body_count,
+        int device_index)
+        : baseline_(std::make_unique<CudaVelocityVerlet>(
+              baseline_body_count, device_index)),
+          counterfactual_(std::make_unique<CudaVelocityVerlet>(
+              counterfactual_body_count, device_index)) {}
+
+    PairResult advance_one(
+        const SimulationState& baseline,
+        const SimulationState& counterfactual,
+        double timestep_s) {
+        if (!valid()) {
+            throw std::logic_error("CUDA paired executor is invalidated");
+        }
+        try {
+            const auto baseline_injection =
+                failure_injection_ == ExperimentBranch::baseline
+                ? CudaHostFailureInjection::after_enqueue_before_synchronize
+                : CudaHostFailureInjection::none;
+            const auto counterfactual_injection =
+                failure_injection_ == ExperimentBranch::counterfactual
+                ? CudaHostFailureInjection::after_enqueue_before_synchronize
+                : CudaHostFailureInjection::none;
+            failure_injection_.reset();
+            auto baseline_result = baseline_->run(
+                baseline, 1U, timestep_s, nbody::gravitational_constant,
+                baseline_injection);
+            auto counterfactual_result =
+                counterfactual_->run(
+                    counterfactual, 1U, timestep_s,
+                    nbody::gravitational_constant, counterfactual_injection);
+            return {
+                std::move(baseline_result.final_state),
+                std::move(counterfactual_result.final_state),
+            };
+        } catch (...) {
+            invalidate();
+            throw;
+        }
+    }
+
+    void invalidate() noexcept {
+        counterfactual_.reset();
+        baseline_.reset();
+    }
+
+    bool valid() const noexcept {
+        return baseline_ != nullptr && counterfactual_ != nullptr;
+    }
+
+    void inject_host_failure_after_enqueue(ExperimentBranch branch) {
+        if (!valid()) {
+            throw std::logic_error("cannot inject failure into an invalid CUDA executor");
+        }
+        failure_injection_ = branch;
+    }
+
+private:
+    // Separate objects own separate streams, pinned host staging, and persistent
+    // allocations sized to the full and compacted branches respectively.
+    std::unique_ptr<CudaVelocityVerlet> baseline_;
+    std::unique_ptr<CudaVelocityVerlet> counterfactual_;
+    std::optional<ExperimentBranch> failure_injection_;
+#else
+    CudaPairExecutor(std::size_t, std::size_t, int) = delete;
+    void invalidate() noexcept {}
+    bool valid() const noexcept { return false; }
+    void inject_host_failure_after_enqueue(ExperimentBranch) = delete;
+#endif
+};
+
 std::uint64_t estimate_counterfactual_direct_force_workload(
     std::size_t baseline_body_count,
     std::size_t counterfactual_body_count,
@@ -867,6 +951,19 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
         }
         if (configuration_.openmp_threads < 1) {
             throw std::invalid_argument("OpenMP experiment thread count must be positive");
+        }
+    }
+    if (configuration_.backend == ExperimentBackend::cuda) {
+        if (configuration_.cuda_device < 0) {
+            throw std::invalid_argument("CUDA experiment device index must be non-negative");
+        }
+        if (!cuda_compiled()) {
+            throw std::runtime_error(
+                "CUDA experiment backend was requested but is not compiled");
+        }
+        if (!cuda_available(configuration_.cuda_device)) {
+            throw std::runtime_error(
+                "CUDA experiment backend was requested but the selected device is unavailable");
         }
     }
     if (configuration_.limits.integration_steps_per_batch == 0U ||
@@ -1171,12 +1268,46 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
     consecutive_threshold_samples_.assign(monitored_mapping_indices_.size(), 0U);
     append_sample(result_, snapshot_, configuration_, monitored_mapping_indices_,
         reference_mapping_indices_, consecutive_threshold_samples_);
+#ifdef NBODY_EXPERIMENT_HAS_CUDA
+    if (configuration_.backend == ExperimentBackend::cuda) {
+        cuda_executor_ = std::make_unique<CudaPairExecutor>(
+            result_.baseline_state.bodies.size(),
+            result_.counterfactual_state.bodies.size(),
+            configuration_.cuda_device);
+    }
+#endif
 }
+
+CounterfactualExperimentRunner::~CounterfactualExperimentRunner() = default;
 
 bool CounterfactualExperimentRunner::openmp_supported() noexcept {
 #ifdef NBODY_EXPERIMENT_HAS_OPENMP
     return true;
 #else
+    return false;
+#endif
+}
+
+bool CounterfactualExperimentRunner::cuda_compiled() noexcept {
+#ifdef NBODY_EXPERIMENT_HAS_CUDA
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool CounterfactualExperimentRunner::cuda_available(int device_index) noexcept {
+#ifdef NBODY_EXPERIMENT_HAS_CUDA
+    if (device_index < 0) {
+        return false;
+    }
+    try {
+        return cuda_device_count() > device_index;
+    } catch (...) {
+        return false;
+    }
+#else
+    (void)device_index;
     return false;
 #endif
 }
@@ -1246,14 +1377,35 @@ bool CounterfactualExperimentRunner::advance_batch() {
                 next.counterfactual_state);
             const double baseline_time_before = next.baseline_state.time_s;
             const double counterfactual_time_before = next.counterfactual_state.time_s;
-            velocity_verlet_step(next.baseline_state, snapshot_.fixed_timestep_s(), *backend);
+            if (configuration_.backend == ExperimentBackend::cuda) {
+#ifdef NBODY_EXPERIMENT_HAS_CUDA
+                if (!cuda_executor_ || !cuda_executor_->valid()) {
+                    throw std::logic_error(
+                        "CUDA experiment backend has no valid paired executor");
+                }
+                auto paired = cuda_executor_->advance_one(
+                    next.baseline_state, next.counterfactual_state,
+                    snapshot_.fixed_timestep_s());
+                next.baseline_state = std::move(paired.baseline);
+                next.counterfactual_state = std::move(paired.counterfactual);
+#else
+                throw std::logic_error(
+                    "CUDA experiment backend is active in a non-CUDA build");
+#endif
+            } else {
+                velocity_verlet_step(
+                    next.baseline_state, snapshot_.fixed_timestep_s(), *backend);
+            }
             if (!std::isfinite(next.baseline_state.time_s) ||
                 !(next.baseline_state.time_s > baseline_time_before)) {
                 throw ScientificFailure(
                     ExperimentIssueKind::invalid_simulated_time,
                     "baseline branch simulated time failed to advance");
             }
-            velocity_verlet_step(next.counterfactual_state, snapshot_.fixed_timestep_s(), *backend);
+            if (configuration_.backend != ExperimentBackend::cuda) {
+                velocity_verlet_step(
+                    next.counterfactual_state, snapshot_.fixed_timestep_s(), *backend);
+            }
             if (!std::isfinite(next.counterfactual_state.time_s) ||
                 !(next.counterfactual_state.time_s > counterfactual_time_before)) {
                 throw ScientificFailure(
@@ -1320,12 +1472,18 @@ bool CounterfactualExperimentRunner::advance_batch() {
         }
         return true;
     } catch (const ScientificFailure& error) {
+        if (cuda_executor_) {
+            cuda_executor_->invalidate();
+        }
         const auto terminal = make_terminal_failure(
             error.issue_kind(), result_.baseline_state.time_s, error.what());
         result_.terminal_failure = terminal;
         result_.status = ExperimentStatus::failed;
         return false;
     } catch (const std::exception& error) {
+        if (cuda_executor_) {
+            cuda_executor_->invalidate();
+        }
         const auto terminal = make_terminal_failure(
             ExperimentIssueKind::integration_failure,
             result_.baseline_state.time_s, error.what());
@@ -1356,8 +1514,36 @@ void CounterfactualExperimentRunner::request_cancel() noexcept {
     cancellation_requested_ = true;
 }
 
+void CounterfactualExperimentRunner::inject_cuda_host_failure_after_enqueue_for_testing(
+    ExperimentBranch branch) {
+    if (configuration_.backend != ExperimentBackend::cuda) {
+        throw std::logic_error(
+            "CUDA host-failure injection requires the CUDA experiment backend");
+    }
+#ifdef NBODY_EXPERIMENT_HAS_CUDA
+    if (!cuda_executor_ || !cuda_executor_->valid()) {
+        throw std::logic_error(
+            "CUDA host-failure injection requires valid paired resources");
+    }
+    cuda_executor_->inject_host_failure_after_enqueue(branch);
+#else
+    (void)branch;
+    throw std::logic_error(
+        "CUDA host-failure injection is unavailable in a non-CUDA build");
+#endif
+}
+
+bool CounterfactualExperimentRunner::cuda_resources_valid() const noexcept {
+    return cuda_executor_ && cuda_executor_->valid();
+}
+
 const char* experiment_backend_name(ExperimentBackend backend) noexcept {
-    return backend == ExperimentBackend::openmp ? "OpenMP" : "Sequential";
+    switch (backend) {
+        case ExperimentBackend::sequential: return "Sequential";
+        case ExperimentBackend::openmp: return "OpenMP";
+        case ExperimentBackend::cuda: return "CUDA";
+    }
+    return "Unknown";
 }
 
 const char* experiment_status_name(ExperimentStatus status) noexcept {

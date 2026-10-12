@@ -34,6 +34,18 @@ struct CudaIntegrationResult {
     CudaRunTimings timings;
 };
 
+// Test-only fault injection. The injected failure occurs after asynchronous
+// work and readback have been enqueued but before the ordinary completion
+// synchronization. It exercises host-side teardown and does not simulate a
+// CUDA runtime, device, or hardware failure.
+enum class CudaHostFailureInjection {
+    none,
+    after_enqueue_before_synchronize,
+};
+
+// Strict device enumeration. CUDA runtime/driver errors are reported by
+// exception; callers that gate mandatory GPU tests must not convert those
+// errors into a no-device skip.
 int cuda_device_count();
 CudaDeviceInfo cuda_device_info(int device_index = 0);
 
@@ -69,7 +81,9 @@ public:
         const SimulationState& initial_state,
         std::size_t steps,
         double dt_s,
-        double gravitational_constant_value = gravitational_constant);
+        double gravitational_constant_value = gravitational_constant,
+        CudaHostFailureInjection failure_injection =
+            CudaHostFailureInjection::none);
     CudaDeviceInfo device_info() const;
     double allocation_ms() const noexcept;
 

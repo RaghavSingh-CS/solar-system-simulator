@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -15,6 +16,7 @@ namespace nbody::experiments {
 enum class ExperimentBackend {
     sequential,
     openmp,
+    cuda,
 };
 
 enum class ExperimentIntegrator {
@@ -164,6 +166,7 @@ struct CounterfactualExperimentConfiguration {
     std::string removed_body_stable_id;
     ExperimentBackend backend{ExperimentBackend::sequential};
     int openmp_threads{1};
+    int cuda_device{0};
     ExperimentLimits limits;
     SignificancePolicy significance;
     ScientificGuardPolicy guards;
@@ -267,6 +270,7 @@ public:
     CounterfactualExperimentRunner(
         ExperimentSnapshot snapshot,
         CounterfactualExperimentConfiguration configuration);
+    ~CounterfactualExperimentRunner();
 
     CounterfactualExperimentRunner(const CounterfactualExperimentRunner&) = delete;
     CounterfactualExperimentRunner& operator=(
@@ -276,6 +280,11 @@ public:
         CounterfactualExperimentRunner&&) = delete;
 
     static bool openmp_supported() noexcept;
+    static bool cuda_compiled() noexcept;
+    // UI/convenience probe only: false also covers enumeration errors because
+    // this API is noexcept. Mandatory GPU tests must call cuda_device_count()
+    // and treat enumeration errors as failures.
+    static bool cuda_available(int device_index = 0) noexcept;
 
     const ExperimentSnapshot& snapshot() const noexcept;
     const CounterfactualExperimentConfiguration& configuration() const noexcept;
@@ -289,14 +298,25 @@ public:
     void set_paused(bool paused) noexcept;
     bool paused() const noexcept;
     void request_cancel() noexcept;
+    // One-shot test seam. It throws after the selected CUDA branch has queued
+    // genuine GPU work and readback, before normal synchronization. This is a
+    // recoverable host-side injection, not a simulated CUDA/device failure.
+    void inject_cuda_host_failure_after_enqueue_for_testing(
+        ExperimentBranch branch);
+    // False after a CUDA or scientific batch failure invalidates speculative
+    // device state. Non-CUDA runners do not own CUDA resources.
+    bool cuda_resources_valid() const noexcept;
 
 private:
+    class CudaPairExecutor;
+
     ExperimentSnapshot snapshot_;
     CounterfactualExperimentConfiguration configuration_;
     CounterfactualExperimentResult result_;
     std::vector<std::size_t> monitored_mapping_indices_;
     std::vector<std::size_t> reference_mapping_indices_;
     std::vector<std::size_t> consecutive_threshold_samples_;
+    std::unique_ptr<CudaPairExecutor> cuda_executor_;
     bool cancellation_requested_{false};
     bool pause_requested_{false};
 };

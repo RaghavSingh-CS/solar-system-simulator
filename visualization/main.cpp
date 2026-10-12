@@ -984,10 +984,22 @@ make_experiment_configuration(
     nbody::experiments::CounterfactualExperimentConfiguration configuration;
     configuration.removed_body_stable_id =
         app.experiment_ui.removed_body_stable_id;
-    configuration.backend = app.experiment_ui.backend_index == 0
-        ? nbody::experiments::ExperimentBackend::sequential
-        : nbody::experiments::ExperimentBackend::openmp;
+    switch (app.experiment_ui.backend_index) {
+        case 0:
+            configuration.backend =
+                nbody::experiments::ExperimentBackend::sequential;
+            break;
+        case 1:
+            configuration.backend = nbody::experiments::ExperimentBackend::openmp;
+            break;
+        case 2:
+            configuration.backend = nbody::experiments::ExperimentBackend::cuda;
+            break;
+        default:
+            throw std::invalid_argument("unknown counterfactual experiment backend");
+    }
     configuration.openmp_threads = preferred_openmp_threads;
+    configuration.cuda_device = app.preferred_cuda_device;
     configuration.limits.observation_horizon_s =
         app.experiment_ui.observation_horizon_s;
     configuration.limits.sample_cadence_s = app.experiment_ui.sample_cadence_s;
@@ -1742,9 +1754,27 @@ UiActions draw_control_panel(
         ImGui::RadioButton("OpenMP CPU", &experiment.backend_index, 1);
         ImGui::EndDisabled();
         if (!experiment_openmp_available) {
-            experiment.backend_index = 0;
+            if (experiment.backend_index == 1) {
+                experiment.backend_index = 0;
+            }
             ImGui::TextDisabled(
                 "OpenMP is unavailable in this build; Sequential will be used explicitly.");
+        }
+        if (nbody::experiments::CounterfactualExperimentRunner::cuda_compiled()) {
+            if (!control_layout.stacked) {
+                ImGui::SameLine();
+            }
+            const bool experiment_cuda_available = app.cuda_device_available;
+            ImGui::BeginDisabled(!experiment_cuda_available);
+            ImGui::RadioButton("CUDA GPU", &experiment.backend_index, 2);
+            ImGui::EndDisabled();
+            if (!experiment_cuda_available) {
+                if (experiment.backend_index == 2) {
+                    experiment.backend_index = 0;
+                }
+                ImGui::TextDisabled(
+                    "CUDA support is compiled, but the selected NVIDIA device is unavailable; CUDA experiments cannot start.");
+            }
         }
 
         const bool control_table = !control_layout.stacked && ImGui::BeginTable(
@@ -1830,6 +1860,11 @@ UiActions draw_control_panel(
             } else if (configuration.significance.normalized_deviation_threshold < 0.0 ||
                 !std::isfinite(configuration.significance.normalized_deviation_threshold)) {
                 estimate_error = "Normalized threshold must be finite and non-negative.";
+            } else if (configuration.backend ==
+                    nbody::experiments::ExperimentBackend::cuda &&
+                !app.cuda_device_available) {
+                estimate_error =
+                    "The selected CUDA device is unavailable for counterfactual execution.";
             } else {
                 estimate = nbody::visualization::estimate_counterfactual_resources(
                     snapshot, configuration);
@@ -1991,6 +2026,9 @@ UiActions draw_control_panel(
                         nbody::experiments::ExperimentBackend::openmp) {
                         backend += " (" + std::to_string(run.openmp_threads) +
                             " threads)";
+                    } else if (run.backend ==
+                        nbody::experiments::ExperimentBackend::cuda) {
+                        backend += " (device " + std::to_string(run.cuda_device) + ")";
                     }
                     property_row("Executed backend", backend);
                     property_row("Observation horizon",
@@ -2085,12 +2123,17 @@ UiActions draw_control_panel(
                 property_row("Removed stable ID", run.removed_body_stable_id);
                 property_row("Snapshot provenance", run.source_state_provenance);
                 property_row("Coordinate contract", run.coordinate_frame);
-                property_row("Executed backend",
-                    run.backend == nbody::experiments::ExperimentBackend::openmp
-                        ? std::string(nbody::experiments::experiment_backend_name(
-                            run.backend)) + " (" +
-                            std::to_string(run.openmp_threads) + " threads)"
-                        : nbody::experiments::experiment_backend_name(run.backend));
+                std::string executed_backend =
+                    nbody::experiments::experiment_backend_name(run.backend);
+                if (run.backend == nbody::experiments::ExperimentBackend::openmp) {
+                    executed_backend += " (" + std::to_string(run.openmp_threads) +
+                        " threads)";
+                } else if (run.backend ==
+                    nbody::experiments::ExperimentBackend::cuda) {
+                    executed_backend += " (device " +
+                        std::to_string(run.cuda_device) + ")";
+                }
+                property_row("Executed backend", executed_backend);
                 property_row("Physical timestep",
                     nbody::visualization::format_measurement(
                         run.physical_timestep_s, "s", 10));

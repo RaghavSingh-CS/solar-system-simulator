@@ -229,6 +229,7 @@ void test_immutable_executed_run_descriptor() {
     configuration.significance.absolute_separation_threshold_m = 123.0;
     configuration.significance.normalized_deviation_threshold = 4.5e-6;
     configuration.significance.persistence_samples = 7U;
+    configuration.cuda_device = 7;
     CounterfactualExperimentWorker worker;
     const auto generation = worker.start(
         worker_snapshot(42.0, 100000.0), configuration,
@@ -236,6 +237,7 @@ void test_immutable_executed_run_descriptor() {
 
     configuration.backend = ExperimentBackend::openmp;
     configuration.openmp_threads = 99;
+    configuration.cuda_device = 99;
     configuration.removed_body_stable_id = "tracer";
     configuration.limits.observation_horizon_s = 1.0;
     configuration.limits.sample_cadence_s = 1.0;
@@ -258,6 +260,7 @@ void test_immutable_executed_run_descriptor() {
         running.run->removed_body_stable_id == "removed" &&
         running.run->backend == ExperimentBackend::sequential &&
         running.run->openmp_threads == 1 &&
+        running.run->cuda_device == 7 &&
         running.run->physical_timestep_s == 1.0 &&
         running.run->observation_horizon_s == 100000.0 &&
         running.run->sample_cadence_s == 100000.0 &&
@@ -294,6 +297,24 @@ void test_immutable_executed_run_descriptor() {
         inspected_again.run->observation_horizon_s == 2.0 &&
         inspected_again.run->absolute_separation_threshold_m == 1.0e-12,
         "post-completion editor changes altered executed metadata");
+}
+
+void test_cuda_worker_metadata_and_rejection() {
+    auto configuration = worker_configuration(2.0);
+    configuration.backend = ExperimentBackend::cuda;
+    configuration.cuda_device = std::numeric_limits<int>::max();
+    CounterfactualExperimentWorker worker;
+    const auto generation = worker.start(
+        worker_snapshot(), configuration,
+        {23U, nbody::visualization::CounterfactualSnapshotSource::current_state});
+    worker.wait_until_idle();
+    const auto publication = worker.publication();
+    require(publication.generation == generation && publication.run &&
+            publication.run->backend == ExperimentBackend::cuda &&
+            publication.run->cuda_device == std::numeric_limits<int>::max() &&
+            publication.state == CounterfactualWorkerState::failed &&
+            !publication.result && !publication.worker_error.empty(),
+        "unavailable CUDA worker request fell back or lost immutable metadata");
 }
 
 void test_cancellation_and_active_destruction() {
@@ -741,6 +762,7 @@ int main() {
         test_worker_completion_progress_and_restart();
         test_application_publication_generation_gate();
         test_immutable_executed_run_descriptor();
+        test_cuda_worker_metadata_and_rejection();
         test_cancellation_and_active_destruction();
         test_failure_preserves_committed_result();
         test_scenario_switch_does_not_alias_live_controller();

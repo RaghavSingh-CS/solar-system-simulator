@@ -1,6 +1,7 @@
 #include "nbody/cuda_backend.hpp"
 #include "nbody/diagnostics.hpp"
 #include "nbody/scenarios.hpp"
+#include "cuda_test_gate.hpp"
 
 #include <algorithm>
 #include <array>
@@ -173,14 +174,11 @@ int main(int argc, char** argv) {
                       << NBODY_BUILD_CONFIGURATION << "\"}\n";
             return 0;
         }
-        int device_count = 0;
-        try {
-            device_count = nbody::cuda_device_count();
-        } catch (const std::exception& error) {
-            std::cout << "SKIP: CUDA runtime has no available device: " << error.what() << '\n';
-            return 77;
-        }
-        if (device_count == 0) {
+        const auto device_decision =
+            nbody::test_support::strict_cuda_runtime_test_decision(
+                [] { return nbody::cuda_device_count(); });
+        if (device_decision ==
+            nbody::test_support::CudaRuntimeTestDecision::skip_no_device) {
             std::cout << "SKIP: CUDA support compiled, but no CUDA device is available\n";
             return 77;
         }

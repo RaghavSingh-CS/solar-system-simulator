@@ -2,6 +2,7 @@
 #include "nbody/experiments/counterfactual.hpp"
 #include "nbody/simulation.hpp"
 #include "nbody/solar_system.hpp"
+#include "cuda_test_gate.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1194,6 +1195,46 @@ void test_openmp_gating() {
 }
 #endif
 
+void test_cuda_gating() {
+#ifdef NBODY_TEST_HAS_CUDA
+    require(CounterfactualExperimentRunner::cuda_compiled(),
+        "CUDA build did not advertise compiled experiment support");
+    require(!CounterfactualExperimentRunner::cuda_available(-1),
+        "negative CUDA experiment device index was advertised as available");
+#else
+    require(!CounterfactualExperimentRunner::cuda_compiled() &&
+            !CounterfactualExperimentRunner::cuda_available(0),
+        "CPU-only experiment build incorrectly advertises CUDA support");
+    auto configuration = controlled_configuration();
+    configuration.backend = ExperimentBackend::cuda;
+    require_throws([&] {
+        CounterfactualExperimentRunner runner(controlled_snapshot(), configuration);
+    }, "CPU-only experiment silently fell back from CUDA");
+#endif
+}
+
+void test_strict_cuda_runtime_test_decision() {
+    using nbody::test_support::CudaRuntimeTestDecision;
+    using nbody::test_support::strict_cuda_runtime_test_decision;
+
+    require(strict_cuda_runtime_test_decision([] { return 0; }) ==
+            CudaRuntimeTestDecision::skip_no_device,
+        "zero-device enumeration was not classified as the sole skip case");
+    require(strict_cuda_runtime_test_decision([] { return 1; }) ==
+            CudaRuntimeTestDecision::execute &&
+            strict_cuda_runtime_test_decision([] { return 4; }) ==
+                CudaRuntimeTestDecision::execute,
+        "positive device enumeration did not require CUDA execution");
+    require_throws([] {
+        (void)strict_cuda_runtime_test_decision([]() -> int {
+            throw std::runtime_error("injected CUDA enumeration failure");
+        });
+    }, "CUDA enumeration exception was converted into a skip decision");
+    require_throws([] {
+        (void)strict_cuda_runtime_test_decision([] { return -1; });
+    }, "invalid negative CUDA device count was not rejected");
+}
+
 }  // namespace
 
 int main() {
@@ -1216,6 +1257,8 @@ int main() {
 #else
         test_openmp_gating();
 #endif
+        test_cuda_gating();
+        test_strict_cuda_runtime_test_decision();
         std::cout << "Counterfactual experiment tests passed\n";
         return 0;
     } catch (const std::exception& error) {

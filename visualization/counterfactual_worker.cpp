@@ -105,6 +105,7 @@ struct CounterfactualExperimentWorker::Job {
         value.removed_body_stable_id = configuration.removed_body_stable_id;
         value.backend = configuration.backend;
         value.openmp_threads = configuration.openmp_threads;
+        value.cuda_device = configuration.cuda_device;
         value.physical_timestep_s = snapshot.fixed_timestep_s();
         value.observation_horizon_s = configuration.limits.observation_horizon_s;
         value.accepted_step_count = estimate.integration_steps;

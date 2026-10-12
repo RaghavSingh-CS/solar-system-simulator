@@ -1,5 +1,7 @@
+#include "nbody/cuda_backend.hpp"
 #include "nbody/scenarios.hpp"
 #include "nbody/visualization/controller.hpp"
+#include "cuda_test_gate.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -180,7 +182,11 @@ void test_transactional_failures() {
 
 int main() {
     try {
-        if (!nbody::visualization::SimulationController::cuda_available()) {
+        const auto device_decision =
+            nbody::test_support::strict_cuda_runtime_test_decision(
+                [] { return nbody::cuda_device_count(); });
+        if (device_decision ==
+            nbody::test_support::CudaRuntimeTestDecision::skip_no_device) {
             std::cout << "SKIP: CUDA visualization support compiled, but no CUDA device is available\n";
             return 77;
         }

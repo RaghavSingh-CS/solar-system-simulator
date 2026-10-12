@@ -58,6 +58,9 @@ public:
 
     static bool openmp_available() noexcept;
     static bool cuda_compiled() noexcept;
+    // UI/convenience probe only: false also covers enumeration errors because
+    // this API is noexcept. Mandatory GPU tests use strict cuda_device_count()
+    // enumeration so runtime/driver errors fail rather than skip.
     static bool cuda_available(int device_index = 0) noexcept;
 
 private:
