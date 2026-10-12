@@ -326,6 +326,15 @@ checked work/memory estimates. Cancelled and failed runs retain the same
 descriptor; displayed historical values never come from subsequently edited
 controls.
 
+The input layout uses visible labels with units and separate hidden widget IDs,
+instead of trailing ImGui labels that can be clipped by full-width numeric
+fields. At narrow content widths controls stack vertically; wider panels use a
+bounded label/value table. Current-snapshot and initial-state sources, curated
+physical removal, and Sequential/OpenMP execution are presented as distinct
+choices. Inline explanations define horizon, retained-sample cadence, the two
+thresholds, and persistence, while disabled launch/OpenMP states identify the
+reason they are unavailable.
+
 The panel shows checked steps, retained samples, direct-force work, and a
 conservative memory estimate before launch. Horizon, cadence, monitored-body,
 history, and engine work limits remain authoritative. Progress is published
@@ -333,13 +342,29 @@ only at synchronized paired batch boundaries. Terminal publication contains
 the bounded result, per-branch conservation diagnostics, warnings and dropped-
 warning count, or a separate bounded worker failure message.
 
+Results have three levels. The open summary shows status, removed body,
+executed backend, horizon, synchronized completed steps, monitored/significant
+body counts, warning counts, overlay availability, and the active coordinate
+frame. A horizontally scrollable, sortable table maps committed summaries to
+stable body names/IDs and shows final/maximum absolute separation, fixed
+normalization scale, normalized deviation, velocity difference, optional
+parent-relative separation, first crossing, persistence time, and significance.
+Undefined optional metrics are `N/A`; the renderer does not recompute them.
+Detailed diagnostics group retained warnings by branch and issue type before an
+expandable lossless retained-warning list, report dropped-warning counts, and
+show baseline and counterfactual conservation against each branch's own initial
+state. Immutable run configuration/provenance is separately collapsible.
+Terminal failures and stale-result suppression remain visible outside collapsed
+details.
+
 Completed overlays use retained samples only. Baseline paths are solid and
 counterfactual paths dashed; both use the same inertial origin or the matching
 historical baseline-parent origin. If that surviving origin is not monitored,
 bounded baseline-only reference positions are retained at the same sample
 times, separately from metric bodies and included in memory admission. Removed,
 missing, unretained, or incomplete origins suppress the local overlay with an
-explicit explanation; there is no live-origin fallback. The viewer does not
+explicit explanation and a suggestion to use the SSB/inertial frame or a
+retained surviving common origin; there is no live-origin fallback. The viewer does not
 independently recenter the two branches. At most the selected body plus a
 bounded set of significant bodies is drawn, and each path must also pass the
 active-profile, class, and individual visibility masks. Displayed separation,
@@ -349,6 +374,12 @@ or stability claim.
 Instantaneous removal remains hypothetical, and the provisional catalog
 60-second timestep, point-mass model, linear swept-step warning, and one-day
 engine ceiling do not establish ephemeris accuracy.
+
+Full-system catalog labels retain collision rejection and hysteresis while
+prioritizing the selected body, star, planets, dwarf planets, and then smaller
+classes in deterministic order. Focused subsystem label behavior is unchanged.
+Automated tests cover the priority and collision policy, but native-window
+appearance at narrow and full-system layouts still requires manual review.
 
 ## Validation boundary and deferred work
 

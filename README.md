@@ -123,7 +123,12 @@ Controls:
   later editor values. The overlay uses a solid baseline and dashed altered
   path in one common frame; unmonitored local origins use separately retained
   matched-time baseline references, while unavailable origins suppress the
-  overlay explicitly. Separation is not labeled as escape.
+  overlay explicitly. Responsive controls keep labels separate from numeric
+  fields at narrow panel widths. Results are organized into a run summary, a
+  sortable stable-ID per-body table, grouped expandable scientific warnings,
+  independent per-branch conservation diagnostics, and collapsible immutable
+  provenance. Missing metrics are shown as `N/A`; terminal failures remain
+  prominent. Separation is not labeled as escape.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
 - Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.
@@ -135,6 +140,9 @@ Controls:
 - Left-drag, `A`/`D`, or arrow keys: orbit; mouse wheel or `W`/`S`: dolly; `C`: overview camera.
 
 The panel is resizable from 380 px to the smaller of 680 px or 55% of the window, and the 3D scene viewport always occupies the remaining width. Hover help documents every primary control. CUDA is exposed only in CUDA-enabled builds with an available device; MPI remains a separate benchmark executable. Auto remains absent until Stage 5 produces a valid calibration. Viewer FPS/frame time is display-only and is not controlled benchmark evidence. See [the visualization notes](docs/visualization.md) for provenance, architecture, options, and limitations.
+Automated layout/model tests do not replace manual native-window inspection;
+the revised narrow-panel controls, results table, warning expansion, legends,
+and full-system label density still require appearance validation.
 
 Run (Visual Studio multi-config path shown):
 

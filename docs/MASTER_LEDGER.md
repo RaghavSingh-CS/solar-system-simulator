@@ -1480,6 +1480,51 @@ and RTX 4050 validation remain pending. Sequential/OpenMP/CUDA Barnes--Hut is
 still mandatory and unimplemented. Frozen Stage 5 source, protocols, policy,
 scripts, benchmarks, and evidence remain unchanged.
 
+### Counterfactual results-presentation usability pass
+
+This uncommitted pass on `feature/cuda-visualizer` starts from
+`1c8c23236a5d88277f8a704dc10619f79173fa5c` and changes presentation only.
+Experiment controls now use responsive label/value geometry with explicit
+units, distinct current-snapshot versus initial-state choices, clear curated
+physical-removal and Sequential/OpenMP controls, concise definitions for
+horizon/cadence/thresholds/persistence, and reasons for disabled launch states.
+The experiment configuration and engine semantics are unchanged.
+
+Committed immutable results are mapped by stable ID into a cached presentation
+model. The panel provides an open summary and a sortable per-body table covering
+final/maximum separation, the fixed normalization scale, normalized deviation,
+velocity difference, optional parent-relative separation, first threshold
+crossing, persistence time, and significance. Missing optional values display
+as `N/A`. Baseline and counterfactual conservation are labeled independently:
+energy drift is relative, while linear- and angular-momentum drift are absolute
+with SI units. Cross-branch energy difference is explicitly not presented as
+integration error.
+
+Retained warnings are grouped once per immutable result by branch and issue
+type; expandable entries preserve every bounded underlying warning, and the
+dropped-warning count remains explicit. Terminal engine/worker failures remain
+outside collapsed diagnostics. Overlay feedback names the active SSB/inertial
+or shared baseline-relative frame and explains removed, missing, unretained, or
+incomplete origins without fallback or independent recentering. The line legend
+draws baseline solid and counterfactual dashed styles. Full-system label
+decluttering now gives deterministic class-aware priority to selected and major
+bodies while leaving focused subsystem behavior and physical visibility
+unchanged.
+
+Focused deterministic coverage includes stable-ID row mapping, numeric and
+optional-value sorting, `N/A` and zero-time semantics, threshold/persistence
+retention, warning grouping and dropped counts, immutable run metadata, frame
+availability explanations, common-frame overlay alignment, visibility masks,
+narrow/wide control geometry, label priority, and absence of live-controller or
+committed-result mutation. Manual native-window appearance verification remains
+required after automated validation.
+
+Canonical Release validation passed on 2026-10-12: CPU CTest `12/12` and
+OpenMP CTest `13/13`. Focused visualization-model and counterfactual-worker
+tests passed `2/2` in each configuration. Both complete suites also passed the
+repository-layout checker and pinned dependency-cache verifier. CUDA paired
+execution and NVIDIA runtime validation were not performed or claimed.
+
 ## Canonical repository layout and build custody
 
 ### Organization record
