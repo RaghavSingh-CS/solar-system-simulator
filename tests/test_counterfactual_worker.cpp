@@ -507,6 +507,17 @@ void test_hidden_reference_origin_and_frame_failures() {
     require(reconstructed.frame_unavailable_reason.empty() &&
         reconstructed.paths.size() == 2U,
         "unmonitored surviving origin was not retained for rendering");
+    const auto local_status = nbody::visualization::counterfactual_frame_status(
+        publication, std::optional<std::string>{"central"});
+    const auto inertial_status = nbody::visualization::counterfactual_frame_status(
+        publication);
+    require(local_status.available &&
+        local_status.coordinate_frame_label.find("central") != std::string::npos &&
+        local_status.explanation.find("never independently recentered") !=
+            std::string::npos &&
+        inertial_status.available &&
+        inertial_status.coordinate_frame_label.find("inertial") != std::string::npos,
+        "available comparison frames are not labeled with their shared-frame contract");
     for (std::size_t sample_index = 0;
          sample_index < publication.result->samples.size(); ++sample_index) {
         const auto& sample = publication.result->samples[sample_index];
@@ -526,7 +537,10 @@ void test_hidden_reference_origin_and_frame_failures() {
     const auto changed_origin = nbody::visualization::build_counterfactual_render_paths(
         publication, transform, {"tracer"}, std::optional<std::string>{"other"});
     require(changed_origin.paths.empty() &&
-        !changed_origin.frame_unavailable_reason.empty(),
+        changed_origin.frame_unavailable_reason.find("no retained historical") !=
+            std::string::npos &&
+        changed_origin.frame_unavailable_reason.find("SSB/inertial") !=
+            std::string::npos,
         "switching to an unretained local origin silently changed frames");
 
     auto removed_result = std::make_shared<
@@ -536,7 +550,9 @@ void test_hidden_reference_origin_and_frame_failures() {
     const auto removed_origin = nbody::visualization::build_counterfactual_render_paths(
         publication, transform, {"tracer"}, std::optional<std::string>{"central"});
     require(removed_origin.paths.empty() &&
-        removed_origin.frame_unavailable_reason.find("removed") != std::string::npos,
+        removed_origin.frame_unavailable_reason.find("removed") != std::string::npos &&
+        removed_origin.frame_unavailable_reason.find("surviving common origin") !=
+            std::string::npos,
         "removed local origin did not suppress its overlay explicitly");
 
     removed_result->removed_body_stable_id = "removed";
@@ -544,7 +560,10 @@ void test_hidden_reference_origin_and_frame_failures() {
     const auto incomplete_origin = nbody::visualization::build_counterfactual_render_paths(
         publication, transform, {"tracer"}, std::optional<std::string>{"central"});
     require(incomplete_origin.paths.empty() &&
-        incomplete_origin.frame_unavailable_reason.find("incomplete") != std::string::npos,
+        incomplete_origin.frame_unavailable_reason.find("incomplete") !=
+            std::string::npos &&
+        incomplete_origin.frame_unavailable_reason.find("SSB/inertial") !=
+            std::string::npos,
         "missing origin samples were not suppressed explicitly");
 }
 
@@ -573,6 +592,117 @@ void test_overlay_visibility_policy() {
     visible = nbody::visualization::counterfactual_visible_overlay_ids(
         legacy, profile, individual, classes, {"earth"}, 12U);
     require(visible.empty(), "class visibility did not suppress the overlay");
+}
+
+void test_result_presentation_rows_sorting_and_missing_metrics() {
+    nbody::experiments::CounterfactualExperimentResult result;
+    nbody::experiments::BodyDeviationSummary tracer;
+    tracer.stable_id = "tracer";
+    tracer.final_absolute_separation_m = 3.0;
+    tracer.maximum_absolute_separation_m = 8.0;
+    tracer.fixed_normalization_scale_m = 20.0;
+    tracer.final_normalized_deviation = 0.15;
+    tracer.final_velocity_difference_m_s = 0.25;
+    tracer.final_parent_relative_separation_m = 2.0;
+    tracer.first_threshold_crossing_time_s = 4.0;
+    tracer.persistent_threshold_time_s = 6.0;
+    tracer.significant = true;
+    nbody::experiments::BodyDeviationSummary central;
+    central.stable_id = "central";
+    central.final_absolute_separation_m = 1.0;
+    central.maximum_absolute_separation_m = 9.0;
+    central.fixed_normalization_scale_m = 10.0;
+    central.final_normalized_deviation = 0.1;
+    central.final_velocity_difference_m_s = 0.5;
+    result.summaries = {tracer, central};
+    const auto original = result.summaries;
+
+    auto rows = nbody::visualization::build_counterfactual_result_rows(
+        result, {{"central", "Central Body"}, {"tracer", "Tracer Body"}});
+    require(rows.size() == 2U && rows[0].stable_id == "central" &&
+        rows[0].display_name == "Central Body" &&
+        rows[1].stable_id == "tracer" && rows[1].significant &&
+        rows[1].first_threshold_crossing_time_s == 4.0 &&
+        rows[1].persistent_threshold_time_s == 6.0,
+        "stable-ID result rows lost names or threshold/persistence semantics");
+    nbody::visualization::sort_counterfactual_result_rows(
+        rows,
+        nbody::visualization::CounterfactualResultSortKey::maximum_absolute_separation,
+        false);
+    require(rows[0].stable_id == "central" && rows[1].stable_id == "tracer",
+        "descending numerical result sorting is incorrect");
+    nbody::visualization::sort_counterfactual_result_rows(
+        rows,
+        nbody::visualization::CounterfactualResultSortKey::parent_relative_separation,
+        false);
+    require(rows[0].stable_id == "tracer" && rows[1].stable_id == "central",
+        "missing optional metrics did not remain last during sorting");
+    require(nbody::visualization::counterfactual_optional_measurement(
+                std::nullopt, "s") == "N/A" &&
+        nbody::visualization::counterfactual_optional_measurement(
+                std::optional<double>{0.0}, "s").find(" s") != std::string::npos,
+        "missing or zero-valued metric presentation is ambiguous");
+    require(result.summaries.size() == original.size() &&
+        result.summaries[0].stable_id == original[0].stable_id &&
+        result.summaries[0].maximum_absolute_separation_m ==
+            original[0].maximum_absolute_separation_m,
+        "presentation row construction mutated the committed result");
+
+    bool unknown_id_rejected = false;
+    try {
+        (void)nbody::visualization::build_counterfactual_result_rows(
+            result, {{"central", "Central Body"}});
+    } catch (const std::logic_error&) {
+        unknown_id_rejected = true;
+    }
+    require(unknown_id_rejected,
+        "presentation silently accepted a result stable ID absent from the scenario");
+}
+
+void test_warning_grouping_and_control_layout() {
+    nbody::experiments::CounterfactualExperimentResult result;
+    const auto add_issue = [&](
+        nbody::experiments::ExperimentIssueKind kind,
+        std::optional<nbody::experiments::ExperimentBranch> branch,
+        const char* message) {
+        nbody::experiments::ExperimentIssue issue;
+        issue.kind = kind;
+        issue.branch = branch;
+        issue.message = message;
+        result.issues.push_back(std::move(issue));
+    };
+    add_issue(nbody::experiments::ExperimentIssueKind::dangerous_close_approach,
+        nbody::experiments::ExperimentBranch::baseline, "first");
+    add_issue(nbody::experiments::ExperimentIssueKind::dangerous_close_approach,
+        nbody::experiments::ExperimentBranch::baseline, "second");
+    add_issue(nbody::experiments::ExperimentIssueKind::dangerous_close_approach,
+        nbody::experiments::ExperimentBranch::counterfactual, "third");
+    add_issue(nbody::experiments::ExperimentIssueKind::excessive_conservation_drift,
+        std::nullopt, "fourth");
+    result.dropped_issue_count = 7U;
+    const auto messages_before = std::vector<std::string>{
+        result.issues[0].message, result.issues[1].message,
+        result.issues[2].message, result.issues[3].message};
+    const auto groups = nbody::visualization::group_counterfactual_warnings(result);
+    require(groups.size() == 3U &&
+        groups[0].retained_issue_indices == std::vector<std::size_t>({0U, 1U}) &&
+        groups[1].retained_issue_indices == std::vector<std::size_t>({2U}) &&
+        groups[2].retained_issue_indices == std::vector<std::size_t>({3U}) &&
+        result.dropped_issue_count == 7U &&
+        result.issues[0].message == messages_before[0] &&
+        std::string(nbody::visualization::counterfactual_issue_branch_name(
+            groups[1].branch)) == "Counterfactual",
+        "warning grouping lost branch/type identity, dropped counts, or retained text");
+
+    const auto narrow =
+        nbody::visualization::counterfactual_control_layout(280.0F);
+    const auto wide =
+        nbody::visualization::counterfactual_control_layout(520.0F);
+    require(narrow.stacked && narrow.value_width == 280.0F &&
+        !wide.stacked && wide.label_width >= 140.0F &&
+        wide.value_width > 0.0F &&
+        wide.label_width + wide.value_width <= 520.0F,
+        "responsive experiment-control layout can clip its label/value columns");
 }
 
 void test_openmp_worker() {
@@ -619,6 +749,8 @@ int main() {
         test_shared_render_space_paths();
         test_hidden_reference_origin_and_frame_failures();
         test_overlay_visibility_policy();
+        test_result_presentation_rows_sorting_and_missing_metrics();
+        test_warning_grouping_and_control_layout();
         test_openmp_worker();
         std::cout << "Counterfactual worker tests passed\n";
         return 0;

@@ -323,6 +323,41 @@ bool overlaps(const LabelPlacement& left, const LabelPlacement& right, float mar
 
 }  // namespace
 
+int astronomical_label_priority(
+    astronomy::AstronomicalBodyClass body_class,
+    bool selected,
+    std::size_t deterministic_order) noexcept {
+    if (selected) {
+        return 1000;
+    }
+    int class_priority = 500;
+    switch (body_class) {
+        case astronomy::AstronomicalBodyClass::star:
+            class_priority = 950;
+            break;
+        case astronomy::AstronomicalBodyClass::planet:
+            class_priority = 900;
+            break;
+        case astronomy::AstronomicalBodyClass::dwarf_planet:
+            class_priority = 820;
+            break;
+        case astronomy::AstronomicalBodyClass::natural_satellite:
+            class_priority = 740;
+            break;
+        case astronomy::AstronomicalBodyClass::asteroid:
+            class_priority = 640;
+            break;
+        case astronomy::AstronomicalBodyClass::comet:
+            class_priority = 620;
+            break;
+        case astronomy::AstronomicalBodyClass::trans_neptunian_object:
+            class_priority = 600;
+            break;
+    }
+    return class_priority - static_cast<int>(std::min<std::size_t>(
+        deterministic_order, 99U));
+}
+
 std::vector<LabelPlacement> declutter_labels(
     std::vector<LabelCandidate> candidates,
     glm::vec2 viewport_size,

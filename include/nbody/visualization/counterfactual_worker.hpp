@@ -104,6 +104,84 @@ struct CounterfactualRenderPathResult {
     std::string frame_unavailable_reason;
 };
 
+struct CounterfactualControlLayout {
+    bool stacked{false};
+    float label_width{0.0F};
+    float value_width{0.0F};
+};
+
+struct CounterfactualBodyLabel {
+    std::string stable_id;
+    std::string display_name;
+};
+
+struct CounterfactualResultRow {
+    std::string stable_id;
+    std::string display_name;
+    double final_absolute_separation_m{0.0};
+    double maximum_absolute_separation_m{0.0};
+    double fixed_normalization_scale_m{0.0};
+    double final_normalized_deviation{0.0};
+    double final_velocity_difference_m_s{0.0};
+    std::optional<double> final_parent_relative_separation_m;
+    std::optional<double> first_threshold_crossing_time_s;
+    std::optional<double> persistent_threshold_time_s;
+    bool significant{false};
+};
+
+enum class CounterfactualResultSortKey {
+    display_name,
+    stable_id,
+    final_absolute_separation,
+    maximum_absolute_separation,
+    normalization_scale,
+    normalized_deviation,
+    velocity_difference,
+    parent_relative_separation,
+    first_threshold_crossing,
+    persistence_time,
+    significance,
+};
+
+struct CounterfactualWarningGroup {
+    experiments::ExperimentIssueKind kind{
+        experiments::ExperimentIssueKind::integration_failure};
+    std::optional<experiments::ExperimentBranch> branch;
+    std::vector<std::size_t> retained_issue_indices;
+};
+
+struct CounterfactualFrameStatus {
+    bool available{false};
+    std::string coordinate_frame_label;
+    std::string explanation;
+};
+
+CounterfactualControlLayout counterfactual_control_layout(float available_width);
+
+std::vector<CounterfactualResultRow> build_counterfactual_result_rows(
+    const experiments::CounterfactualExperimentResult& result,
+    const std::vector<CounterfactualBodyLabel>& labels);
+
+void sort_counterfactual_result_rows(
+    std::vector<CounterfactualResultRow>& rows,
+    CounterfactualResultSortKey key,
+    bool ascending);
+
+std::vector<CounterfactualWarningGroup> group_counterfactual_warnings(
+    const experiments::CounterfactualExperimentResult& result);
+
+CounterfactualFrameStatus counterfactual_frame_status(
+    const CounterfactualWorkerPublication& publication,
+    const std::optional<std::string>& common_baseline_origin_stable_id = std::nullopt);
+
+const char* counterfactual_issue_kind_name(
+    experiments::ExperimentIssueKind kind) noexcept;
+const char* counterfactual_issue_branch_name(
+    const std::optional<experiments::ExperimentBranch>& branch) noexcept;
+std::string counterfactual_optional_measurement(
+    const std::optional<double>& value,
+    const char* unit);
+
 std::uint64_t checked_next_counterfactual_generation(std::uint64_t current);
 
 class CounterfactualPublicationGate {

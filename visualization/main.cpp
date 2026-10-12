@@ -256,6 +256,12 @@ struct ApplicationModel {
         bool show_significant{true};
         std::string overlay_frame_error;
         std::string error;
+        std::uint64_t presentation_generation{0};
+        const nbody::experiments::CounterfactualExperimentResult*
+            presentation_result{nullptr};
+        std::vector<nbody::visualization::CounterfactualResultRow> result_rows;
+        std::vector<nbody::visualization::CounterfactualWarningGroup> warning_groups;
+        std::string presentation_error;
     };
 
     nbody::visualization::ScenarioDefinition scenario;
@@ -447,6 +453,39 @@ struct ApplicationModel {
         auto next = experiment_worker.publication();
         if (experiment_gate.accepts(next)) {
             experiment_publication = std::move(next);
+        }
+        const auto* result = experiment_publication.result.get();
+        if (experiment_ui.presentation_generation ==
+                experiment_publication.generation &&
+            experiment_ui.presentation_result == result &&
+            experiment_gate.accepts(experiment_publication)) {
+            return;
+        }
+        experiment_ui.presentation_generation = experiment_publication.generation;
+        experiment_ui.presentation_result = result;
+        experiment_ui.result_rows.clear();
+        experiment_ui.warning_groups.clear();
+        experiment_ui.presentation_error.clear();
+        if (result == nullptr ||
+            !experiment_gate.accepts(experiment_publication)) {
+            return;
+        }
+        try {
+            std::vector<nbody::visualization::CounterfactualBodyLabel> labels;
+            labels.reserve(scenario.stable_ids.size());
+            for (std::size_t index = 0; index < scenario.stable_ids.size(); ++index) {
+                labels.push_back({
+                    scenario.stable_ids[index],
+                    controller.state().bodies[index].name,
+                });
+            }
+            experiment_ui.result_rows =
+                nbody::visualization::build_counterfactual_result_rows(
+                    *result, labels);
+            experiment_ui.warning_groups =
+                nbody::visualization::group_counterfactual_warnings(*result);
+        } catch (const std::exception& error) {
+            experiment_ui.presentation_error = error.what();
         }
     }
 
@@ -924,6 +963,20 @@ std::string human_bytes(std::size_t bytes) {
     return text.str();
 }
 
+std::string join_stable_ids(const std::vector<std::string>& ids) {
+    if (ids.empty()) {
+        return "None";
+    }
+    std::ostringstream text;
+    for (std::size_t index = 0; index < ids.size(); ++index) {
+        if (index != 0U) {
+            text << ", ";
+        }
+        text << ids[index];
+    }
+    return text.str();
+}
+
 nbody::experiments::CounterfactualExperimentConfiguration
 make_experiment_configuration(
     const ApplicationModel& app,
@@ -1021,19 +1074,220 @@ void help_for_last_item(nbody::visualization::HelpTopic topic) {
 void property_row(const char* label, const std::string& value) {
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
-    ImGui::TextDisabled("%s", label);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("%s", label);
+    ImGui::PopStyleColor();
     ImGui::TableSetColumnIndex(1);
     ImGui::TextWrapped("%s", value.c_str());
 }
 
 bool begin_property_table(const char* id) {
+    const float available_width = ImGui::GetContentRegionAvail().x;
     if (!ImGui::BeginTable(
             id, 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings)) {
         return false;
     }
-    ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 150.0F);
+    const float label_width = std::clamp(
+        available_width * 0.40F, 110.0F, 170.0F);
+    ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, label_width);
     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
     return true;
+}
+
+void tooltip_for_last_item(const char* text) {
+    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+        return;
+    }
+    ImGui::BeginTooltip();
+    ImGui::PushTextWrapPos(std::min(420.0F, ImGui::GetIO().DisplaySize.x * 0.42F));
+    ImGui::TextUnformatted(text);
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
+}
+
+void draw_counterfactual_legend() {
+    const ImVec2 start = ImGui::GetCursorScreenPos();
+    auto* draw_list = ImGui::GetWindowDrawList();
+    constexpr float line_width = 34.0F;
+    constexpr float row_height = 18.0F;
+    const float middle = start.y + row_height * 0.5F;
+    draw_list->AddLine(
+        {start.x, middle}, {start.x + line_width, middle},
+        IM_COL32(122, 209, 255, 255), 2.0F);
+    ImGui::SetCursorScreenPos({start.x + line_width + 8.0F, start.y});
+    ImGui::TextUnformatted("Baseline (solid)");
+    const ImVec2 second = ImGui::GetCursorScreenPos();
+    for (int segment = 0; segment < 4; ++segment) {
+        const float x = second.x + static_cast<float>(segment) * 9.0F;
+        draw_list->AddLine(
+            {x, second.y + row_height * 0.5F},
+            {x + 5.0F, second.y + row_height * 0.5F},
+            IM_COL32(255, 97, 194, 255), 2.0F);
+    }
+    ImGui::SetCursorScreenPos({second.x + line_width + 8.0F, second.y});
+    ImGui::TextUnformatted("Counterfactual (dashed)");
+}
+
+nbody::visualization::CounterfactualResultSortKey counterfactual_sort_key(
+    ImGuiID column_id) {
+    using Key = nbody::visualization::CounterfactualResultSortKey;
+    switch (column_id) {
+        case 1U: return Key::display_name;
+        case 2U: return Key::final_absolute_separation;
+        case 3U: return Key::maximum_absolute_separation;
+        case 4U: return Key::normalization_scale;
+        case 5U: return Key::normalized_deviation;
+        case 6U: return Key::velocity_difference;
+        case 7U: return Key::parent_relative_separation;
+        case 8U: return Key::first_threshold_crossing;
+        case 9U: return Key::persistence_time;
+        case 10U: return Key::significance;
+        default: return Key::stable_id;
+    }
+}
+
+void draw_counterfactual_result_table(
+    std::vector<nbody::visualization::CounterfactualResultRow>& rows) {
+    constexpr ImGuiTableFlags flags = ImGuiTableFlags_Borders |
+        ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable |
+        ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
+        ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollX |
+        ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
+    if (!ImGui::BeginTable("counterfactual_body_results", 10, flags,
+            {0.0F, std::min(330.0F, ImGui::GetIO().DisplaySize.y * 0.40F)})) {
+        return;
+    }
+    ImGui::TableSetupScrollFreeze(1, 1);
+    ImGui::TableSetupColumn("Body / stable ID",
+        ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed,
+        170.0F, 1U);
+    ImGui::TableSetupColumn("Final separation (m)", 0, 130.0F, 2U);
+    ImGui::TableSetupColumn("Maximum separation (m)", 0, 145.0F, 3U);
+    ImGui::TableSetupColumn("Normalization scale (m)", 0, 145.0F, 4U);
+    ImGui::TableSetupColumn("Normalized deviation", 0, 130.0F, 5U);
+    ImGui::TableSetupColumn("Velocity difference (m/s)", 0, 150.0F, 6U);
+    ImGui::TableSetupColumn("Parent-relative (m)", 0, 130.0F, 7U);
+    ImGui::TableSetupColumn("First crossing (s)", 0, 120.0F, 8U);
+    ImGui::TableSetupColumn("Persistence reached (s)", 0, 140.0F, 9U);
+    ImGui::TableSetupColumn("Significant", 0, 90.0F, 10U);
+    ImGui::TableHeadersRow();
+    if (auto* specs = ImGui::TableGetSortSpecs();
+        specs != nullptr && specs->SpecsDirty && specs->SpecsCount > 0) {
+        const auto& spec = specs->Specs[0];
+        nbody::visualization::sort_counterfactual_result_rows(
+            rows, counterfactual_sort_key(spec.ColumnUserID),
+            spec.SortDirection != ImGuiSortDirection_Descending);
+        specs->SpecsDirty = false;
+    }
+    for (const auto& row : rows) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted(row.display_name.c_str());
+        ImGui::TextDisabled("%s", row.stable_id.c_str());
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text("%.6e", row.final_absolute_separation_m);
+        ImGui::TableSetColumnIndex(2);
+        ImGui::Text("%.6e", row.maximum_absolute_separation_m);
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%.6e", row.fixed_normalization_scale_m);
+        ImGui::TableSetColumnIndex(4);
+        ImGui::Text("%.6e", row.final_normalized_deviation);
+        ImGui::TableSetColumnIndex(5);
+        ImGui::Text("%.6e", row.final_velocity_difference_m_s);
+        ImGui::TableSetColumnIndex(6);
+        if (row.final_parent_relative_separation_m) {
+            ImGui::Text("%.6e", *row.final_parent_relative_separation_m);
+        } else {
+            ImGui::TextDisabled("N/A");
+        }
+        ImGui::TableSetColumnIndex(7);
+        if (row.first_threshold_crossing_time_s) {
+            ImGui::Text("%.6e", *row.first_threshold_crossing_time_s);
+        } else {
+            ImGui::TextDisabled("N/A");
+        }
+        ImGui::TableSetColumnIndex(8);
+        if (row.persistent_threshold_time_s) {
+            ImGui::Text("%.6e", *row.persistent_threshold_time_s);
+        } else {
+            ImGui::TextDisabled("N/A");
+        }
+        ImGui::TableSetColumnIndex(9);
+        if (row.significant) {
+            ImGui::TextColored(ImVec4(1.0F, 0.73F, 0.25F, 1.0F), "YES");
+        } else {
+            ImGui::TextDisabled("No");
+        }
+    }
+    ImGui::EndTable();
+}
+
+void draw_counterfactual_conservation(
+    const char* branch,
+    const nbody::experiments::BranchConservationDiagnostics& diagnostics) {
+    ImGui::SeparatorText(branch);
+    if (begin_property_table(branch)) {
+        property_row("Relative energy drift",
+            nbody::visualization::format_measurement(
+                diagnostics.relative_energy_drift, "dimensionless", 6));
+        property_row("Absolute energy drift",
+            nbody::visualization::format_measurement(
+                diagnostics.absolute_energy_drift_j, "J", 6));
+        property_row("Absolute linear-momentum drift",
+            nbody::visualization::format_measurement(
+                diagnostics.linear_momentum_drift_kg_m_s, "kg m/s", 6));
+        property_row("Absolute angular-momentum drift",
+            nbody::visualization::format_measurement(
+                diagnostics.angular_momentum_drift_kg_m2_s, "kg m^2/s", 6));
+        ImGui::EndTable();
+    }
+}
+
+void draw_counterfactual_warning_groups(
+    const nbody::experiments::CounterfactualExperimentResult& result,
+    const std::vector<nbody::visualization::CounterfactualWarningGroup>& groups) {
+    ImGui::Text("Retained warnings: %zu in %zu branch/type groups",
+        result.issues.size(), groups.size());
+    if (result.dropped_issue_count > 0U) {
+        ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
+            "%zu additional warnings were dropped by the configured storage bound.",
+            result.dropped_issue_count);
+    }
+    for (std::size_t group_index = 0; group_index < groups.size(); ++group_index) {
+        const auto& group = groups[group_index];
+        ImGui::PushID(static_cast<int>(group_index));
+        const bool open = ImGui::TreeNodeEx("warning_group",
+            ImGuiTreeNodeFlags_SpanAvailWidth,
+            "%s · %s — %zu retained",
+            nbody::visualization::counterfactual_issue_branch_name(group.branch),
+            nbody::visualization::counterfactual_issue_kind_name(group.kind),
+            group.retained_issue_indices.size());
+        if (open) {
+            for (const auto issue_index : group.retained_issue_indices) {
+                if (issue_index >= result.issues.size()) {
+                    ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
+                        "Invalid retained warning index");
+                    continue;
+                }
+                const auto& issue = result.issues[issue_index];
+                ImGui::PushID(static_cast<int>(issue_index));
+                ImGui::BulletText("t=%.6e s%s", issue.time_s,
+                    issue.numerical_invalidity ? " · numerical invalidity" : "");
+                if (issue.first_body_stable_id || issue.second_body_stable_id) {
+                    ImGui::TextDisabled("Bodies: %s%s%s",
+                        issue.first_body_stable_id
+                            ? issue.first_body_stable_id->c_str() : "N/A",
+                        issue.second_body_stable_id ? " / " : "",
+                        issue.second_body_stable_id
+                            ? issue.second_body_stable_id->c_str() : "");
+                }
+                ImGui::TextWrapped("%s", issue.message.c_str());
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
 }
 
 UiActions draw_control_panel(
@@ -1429,17 +1683,27 @@ UiActions draw_control_panel(
     } else {
         auto& experiment = app.experiment_ui;
         ImGui::TextDisabled("Settings below configure the NEXT run.");
+        const auto control_layout =
+            nbody::visualization::counterfactual_control_layout(
+                ImGui::GetContentRegionAvail().x);
         const auto candidates =
             nbody::visualization::counterfactual_removal_candidates(app.scenario);
+        ImGui::TextUnformatted("Start from");
         if (ImGui::RadioButton(
-                "Snapshot current simulation", experiment.capture_current_state)) {
+                "Current simulation snapshot", experiment.capture_current_state)) {
             experiment.capture_current_state = true;
         }
-        ImGui::SameLine();
+        tooltip_for_last_item(
+            "Copies the current simulated state and its current timestamp. The live viewer is never mutated by the experiment.");
+        if (!control_layout.stacked) {
+            ImGui::SameLine();
+        }
         if (ImGui::RadioButton(
-                "Initial scenario", !experiment.capture_current_state)) {
+                "Initial scenario state (t = 0)", !experiment.capture_current_state)) {
             experiment.capture_current_state = false;
         }
+        tooltip_for_last_item(
+            "Copies the scenario's defined initial state at simulation time zero, independent of the live viewer's current time.");
 
         int removal_index = 0;
         std::vector<const char*> removal_names;
@@ -1455,41 +1719,83 @@ UiActions draw_control_panel(
             }
         }
         if (!removal_names.empty()) {
+            ImGui::TextUnformatted("Hypothetically remove one gravitating body");
             ImGui::SetNextItemWidth(-1.0F);
-            if (ImGui::Combo("Hypothetically remove", &removal_index,
+            if (ImGui::Combo("##counterfactual_remove_body", &removal_index,
                     removal_names.data(), static_cast<int>(removal_names.size()))) {
                 experiment.removed_body_stable_id =
                     candidates[static_cast<std::size_t>(removal_index)];
             }
+            tooltip_for_last_item(
+                "The selected body is physically absent from the counterfactual solver branch; this is not a visibility toggle.");
         }
         ImGui::TextDisabled("Sun and unapproved catalog bodies are not eligible.");
 
-        ImGui::RadioButton("Experiment Sequential", &experiment.backend_index, 0);
-        ImGui::SameLine();
+        ImGui::TextUnformatted("Experiment backend");
+        ImGui::RadioButton("Sequential CPU", &experiment.backend_index, 0);
+        if (!control_layout.stacked) {
+            ImGui::SameLine();
+        }
         const bool experiment_openmp_available =
             nbody::experiments::CounterfactualExperimentRunner::openmp_supported();
         ImGui::BeginDisabled(!experiment_openmp_available);
-        ImGui::RadioButton("Experiment OpenMP", &experiment.backend_index, 1);
+        ImGui::RadioButton("OpenMP CPU", &experiment.backend_index, 1);
         ImGui::EndDisabled();
         if (!experiment_openmp_available) {
             experiment.backend_index = 0;
+            ImGui::TextDisabled(
+                "OpenMP is unavailable in this build; Sequential will be used explicitly.");
         }
 
-        ImGui::SetNextItemWidth(-1.0F);
-        ImGui::InputDouble("Observation horizon (s)",
+        const bool control_table = !control_layout.stacked && ImGui::BeginTable(
+            "counterfactual_inputs", 2,
+            ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings);
+        if (control_table) {
+            ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed,
+                control_layout.label_width);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        }
+        const auto begin_input = [&](const char* label) {
+            if (control_table) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextWrapped("%s", label);
+                ImGui::TableSetColumnIndex(1);
+            } else {
+                ImGui::TextWrapped("%s", label);
+            }
+            ImGui::SetNextItemWidth(-1.0F);
+        };
+        begin_input("Observation horizon (s)");
+        ImGui::InputDouble("##counterfactual_horizon",
             &experiment.observation_horizon_s, 0.0, 0.0, "%.0f");
-        ImGui::SetNextItemWidth(-1.0F);
-        ImGui::InputDouble("Sampling cadence (s)",
+        tooltip_for_last_item(
+            "Total simulated duration. The catalog's one-day ceiling is an operational policy, not an accuracy guarantee.");
+        begin_input("Retained-sample cadence (s)");
+        ImGui::InputDouble("##counterfactual_cadence",
             &experiment.sample_cadence_s, 0.0, 0.0, "%.0f");
-        ImGui::SetNextItemWidth(-1.0F);
-        ImGui::InputDouble("Absolute threshold (m)",
+        tooltip_for_last_item(
+            "Time between committed comparison samples. No intermediate trajectory points are fabricated.");
+        begin_input("Absolute separation threshold (m)");
+        ImGui::InputDouble("##counterfactual_absolute_threshold",
             &experiment.absolute_threshold_m, 0.0, 0.0, "%.6g");
-        ImGui::SetNextItemWidth(-1.0F);
-        ImGui::InputDouble("Normalized threshold", &experiment.normalized_threshold,
-            0.0, 0.0, "%.6g");
-        ImGui::SetNextItemWidth(-1.0F);
-        ImGui::InputInt("Persistence samples", &experiment.persistence_samples);
+        tooltip_for_last_item(
+            "A survivor must exceed this absolute baseline/counterfactual separation and the normalized threshold.");
+        begin_input("Normalized-deviation threshold");
+        ImGui::InputDouble("##counterfactual_normalized_threshold",
+            &experiment.normalized_threshold, 0.0, 0.0, "%.6g");
+        tooltip_for_last_item(
+            "Dimensionless separation divided by the body's fixed launch-time characteristic scale.");
+        begin_input("Persistence (retained samples)");
+        ImGui::InputInt("##counterfactual_persistence", &experiment.persistence_samples);
+        tooltip_for_last_item(
+            "Both thresholds must remain satisfied for this many consecutive retained samples.");
+        if (control_table) {
+            ImGui::EndTable();
+        }
         experiment.persistence_samples = std::max(1, experiment.persistence_samples);
+        ImGui::TextDisabled(
+            "Significant = both thresholds met for the configured persistence; large separation alone is not escape.");
 
         if (ImGui::CollapsingHeader("Monitored survivor bodies")) {
             ImGui::BeginChild("experiment_monitored", {0.0F, 170.0F}, true);
@@ -1592,6 +1898,18 @@ UiActions draw_control_panel(
             app.experiment_worker.request_cancel();
         }
         ImGui::EndDisabled();
+        if (!start_allowed) {
+            if (busy) {
+                ImGui::TextDisabled(
+                    "Start is disabled while the current paired run is active; cancel or wait for a synchronized boundary.");
+            } else if (candidates.empty()) {
+                ImGui::TextDisabled(
+                    "Start is disabled because this scenario has no approved removal candidate.");
+            } else if (!estimate_error.empty()) {
+                ImGui::TextDisabled(
+                    "Start is disabled until the configuration error above is corrected.");
+            }
+        }
         if (!experiment.error.empty()) {
             ImGui::TextColored(ImVec4(0.96F, 0.47F, 0.31F, 1.0F), "%s",
                 experiment.error.c_str());
@@ -1601,147 +1919,211 @@ UiActions draw_control_panel(
         const auto raw_worker_publication = app.experiment_worker.publication();
         const bool stale_worker_publication = raw_worker_publication.run &&
             !app.experiment_gate.accepts(raw_worker_publication);
+        const bool publication_is_current = publication_matches_scenario(app);
+        const bool presentation_eligible = !stale_worker_publication &&
+            (!publication.result || publication_is_current);
         if (stale_worker_publication) {
-            ImGui::Text("Status: Stale (suppressed)");
-            ImGui::TextDisabled(
-                "A prior-scenario publication is not eligible for progress, metrics, warnings, or overlays.");
-        } else {
-            ImGui::Text("Status: %s",
-                nbody::visualization::counterfactual_worker_state_name(publication.state));
+            ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
+                "Status: Stale result suppressed");
+            ImGui::TextWrapped(
+                "A prior-scenario publication is ineligible for progress, metrics, warnings, and overlays. Start a new run for the active scenario.");
         }
-        if (publication.total_steps > 0U) {
+        if (!stale_worker_publication && publication.total_steps > 0U) {
             const float progress = static_cast<float>(publication.completed_steps) /
                 static_cast<float>(publication.total_steps);
             ImGui::ProgressBar(std::clamp(progress, 0.0F, 1.0F), {-1.0F, 0.0F});
             ImGui::TextDisabled("%zu / %zu paired steps published",
                 publication.completed_steps, publication.total_steps);
         }
-        if (!publication.worker_error.empty()) {
+        if (presentation_eligible && !publication.worker_error.empty()) {
             ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
                 "Worker failure: %s", publication.worker_error.c_str());
         }
-        if (publication.run) {
-            const auto& run = *publication.run;
-            ImGui::SeparatorText("Executed run (immutable)");
-            ImGui::Text("Scenario generation: %llu  Worker generation: %llu",
-                static_cast<unsigned long long>(run.scenario_generation),
-                static_cast<unsigned long long>(run.worker_generation));
-            ImGui::Text("Snapshot: %s at t=%.17g s",
-                nbody::visualization::counterfactual_snapshot_source_name(
-                    run.snapshot_source),
-                run.snapshot_time_s);
-            ImGui::TextWrapped("Scenario/dataset: %s", run.scenario_id.c_str());
-            ImGui::TextWrapped("Snapshot provenance: %s",
-                run.source_state_provenance.c_str());
-            ImGui::TextWrapped("Coordinate contract: %s", run.coordinate_frame.c_str());
-            if (run.backend == nbody::experiments::ExperimentBackend::openmp) {
-                ImGui::Text("Backend: %s (threads=%d)",
-                    nbody::experiments::experiment_backend_name(run.backend),
-                    run.openmp_threads);
-            } else {
-                ImGui::Text("Backend: %s",
-                    nbody::experiments::experiment_backend_name(run.backend));
-            }
-            ImGui::Text("Fixed timestep: %.17g s", run.physical_timestep_s);
-            ImGui::Text("Horizon: %.17g s (%zu accepted steps)",
-                run.observation_horizon_s, run.accepted_step_count);
-            ImGui::Text("Sample cadence: %.17g s", run.sample_cadence_s);
-            ImGui::Text("Monitored metrics: %zu  Hidden frame references: %zu",
-                run.monitored_body_stable_ids.size(),
-                run.retained_reference_body_stable_ids.size());
-            ImGui::Text("Absolute threshold: %.6e m", run.absolute_separation_threshold_m);
-            ImGui::Text("Normalized threshold: %.6e", run.normalized_deviation_threshold);
-            ImGui::TextWrapped(
-                "Significance requires BOTH thresholds for %zu consecutive retained samples.",
-                run.persistence_samples);
-            ImGui::Text("Estimated direct interactions: %llu",
-                static_cast<unsigned long long>(
-                    run.estimated_direct_force_interactions));
-            ImGui::Text("Estimated retained storage: %s",
-                human_bytes(run.estimated_retained_bytes).c_str());
-        }
-        const bool publication_is_current = publication_matches_scenario(app);
         if (publication.result && !publication_is_current) {
-            ImGui::TextDisabled(
-                "Completed result belongs to a different physical scenario; overlay suppressed.");
+            ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
+                "Completed result belongs to a different physical composition; all result presentation is suppressed.");
+        }
+        if (presentation_eligible && publication.result &&
+            publication.result->terminal_failure) {
+            const auto& failure = *publication.result->terminal_failure;
+            ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
+                "Terminal failure at t=%.6e s: %.*s%s",
+                failure.time_s,
+                static_cast<int>(failure.message_text().size()),
+                failure.message_text().data(),
+                failure.message_truncated ? " [message truncated]" : "");
+        }
+        if (!experiment.presentation_error.empty()) {
+            ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
+                "Result presentation error: %s",
+                experiment.presentation_error.c_str());
+        }
+
+        ImGui::SeparatorText("Results");
+        std::optional<std::string> requested_origin;
+        if (app.trail_reference_body &&
+            *app.trail_reference_body < app.scenario.stable_ids.size()) {
+            requested_origin = app.scenario.stable_ids[*app.trail_reference_body];
+        }
+        const auto frame_status = presentation_eligible
+            ? nbody::visualization::counterfactual_frame_status(
+                publication, requested_origin)
+            : nbody::visualization::CounterfactualFrameStatus{
+                false, "Unavailable", "Stale or mismatched results are suppressed."};
+        if (ImGui::CollapsingHeader(
+                "Summary", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (begin_property_table("counterfactual_summary")) {
+                property_row("Experiment status",
+                    stale_worker_publication ? "Stale (suppressed)" :
+                    nbody::visualization::counterfactual_worker_state_name(
+                        publication.state));
+                if (presentation_eligible && publication.run) {
+                    const auto& run = *publication.run;
+                    const auto removed_index = nbody::visualization::find_body_index(
+                        app.scenario, run.removed_body_stable_id);
+                    property_row("Removed body", removed_index
+                        ? app.controller.state().bodies[*removed_index].name +
+                            " (" + run.removed_body_stable_id + ")"
+                        : run.removed_body_stable_id);
+                    std::string backend =
+                        nbody::experiments::experiment_backend_name(run.backend);
+                    if (run.backend ==
+                        nbody::experiments::ExperimentBackend::openmp) {
+                        backend += " (" + std::to_string(run.openmp_threads) +
+                            " threads)";
+                    }
+                    property_row("Executed backend", backend);
+                    property_row("Observation horizon",
+                        human_time(run.observation_horizon_s));
+                    property_row("Completed paired steps",
+                        std::to_string(publication.completed_steps) + " / " +
+                        std::to_string(publication.total_steps));
+                    property_row("Monitored bodies",
+                        std::to_string(run.monitored_body_stable_ids.size()));
+                    const auto significant_count = publication.result
+                        ? static_cast<std::size_t>(std::count_if(
+                            publication.result->summaries.begin(),
+                            publication.result->summaries.end(),
+                            [](const auto& row) { return row.significant; }))
+                        : 0U;
+                    property_row("Significant bodies",
+                        publication.result ? std::to_string(significant_count) : "N/A");
+                    property_row("Active comparison frame",
+                        frame_status.coordinate_frame_label);
+                    property_row("Overlay availability",
+                        frame_status.available
+                            ? (experiment.show_overlay
+                                ? "Frame available; enabled (visibility filters apply)"
+                                : "Frame available; display disabled")
+                            : "Unavailable");
+                    if (publication.result) {
+                        property_row("Scientific warnings",
+                            std::to_string(publication.result->issues.size()) +
+                            " retained; " +
+                            std::to_string(publication.result->dropped_issue_count) +
+                            " dropped by bounds");
+                    }
+                } else {
+                    property_row("Executed run", "No experiment submitted");
+                }
+                ImGui::EndTable();
+            }
+            if (publication.result && publication_is_current) {
+                ImGui::Checkbox(
+                    "Show trajectory comparison", &experiment.show_overlay);
+                ImGui::SameLine();
+                ImGui::Checkbox(
+                    "Include significant bodies", &experiment.show_significant);
+                draw_counterfactual_legend();
+                if (frame_status.available) {
+                    ImGui::TextDisabled("%s", frame_status.explanation.c_str());
+                } else {
+                    ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
+                        "%s", frame_status.explanation.c_str());
+                }
+            }
         }
         if (publication.result && publication_is_current) {
             const auto& result = *publication.result;
-            ImGui::Checkbox("Show trajectory comparison", &experiment.show_overlay);
-            ImGui::SameLine();
-            ImGui::Checkbox("Include significant bodies", &experiment.show_significant);
-            ImGui::TextColored(ImVec4(0.48F, 0.82F, 1.0F, 1.0F),
-                "Solid: baseline");
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0F, 0.38F, 0.76F, 1.0F),
-                "Dashed: counterfactual");
-            ImGui::TextWrapped("Removed body: %s",
-                result.removed_body_stable_id.c_str());
-            const std::string selected_id = app.selected_body < app.scenario.stable_ids.size()
-                ? app.scenario.stable_ids[app.selected_body] : std::string{};
-            const auto summary = std::find_if(
-                result.summaries.begin(), result.summaries.end(),
-                [&](const auto& value) { return value.stable_id == selected_id; });
-            if (summary != result.summaries.end()) {
-                ImGui::TextWrapped("Selected survivor: %s", summary->stable_id.c_str());
-                ImGui::Text("Final separation: %.6e m", summary->final_absolute_separation_m);
-                ImGui::Text("Maximum separation: %.6e m", summary->maximum_absolute_separation_m);
-                ImGui::Text("Normalized deviation: %.6e", summary->final_normalized_deviation);
-                ImGui::Text("Fixed normalization scale: %.6e m",
-                    summary->fixed_normalization_scale_m);
-                ImGui::Text("Velocity difference: %.6e m/s",
-                    summary->final_velocity_difference_m_s);
-                if (summary->final_parent_relative_separation_m) {
-                    ImGui::Text("Parent-relative difference: %.6e m",
-                        *summary->final_parent_relative_separation_m);
-                } else {
-                    ImGui::TextDisabled("Parent-relative difference unavailable");
-                }
-                if (summary->first_threshold_crossing_time_s) {
-                    ImGui::Text("First threshold crossing: %.6e s",
-                        *summary->first_threshold_crossing_time_s);
-                } else {
-                    ImGui::TextDisabled("Threshold not crossed at retained samples");
-                }
-                ImGui::Text("Persistent significance: %s",
-                    summary->significant ? "yes" : "no");
-                if (summary->persistent_threshold_time_s) {
-                    ImGui::Text("Persistent threshold reached: %.6e s",
-                        *summary->persistent_threshold_time_s);
-                } else {
-                    ImGui::TextDisabled("Persistent threshold not reached");
-                }
+            if (ImGui::CollapsingHeader(
+                    "Per-body comparison", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::TextDisabled(
+                    "N/A means the committed result does not define that metric. Click a column heading to sort.");
+                draw_counterfactual_result_table(experiment.result_rows);
             }
-            ImGui::Text("Baseline relative energy drift: %.6e",
-                result.baseline_conservation.relative_energy_drift);
-            ImGui::Text("Baseline momentum drift: %.6e kg m/s",
-                result.baseline_conservation.linear_momentum_drift_kg_m_s);
-            ImGui::Text("Baseline angular-momentum drift: %.6e kg m^2/s",
-                result.baseline_conservation.angular_momentum_drift_kg_m2_s);
-            ImGui::Text("Counterfactual relative energy drift: %.6e",
-                result.counterfactual_conservation.relative_energy_drift);
-            ImGui::Text("Counterfactual momentum drift: %.6e kg m/s",
-                result.counterfactual_conservation.linear_momentum_drift_kg_m_s);
-            ImGui::Text("Counterfactual angular-momentum drift: %.6e kg m^2/s",
-                result.counterfactual_conservation.angular_momentum_drift_kg_m2_s);
-            for (const auto& issue : result.issues) {
-                ImGui::TextWrapped("Warning: %s", issue.message.c_str());
-            }
-            if (result.dropped_issue_count > 0U) {
-                ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
-                    "%zu warnings omitted by configured storage bounds",
-                    result.dropped_issue_count);
-            }
-            if (result.terminal_failure) {
-                ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
-                    "Terminal failure: %.*s",
-                    static_cast<int>(result.terminal_failure->message_text().size()),
-                    result.terminal_failure->message_text().data());
+            if (ImGui::CollapsingHeader("Detailed diagnostics")) {
+                ImGui::TextWrapped(
+                    "Conservation drift is evaluated independently against each branch's own initial state. Cross-branch energy differences are not integration error.");
+                draw_counterfactual_conservation(
+                    "Baseline branch", result.baseline_conservation);
+                draw_counterfactual_conservation(
+                    "Counterfactual branch", result.counterfactual_conservation);
+                ImGui::SeparatorText("Scientific warnings");
+                if (result.issues.empty() && result.dropped_issue_count == 0U) {
+                    ImGui::TextDisabled("No retained scientific warnings.");
+                } else {
+                    draw_counterfactual_warning_groups(
+                        result, experiment.warning_groups);
+                }
             }
         }
-        if (!experiment.overlay_frame_error.empty()) {
-            ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F), "%s",
-                experiment.overlay_frame_error.c_str());
+        if (presentation_eligible && publication.run && ImGui::CollapsingHeader(
+                "Executed configuration & provenance")) {
+            const auto& run = *publication.run;
+            ImGui::TextDisabled(
+                "Immutable values captured at launch; edits above configure only the next run.");
+            if (begin_property_table("counterfactual_run_metadata")) {
+                property_row("Run generations",
+                    "scenario " + std::to_string(run.scenario_generation) +
+                    ", worker " + std::to_string(run.worker_generation));
+                property_row("Snapshot",
+                    std::string(nbody::visualization::counterfactual_snapshot_source_name(
+                        run.snapshot_source)) + " at t=" +
+                    nbody::visualization::format_measurement(
+                        run.snapshot_time_s, "s", 10));
+                property_row("Scenario / dataset", run.scenario_id);
+                property_row("Removed stable ID", run.removed_body_stable_id);
+                property_row("Snapshot provenance", run.source_state_provenance);
+                property_row("Coordinate contract", run.coordinate_frame);
+                property_row("Executed backend",
+                    run.backend == nbody::experiments::ExperimentBackend::openmp
+                        ? std::string(nbody::experiments::experiment_backend_name(
+                            run.backend)) + " (" +
+                            std::to_string(run.openmp_threads) + " threads)"
+                        : nbody::experiments::experiment_backend_name(run.backend));
+                property_row("Physical timestep",
+                    nbody::visualization::format_measurement(
+                        run.physical_timestep_s, "s", 10));
+                property_row("Horizon / steps",
+                    nbody::visualization::format_measurement(
+                        run.observation_horizon_s, "s", 10) + " / " +
+                    std::to_string(run.accepted_step_count));
+                property_row("Sample cadence",
+                    nbody::visualization::format_measurement(
+                        run.sample_cadence_s, "s", 10));
+                property_row("Absolute threshold",
+                    nbody::visualization::format_measurement(
+                        run.absolute_separation_threshold_m, "m", 6));
+                property_row("Normalized threshold",
+                    nbody::visualization::format_measurement(
+                        run.normalized_deviation_threshold, "dimensionless", 6));
+                property_row("Persistence rule",
+                    "both thresholds for " +
+                    std::to_string(run.persistence_samples) +
+                    " consecutive retained samples");
+                property_row("Monitored / frame references",
+                    std::to_string(run.monitored_body_stable_ids.size()) + " / " +
+                    std::to_string(run.retained_reference_body_stable_ids.size()));
+                property_row("Monitored stable IDs",
+                    join_stable_ids(run.monitored_body_stable_ids));
+                property_row("Retained frame-reference IDs",
+                    join_stable_ids(run.retained_reference_body_stable_ids));
+                property_row("Estimated direct interactions",
+                    std::to_string(run.estimated_direct_force_interactions));
+                property_row("Estimated retained storage",
+                    human_bytes(run.estimated_retained_bytes));
+                ImGui::EndTable();
+            }
         }
         ImGui::TextWrapped(
             "This experiment is hypothetical. Large separation is not escape or ejection. "
@@ -1901,9 +2283,10 @@ void draw_labels(
         const char* label = app.controller.state().bodies[index].name.c_str();
         const ImVec2 size = ImGui::CalcTextSize(label);
         const bool selected = index == app.selected_body;
-        const bool star = app.scenario.body_metadata[index].body_class ==
-            nbody::astronomy::AstronomicalBodyClass::star;
-        const int priority = selected ? 1000 : (star ? 900 : 700 - static_cast<int>(index));
+        const int priority = app.astronomical()
+            ? nbody::visualization::astronomical_label_priority(
+                app.scenario.body_metadata[index].body_class, selected, index)
+            : (selected ? 1000 : 500 - static_cast<int>(index));
         candidates.push_back({
             index,
             {screen->x, screen->y},

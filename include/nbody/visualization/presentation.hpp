@@ -159,6 +159,11 @@ struct LabelPlacement {
     bool leader_line{false};
 };
 
+int astronomical_label_priority(
+    astronomy::AstronomicalBodyClass body_class,
+    bool selected,
+    std::size_t deterministic_order) noexcept;
+
 std::vector<LabelPlacement> declutter_labels(
     std::vector<LabelCandidate> candidates,
     glm::vec2 viewport_size,

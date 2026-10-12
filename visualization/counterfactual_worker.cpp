@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
@@ -254,6 +256,281 @@ CounterfactualResourceEstimate estimate_counterfactual_resources(
     return result;
 }
 
+CounterfactualControlLayout counterfactual_control_layout(float available_width) {
+    if (!(available_width > 0.0F) || !std::isfinite(available_width)) {
+        throw std::invalid_argument("counterfactual control width must be finite and positive");
+    }
+    constexpr float stacked_threshold = 430.0F;
+    constexpr float column_gap = 12.0F;
+    if (available_width < stacked_threshold) {
+        return {true, available_width, available_width};
+    }
+    const float label_width = std::clamp(available_width * 0.44F, 140.0F, 210.0F);
+    return {false, label_width,
+        std::max(1.0F, available_width - label_width - column_gap)};
+}
+
+std::vector<CounterfactualResultRow> build_counterfactual_result_rows(
+    const experiments::CounterfactualExperimentResult& result,
+    const std::vector<CounterfactualBodyLabel>& labels) {
+    std::unordered_map<std::string, std::string> names;
+    names.reserve(labels.size());
+    for (const auto& label : labels) {
+        if (label.stable_id.empty() || label.display_name.empty() ||
+            !names.emplace(label.stable_id, label.display_name).second) {
+            throw std::invalid_argument(
+                "counterfactual presentation labels must be unique and non-empty");
+        }
+    }
+    std::unordered_set<std::string> seen;
+    std::vector<CounterfactualResultRow> rows;
+    rows.reserve(result.summaries.size());
+    for (const auto& summary : result.summaries) {
+        const auto name = names.find(summary.stable_id);
+        if (name == names.end()) {
+            throw std::logic_error(
+                "counterfactual summary stable ID is absent from presentation labels");
+        }
+        if (!seen.insert(summary.stable_id).second) {
+            throw std::logic_error(
+                "counterfactual summaries contain a duplicate stable ID");
+        }
+        rows.push_back({
+            summary.stable_id,
+            name->second,
+            summary.final_absolute_separation_m,
+            summary.maximum_absolute_separation_m,
+            summary.fixed_normalization_scale_m,
+            summary.final_normalized_deviation,
+            summary.final_velocity_difference_m_s,
+            summary.final_parent_relative_separation_m,
+            summary.first_threshold_crossing_time_s,
+            summary.persistent_threshold_time_s,
+            summary.significant,
+        });
+    }
+    sort_counterfactual_result_rows(
+        rows, CounterfactualResultSortKey::display_name, true);
+    return rows;
+}
+
+namespace {
+
+template <typename Value>
+int compare_values(const Value& left, const Value& right) {
+    if (left < right) {
+        return -1;
+    }
+    if (right < left) {
+        return 1;
+    }
+    return 0;
+}
+
+int compare_optional_values(
+    const std::optional<double>& left,
+    const std::optional<double>& right) {
+    if (left.has_value() != right.has_value()) {
+        return left ? -1 : 1;
+    }
+    return left ? compare_values(*left, *right) : 0;
+}
+
+bool optional_sort_key(CounterfactualResultSortKey key) {
+    return key == CounterfactualResultSortKey::parent_relative_separation ||
+        key == CounterfactualResultSortKey::first_threshold_crossing ||
+        key == CounterfactualResultSortKey::persistence_time;
+}
+
+int compare_result_rows(
+    const CounterfactualResultRow& left,
+    const CounterfactualResultRow& right,
+    CounterfactualResultSortKey key) {
+    switch (key) {
+        case CounterfactualResultSortKey::display_name:
+            return compare_values(left.display_name, right.display_name);
+        case CounterfactualResultSortKey::stable_id:
+            return compare_values(left.stable_id, right.stable_id);
+        case CounterfactualResultSortKey::final_absolute_separation:
+            return compare_values(
+                left.final_absolute_separation_m, right.final_absolute_separation_m);
+        case CounterfactualResultSortKey::maximum_absolute_separation:
+            return compare_values(
+                left.maximum_absolute_separation_m, right.maximum_absolute_separation_m);
+        case CounterfactualResultSortKey::normalization_scale:
+            return compare_values(
+                left.fixed_normalization_scale_m, right.fixed_normalization_scale_m);
+        case CounterfactualResultSortKey::normalized_deviation:
+            return compare_values(
+                left.final_normalized_deviation, right.final_normalized_deviation);
+        case CounterfactualResultSortKey::velocity_difference:
+            return compare_values(
+                left.final_velocity_difference_m_s, right.final_velocity_difference_m_s);
+        case CounterfactualResultSortKey::parent_relative_separation:
+            return compare_optional_values(
+                left.final_parent_relative_separation_m,
+                right.final_parent_relative_separation_m);
+        case CounterfactualResultSortKey::first_threshold_crossing:
+            return compare_optional_values(
+                left.first_threshold_crossing_time_s,
+                right.first_threshold_crossing_time_s);
+        case CounterfactualResultSortKey::persistence_time:
+            return compare_optional_values(
+                left.persistent_threshold_time_s,
+                right.persistent_threshold_time_s);
+        case CounterfactualResultSortKey::significance:
+            return compare_values(left.significant, right.significant);
+    }
+    return 0;
+}
+
+}  // namespace
+
+void sort_counterfactual_result_rows(
+    std::vector<CounterfactualResultRow>& rows,
+    CounterfactualResultSortKey key,
+    bool ascending) {
+    std::stable_sort(rows.begin(), rows.end(), [&](const auto& left, const auto& right) {
+        int comparison = compare_result_rows(left, right, key);
+        if (comparison != 0) {
+            if (optional_sort_key(key) &&
+                ((key == CounterfactualResultSortKey::parent_relative_separation &&
+                     left.final_parent_relative_separation_m.has_value() !=
+                         right.final_parent_relative_separation_m.has_value()) ||
+                 (key == CounterfactualResultSortKey::first_threshold_crossing &&
+                     left.first_threshold_crossing_time_s.has_value() !=
+                         right.first_threshold_crossing_time_s.has_value()) ||
+                 (key == CounterfactualResultSortKey::persistence_time &&
+                     left.persistent_threshold_time_s.has_value() !=
+                         right.persistent_threshold_time_s.has_value()))) {
+                return comparison < 0;
+            }
+            return ascending ? comparison < 0 : comparison > 0;
+        }
+        return left.stable_id < right.stable_id;
+    });
+}
+
+std::vector<CounterfactualWarningGroup> group_counterfactual_warnings(
+    const experiments::CounterfactualExperimentResult& result) {
+    std::vector<CounterfactualWarningGroup> groups;
+    groups.reserve(result.issues.size());
+    for (std::size_t index = 0; index < result.issues.size(); ++index) {
+        const auto& issue = result.issues[index];
+        const auto found = std::find_if(groups.begin(), groups.end(), [&](const auto& group) {
+            return group.kind == issue.kind && group.branch == issue.branch;
+        });
+        if (found == groups.end()) {
+            groups.push_back({issue.kind, issue.branch, {index}});
+        } else {
+            found->retained_issue_indices.push_back(index);
+        }
+    }
+    return groups;
+}
+
+CounterfactualFrameStatus counterfactual_frame_status(
+    const CounterfactualWorkerPublication& publication,
+    const std::optional<std::string>& common_baseline_origin_stable_id) {
+    if (!publication.result) {
+        return {false, "Unavailable",
+            "No committed paired result is available for trajectory comparison."};
+    }
+    const auto& result = *publication.result;
+    if (!common_baseline_origin_stable_id) {
+        if (result.samples.size() < 2U) {
+            return {false, "SSB-centered inertial frame",
+                "Trajectory comparison requires at least two matched-time retained samples."};
+        }
+        return {true, "SSB-centered inertial frame",
+            "Both branches use the same stored SSB-centered inertial coordinates."};
+    }
+    const auto& origin = *common_baseline_origin_stable_id;
+    const std::string label = "Common baseline-relative origin: " + origin;
+    if (origin == result.removed_body_stable_id) {
+        return {false, label,
+            "The requested local origin was removed. Switch to the SSB/inertial frame or select a surviving common origin."};
+    }
+    const auto monitored = std::find(
+        result.monitored_body_stable_ids.begin(),
+        result.monitored_body_stable_ids.end(), origin);
+    const auto reference = std::find(
+        result.reference_body_stable_ids.begin(),
+        result.reference_body_stable_ids.end(), origin);
+    if (monitored == result.monitored_body_stable_ids.end() &&
+        reference == result.reference_body_stable_ids.end()) {
+        return {false, label,
+            "The requested local origin has no retained historical reference samples. Switch to the SSB/inertial frame or rerun with that surviving origin retained."};
+    }
+    if (result.samples.size() < 2U) {
+        return {false, label,
+            "Trajectory comparison requires at least two matched-time retained samples."};
+    }
+    const std::size_t index = monitored != result.monitored_body_stable_ids.end()
+        ? static_cast<std::size_t>(std::distance(
+              result.monitored_body_stable_ids.begin(), monitored))
+        : static_cast<std::size_t>(std::distance(
+              result.reference_body_stable_ids.begin(), reference));
+    const bool monitored_origin = monitored != result.monitored_body_stable_ids.end();
+    const bool incomplete = std::any_of(result.samples.begin(), result.samples.end(),
+        [&](const auto& sample) {
+            return monitored_origin ? index >= sample.bodies.size()
+                                    : index >= sample.baseline_reference_positions_m.size();
+        });
+    if (incomplete) {
+        return {false, label,
+            "Matched-time samples for the requested local origin are incomplete. Switch to the SSB/inertial frame or choose a retained surviving origin."};
+    }
+    return {true, label,
+        "Both branches subtract the same matched-time baseline origin; the counterfactual branch is never independently recentered."};
+}
+
+const char* counterfactual_issue_kind_name(
+    experiments::ExperimentIssueKind kind) noexcept {
+    switch (kind) {
+        case experiments::ExperimentIssueKind::insufficient_timestep_convergence:
+            return "Timestep convergence not established";
+        case experiments::ExperimentIssueKind::dangerous_close_approach:
+            return "Dangerous close approach";
+        case experiments::ExperimentIssueKind::physical_radius_overlap:
+            return "Physical-radius overlap";
+        case experiments::ExperimentIssueKind::excessive_conservation_drift:
+            return "Conservation drift exceeded guard";
+        case experiments::ExperimentIssueKind::invalid_simulated_time:
+            return "Invalid simulated time";
+        case experiments::ExperimentIssueKind::non_finite_state:
+            return "Non-finite state";
+        case experiments::ExperimentIssueKind::coincident_bodies:
+            return "Coincident bodies";
+        case experiments::ExperimentIssueKind::integration_failure:
+            return "Integration failure";
+    }
+    return "Unknown issue";
+}
+
+const char* counterfactual_issue_branch_name(
+    const std::optional<experiments::ExperimentBranch>& branch) noexcept {
+    if (!branch) {
+        return "Paired/common";
+    }
+    return *branch == experiments::ExperimentBranch::baseline
+        ? "Baseline" : "Counterfactual";
+}
+
+std::string counterfactual_optional_measurement(
+    const std::optional<double>& value,
+    const char* unit) {
+    if (!value) {
+        return "N/A";
+    }
+    std::ostringstream text;
+    text << std::scientific << std::setprecision(6) << *value;
+    if (unit != nullptr && unit[0] != '\0') {
+        text << ' ' << unit;
+    }
+    return text.str();
+}
+
 CounterfactualRenderPathResult build_counterfactual_render_paths(
     const CounterfactualWorkerPublication& publication,
     const RenderSpaceTransform& transform,
@@ -261,8 +538,13 @@ CounterfactualRenderPathResult build_counterfactual_render_paths(
     const std::optional<std::string>& common_baseline_origin_stable_id,
     std::size_t maximum_displayed_bodies) {
     CounterfactualRenderPathResult output;
-    if (!publication.result || publication.result->samples.size() < 2U ||
-        maximum_displayed_bodies == 0U) {
+    if (maximum_displayed_bodies == 0U) {
+        return output;
+    }
+    const auto frame = counterfactual_frame_status(
+        publication, common_baseline_origin_stable_id);
+    if (!frame.available) {
+        output.frame_unavailable_reason = frame.explanation;
         return output;
     }
     const auto& result = *publication.result;
@@ -273,11 +555,6 @@ CounterfactualRenderPathResult build_counterfactual_render_paths(
     std::optional<std::size_t> origin_index;
     std::optional<std::size_t> reference_origin_index;
     if (common_baseline_origin_stable_id) {
-        if (*common_baseline_origin_stable_id == result.removed_body_stable_id) {
-            output.frame_unavailable_reason =
-                "Local comparison unavailable: the requested origin was removed.";
-            return output;
-        }
         const auto found = monitored.find(*common_baseline_origin_stable_id);
         if (found != monitored.end()) {
             origin_index = found->second;
@@ -289,24 +566,7 @@ CounterfactualRenderPathResult build_counterfactual_render_paths(
             if (reference != result.reference_body_stable_ids.end()) {
                 reference_origin_index = static_cast<std::size_t>(std::distance(
                     result.reference_body_stable_ids.begin(), reference));
-            } else {
-                output.frame_unavailable_reason =
-                    "Local comparison unavailable: no matched-time baseline origin was retained.";
-                return output;
             }
-        }
-    }
-    if (origin_index || reference_origin_index) {
-        const bool missing_origin_sample = std::any_of(
-            result.samples.begin(), result.samples.end(), [&](const auto& sample) {
-                return (origin_index && *origin_index >= sample.bodies.size()) ||
-                    (reference_origin_index && *reference_origin_index >=
-                        sample.baseline_reference_positions_m.size());
-            });
-        if (missing_origin_sample) {
-            output.frame_unavailable_reason =
-                "Local comparison unavailable: matched-time origin samples are incomplete.";
-            return output;
         }
     }
 

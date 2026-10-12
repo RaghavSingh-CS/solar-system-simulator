@@ -932,6 +932,15 @@ void test_presentation_helpers() {
         {1, {502.0F, 301.0F}, {70.0F, 24.0F}, 100, false},
         {3, {501.0F, 300.0F}, {70.0F, 24.0F}, 1000, true},
     };
+    require(nbody::visualization::astronomical_label_priority(
+                nbody::astronomy::AstronomicalBodyClass::planet, false, 8U) >
+            nbody::visualization::astronomical_label_priority(
+                nbody::astronomy::AstronomicalBodyClass::natural_satellite,
+                false, 1U) &&
+        nbody::visualization::astronomical_label_priority(
+                nbody::astronomy::AstronomicalBodyClass::asteroid, true, 59U) ==
+            1000,
+        "full-system labels do not prioritize major or selected bodies");
     const auto placements = nbody::visualization::declutter_labels(
         candidates, {1280.0F, 720.0F}, 420.0F);
     require(!placements.empty() && placements.front().body_index == 3 &&
