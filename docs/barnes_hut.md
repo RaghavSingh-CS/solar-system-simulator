@@ -1,21 +1,65 @@
-# Sequential Barnes--Hut solver (Stage 1)
+# Barnes--Hut solver (Sequential Stage 1 and OpenMP Stage 2)
 
 ## Scope and selection contract
 
-Stage 1 adds a deterministic sequential Barnes--Hut force solver without
-changing the direct Sequential, OpenMP, CUDA, or MPI implementations. Direct
-force remains the default. The headless runner treats execution backend and
-force solver as separate choices:
+Stage 1 added the deterministic Sequential Barnes--Hut reference. Stage 2
+reuses that exact tree and traversal for an OpenMP target-parallel backend,
+without changing the direct Sequential, OpenMP, CUDA, or MPI implementations.
+Direct force remains the default. The headless runner treats execution backend
+and force solver as separate choices:
 
 ```powershell
 .\build\cpu-release\nbody_headless.exe --backend sequential --solver barnes-hut `
   --theta 0.25 --steps 5000 --sample-every 50 --output orbit-bh.csv
+
+.\build\openmp-release\nbody_headless.exe --backend openmp --solver barnes-hut `
+  --threads 8 --theta 0.25 --steps 5000 --sample-every 50 --output orbit-omp-bh.csv
 ```
 
-Only `sequential + barnes-hut` is implemented. Any other backend/solver pairing
-is rejected; there is no direct-force fallback while reporting Barnes--Hut.
-OpenMP and CUDA Barnes--Hut remain mandatory later stages and are not implied by
-the presence of their direct-force backends.
+`sequential + barnes-hut` and `openmp + barnes-hut` are implemented. A
+CPU-only build rejects OpenMP explicitly, and CUDA Barnes--Hut remains a
+mandatory later stage. No unsupported selection falls back to direct force or
+Sequential while reporting another backend.
+
+## OpenMP shared-tree architecture
+
+Each OpenMP force call validates the state, allocates bounded per-thread
+statistics, and constructs one tree using the Sequential builder. The completed
+tree, body state, permutation, and rank table are then read-only. A
+`schedule(static)` loop assigns target indices; each iteration owns its
+acceleration accumulator and output slot and traverses children/leaves in the
+same order as Sequential. Traversal recursion uses each worker's own bounded
+call stack. There is no concurrent topology mutation, shared floating-point
+accumulation or simultaneous tree build. Calls made from an already active
+OpenMP parallel region are rejected before solver allocation/tree construction;
+the backend never silently serializes or creates a nested team.
+
+Requested thread count is explicit (`1..256`) and must be honored by the
+runtime. Per-thread counters occupy cache-line-aligned slots and are merged in
+ascending worker order after the region. The implementation uses either a
+checked proof that the worst-case work bound fits the configured traversal
+budget or a shared atomic budget on the slow admission path. Exceptions are
+caught inside the region. The strict-budget path uses a compare/exchange
+reservation that never increments beyond the configured limit; exhaustion
+stops new targets promptly and produces one normalized deterministic error.
+It performs no diagnostic replay or other uncharged traversal. Other captured
+failures retain the lowest observed target index where feasible. No failed
+call publishes output or candidate statistics. A separate attempt-work value
+exists only to audit the hard cap and is not a partially committed result.
+Successful statistics are transactional and identify the effective worker
+count.
+
+The backend object is single-owner because it publishes mutable last-success
+statistics. Independent concurrent simulations must use distinct backend
+instances. A checked size-based lower-bound preflight precedes allocation;
+after allocation, admission charges the actual capacities of the output,
+permutation, scratch, inverse-rank, node, and padded per-thread-counter
+vectors before force traversal. This is not an allocator-exact resident-set
+guarantee: allocator metadata, OpenMP runtime storage, and native worker stacks
+are excluded. Traversal has no heap scratch buffer; its per-worker recursion
+stack is bounded by the validated maximum depth. High thread counts can still
+oversubscribe CPUs and consume substantial unaccounted native/runtime stack
+storage, so they require an explicitly provisioned environment.
 
 ## Tree and force policy
 
@@ -66,14 +110,15 @@ positions fail explicitly instead of returning a silent approximation.
 | minimum cell size | `1e-6 m` | Scale floor before a direct termination leaf |
 | maximum nodes | `1,000,000` | Hard node-count budget |
 | maximum traversal work | `1,000,000,000` | Hard visited-node plus direct-interaction budget |
-| memory budget | `256 MiB` | Index arrays, acceleration output, and node-arena bound |
+| memory budget | `256 MiB` | Index/output, node-arena, and OpenMP counter-array bound |
 
 All size calculations use checked `size_t` arithmetic. The node arena grows
 only to the lesser of the node and memory budgets. Build and traversal recursion
-cannot exceed the validated maximum depth. Reported working bytes cover the
-fixed arrays/output and reserved node capacity; they are a conservative
-admission/accounting measure, not a claim about allocator metadata or process
-resident memory.
+cannot exceed the validated maximum depth. Reported working bytes cover actual
+C++ vector capacities for all solver-owned arrays and reserved nodes. The
+public fixed-memory helper is only the checked size-based preflight lower
+bound. Neither value claims allocator metadata, native OpenMP stacks, runtime
+allocations, or process resident memory.
 
 One backend instance is single-owner because it publishes mutable last-call
 statistics. Independent callers use independent instances; the solver does not
@@ -130,19 +175,63 @@ The measurements use three repetitions and uncontrolled host conditions. They
 are sufficient to guide the next experiment design, not to establish a
 production crossover or modify frozen Stage 5 policy/evidence.
 
-Final local Release regression for this candidate passed `16/16` CPU CTests
-and `17/17` OpenMP-configuration CTests. The latter retains the existing
-OpenMP direct-force tests but still uses only the Sequential Barnes--Hut
-implementation. Catalog/dataset/snapshot integrity passed `3/3`; repository
-layout, dependency-cache, direct headless, Barnes--Hut headless, and explicit
-unsupported-combination checks also passed. Independent source-level
-adversarial review passed on 2026-10-13 before commit; it found no blocking
-tree, force, integration, evidence-custody, or build-isolation defect.
+The separate Stage 2 matrix under
+`data/benchmarks/barnes_hut_openmp_stage2/` contains 216 measurements at
+`N=256,1024,4096`, theta `0.25,0.5,0.8`, and 1/2/4/8 effective threads for the
+same three distribution classes. At 4096 bodies, four-thread complete-force
+speedup over Sequential Barnes--Hut ranged from `3.25x` to `3.98x`, and
+eight-thread speedup ranged from `4.28x` to `7.51x`. At theta `0.25`, the
+eight-thread values were `7.02x` uniform, `7.51x` clustered, and `7.33x`
+planar. Against eight-thread direct force, however, theta `0.25` remained
+slower on uniform (`0.26x`) and clustered (`0.35x`) inputs and faster only on
+the planar input (`1.24x`). Tree build remains sequential and is included in
+complete-force wall time.
+
+The Stage 2 raw CSV SHA-256 is
+`11fb34ae4d3b4f87687cf177f1668139d7f5bad57ec944f78b316048f2f96760`.
+The deterministic `source_manifest.sha256` (SHA-256
+`853de3784315ded6c90a046144d882ae5806ad43df553fdb04683276f295b255`)
+binds the raw matrix to the exact measured solver/header, benchmark harness,
+reference/scenario sources, CMake wiring, preset, raw data, and deterministic
+build-provenance record used for measurement. The source implementation and
+verification tooling are committed as `80d83f3`; the evidence and checkout
+custody rules are committed as `c572be1`. `build_provenance.json` (SHA-256
+`3b4f33cc83ff6f25b2954d1722d259c5e2fa0c3211c165e8eaf8c9ee19cab2c2`)
+records the actual compiler and version, CMake/Ninja versions, Release/OpenMP
+flags and cache values, runtime libraries, selected compiler commands, and
+benchmark linker command. This provenance identifies the build; it does not
+guarantee repeatable machine-level performance.
+Only two repetitions were retained under uncontrolled desktop conditions, so
+these measurements do not establish linear scaling, a production crossover,
+or 50K--100K feasibility. They are not graphical FPS and are not Stage 5
+evidence.
+
+Stage 2 focused tests require exact IEEE-754 representation equality for force,
+trajectory, and diagnostic
+agreement between Sequential and OpenMP Barnes--Hut across 1, 2, 4, and 8
+threads where the runtime can supply them. Uniform, clustered, planar,
+boundary, mass-ratio, near-coincident, extreme-binary64, maximum-depth, and
+resource-failure fixtures are included. The comparator uses `memcpy` into a
+fixed-width integer and a signed-zero negative control proves that it is not
+ordinary floating equality. Repeated results and structural/work counters are
+deterministic; timing fields are intentionally excluded from cross-call
+equivalence assertions.
+CPU-only builds exercise both the public API and headless rejection path.
+Final canonical Release validation passed `16/16` CPU CTests and `20/20`
+OpenMP CTests. The latter includes the focused OpenMP Barnes--Hut suite and
+the separate test-only runtime-schedule variant, plus both OpenMP headless
+solver paths. Production remains explicitly `schedule(static)`; the test-only
+variant compiles the same implementation with `schedule(runtime)` and proves
+actual static, dynamic, and guided scheduling. The full suites also cover the legacy Solar
+scenario, 60-body catalog/dataset/snapshot integrity, existing direct-force
+backends, Stage 5 tooling, visualization/counterfactual regressions, repository
+layout, and pinned dependency cache. CUDA compilation/runtime was not attempted
+or claimed on this AMD-only machine. The final independent source-custody gate
+passed on 2026-10-13, including an actual Git-materialized
+`core.autocrlf=true` checkout with matching source and evidence bytes.
 
 ## Remaining stages
 
-- Parallelize the frozen sequential tree/acceptance semantics with OpenMP and
-  validate numerical agreement and deterministic policy boundaries.
 - Design a CUDA-resident tree/build/traversal implementation; do not relabel a
   CPU tree plus GPU direct kernel as CUDA Barnes--Hut.
 - Run controlled broader large-N performance and accuracy evaluation before

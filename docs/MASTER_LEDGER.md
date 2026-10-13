@@ -29,7 +29,7 @@ Last updated: 2026-10-13
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
-| Barnes--Hut large-N solver roadmap | **STAGE 1 SEQUENTIAL IMPLEMENTED / REVIEW PENDING** | Deterministic bounded sequential octree, direct-force comparison, headless selection, and exploratory 128--4096-body evidence; OpenMP/CUDA variants and controlled large-N evaluation remain mandatory |
+| Barnes--Hut large-N solver roadmap | **STAGES 1--2 SEQUENTIAL/OPENMP IMPLEMENTED AND SOURCE-REVIEWED** | Deterministic bounded shared octree, exact Sequential/OpenMP agreement, headless selection, and separately custodied exploratory evidence; CUDA and controlled large-N evaluation remain mandatory |
 
 ## Decisions and rationale
 
@@ -1789,10 +1789,10 @@ Stage 1 was developed on `feature/cuda-visualizer` from
 Sequential Barnes--Hut reference without changing the direct Sequential,
 OpenMP, CUDA, MPI, or Velocity Verlet implementations. `nbody_barnes_hut` is a
 separate library implementing the existing `ForceBackend` acceleration
-contract. The headless runner exposes backend and solver as distinct choices;
-direct remains default, only `sequential + barnes-hut` is supported, and
-unsupported combinations or Barnes--Hut options supplied to direct force fail
-without fallback.
+contract. At that Stage 1 checkpoint, the headless runner exposed backend and
+solver as distinct choices; direct remained default, only
+`sequential + barnes-hut` was supported, and unsupported combinations or
+Barnes--Hut options supplied to direct force failed without fallback.
 
 The deterministic 3D octree stores nodes in a contiguous vector and child
 indices rather than pointers. Stable octant partitioning produces contiguous
@@ -1868,9 +1868,122 @@ uncontrolled-host evidence measured immediately before commit from the source
 captured byte-identically by `eb6dac75012f47d60a87417f6ccecf6df7c4576a`.
 It is not frozen Stage 5 evidence, does not alter any Stage 5 policy, and cannot
 justify an automatic selector. Independent source-level adversarial review
-passed on 2026-10-13 without a P1 blocker. OpenMP Barnes--Hut, CUDA
-Barnes--Hut, counterfactual/viewer integration, controlled large-N evaluation,
-and RTX 4050 compilation/runtime/performance validation all remain pending.
+passed on 2026-10-13 without a P1 blocker. OpenMP Barnes--Hut Stage 2 is now
+implemented and source-reviewed as recorded below. CUDA Barnes--Hut,
+counterfactual/viewer integration, controlled large-N evaluation, and RTX 4050
+compilation/runtime/performance validation remain pending.
+
+## OpenMP Barnes--Hut Stage 2
+
+### Implementation record
+
+Stage 2 was developed on `feature/cuda-visualizer` from
+`1f276505e5766d718e2979f4998831189f6865c8`, passed its final independent
+source-custody gate on 2026-10-13, and is committed as `80d83f3` (implementation,
+tests, harness, and verification tooling) plus `c572be1` (exploratory evidence
+and checkout custody). Successive reviews identified and remediated
+non-representational equality tests, an uncharged failure replay, missing
+nested-region rejection, size-only vector accounting, failed-attempt work
+undercount, ineffective schedule variation, incomplete effective-build
+provenance, incomplete diagnostics comparison, and Windows checkout
+line-ending instability. The final gate independently verified all 216 rows,
+all source hashes, and an actual Git-materialized `core.autocrlf=true` checkout.
+It adds `OpenMpBarnesHutForceBackend` without
+cloning the approximation algorithm: every force call uses the Stage 1
+Sequential builder to construct one deterministic index-based octree, then a
+static OpenMP target loop reads the immutable tree/state. Each worker has its
+own compensated target accumulator, recursion stack, output elements, and
+cache-line-padded counters. Tree construction remains intentionally
+Sequential; there is no topology mutation, nested region, shared floating-
+point reduction, or unsupported fallback.
+
+Thread count is explicit and bounded to `1..256`; the selected runtime must
+honor it, and calls from an active OpenMP region are rejected before solver
+allocation. A size-based lower-bound preflight precedes allocation, then actual
+capacities for output, all three index arrays, nodes, and padded per-thread
+counters are charged before force traversal. A checked worst-case traversal
+bound avoids atomic overhead when the configured work limit is provably
+sufficient; the strict path uses a compare/exchange reservation that cannot
+overshoot. Exhaustion stops new targets, performs no fresh-budget replay, and
+produces a normalized deterministic budget error. C++ exceptions are caught
+within the parallel loop. Failed calls publish neither partial forces nor
+candidate statistics. Contention-free per-thread charged-work counters advance
+immediately after every successful node/direct reservation, independently of
+whether the later numerical calculation throws. Failed fast-path attempt
+counts are therefore complete, strict-path counts remain the atomic reserved
+total, successful work matches published node-plus-direct work, and empty
+successful calls reset the attempt diagnostic.
+Successful per-thread integer statistics are merged after the region and
+identify the effective worker count. Backend instances remain single-owner
+because last-success statistics are mutable. Traversal has no heap scratch;
+the native per-worker recursion stack is bounded by maximum tree depth, but
+native stack bytes, OpenMP runtime allocations, and allocator metadata are not
+included in the reported working-memory estimate. High requested team counts
+can oversubscribe processors and increase those excluded costs.
+
+The headless contract now supports all four CPU combinations: Sequential or
+OpenMP execution with direct or Barnes--Hut force. Direct remains default.
+CPU-only builds retain the public OpenMP Barnes--Hut type but reject execution
+explicitly. Barnes--Hut policy options have identical meanings for Sequential
+and OpenMP. The viewer and counterfactual engine are intentionally unchanged.
+
+### Numerical, regression, and performance status
+
+Focused testing on GCC 15.1.0/libgomp required byte-representation-equal
+Sequential/OpenMP
+Barnes--Hut accelerations for theta `0.25`, `0.5`, and `0.8` over uniform,
+clustered, planar, boundary, unequal-mass, near-coincident, and extreme-binary64
+fixtures at effective thread counts 1, 2, 4, and 8. Repeated forces,
+Velocity Verlet states, conservation diagnostics, tree structure, and work
+counters were exact. Tests also cover empty/single-body self exclusion,
+coincident and nonrepresentable-force failures after reservation,
+maximum-depth termination, node/memory/traversal budget
+failures, transactional statistics, hard work-cap instrumentation under
+actual static/dynamic/guided schedules, actual-capacity memory boundaries, nested-region
+rejection with nesting disabled/enabled, invalid thread counts, direct CLI
+preservation, and CPU-only rejection. A signed-zero negative control proves
+the IEEE-754 comparator differs from ordinary `==`; all five stored diagnostics
+fields plus derived total energy are compared fieldwise by representation.
+Production remains `schedule(static)`. The schedule matrix uses a separately
+named test-only build of the same source with `schedule(runtime)` and a positive
+link-time identity hook, so no runtime ICV is mistaken for production schedule
+variation. Timing fields are not correctness assertions.
+
+The retained 216-row exploratory Release matrix is under
+`data/benchmarks/barnes_hut_openmp_stage2/`; raw CSV SHA-256 is
+`11fb34ae4d3b4f87687cf177f1668139d7f5bad57ec944f78b316048f2f96760`.
+The exact measured sources are bound by
+`source_manifest.sha256` (SHA-256
+`853de3784315ded6c90a046144d882ae5806ad43df553fdb04683276f295b255`).
+That manifest also binds the raw CSV and deterministic effective-build record,
+`build_provenance.json` (SHA-256
+`3b4f33cc83ff6f25b2954d1722d259c5e2fa0c3211c165e8eaf8c9ee19cab2c2`).
+The latter records GNU 15.1.0's executable/version, CMake 4.4.3, Ninja 1.13.2,
+Release/OpenMP flags and cache entries, OpenMP runtime libraries, selected
+actual compiler commands, and the benchmark linker command. These captured
+inputs identify the local build but do not guarantee repeatable machine-level
+timing.
+It covers uniform/clustered/planar distributions, `N=256,1024,4096`, theta
+`0.25,0.5,0.8`, 1/2/4/8 effective threads, one warm-up, and two retained
+repetitions. At 4096 bodies, complete-force speedup versus Sequential
+Barnes--Hut ranged from `3.25x` to `3.98x` at four threads and `4.28x` to
+`7.51x` at eight. For the accuracy-first theta `0.25`, eight-thread speedups
+were `7.02x` uniform, `7.51x` clustered, and `7.33x` planar. Versus
+eight-thread direct force at theta `0.25`, Barnes--Hut was `0.26x` uniform,
+`0.35x` clustered, and `1.24x` planar. The sequential tree-build time is
+included in every complete-force wall time.
+
+These two-repetition uncontrolled-host observations are exploratory, not a
+linear-scaling, universal-crossover, graphical-FPS, or 50K--100K claim. They
+do not alter Stage 1 error evidence or frozen Stage 5 methodology/evidence.
+Final canonical Release validation passed `16/16` CPU CTests and `20/20`
+OpenMP CTests. This includes focused Barnes--Hut, the genuine test-only
+runtime-schedule matrix, both headless solver paths,
+legacy Solar, 60-body catalog/dataset/snapshot, direct-force, Stage 5 tooling,
+visualization/counterfactual, layout, and dependency-cache checks.
+CUDA Barnes--Hut, GUI/counterfactual solver integration, controlled large-N
+evaluation, and RTX 4050 validation remain pending. CUDA compilation/runtime
+was not attempted or claimed in this AMD-only Stage 2 increment.
 
 ## Known limitations
 
@@ -1879,10 +1992,10 @@ and RTX 4050 compilation/runtime/performance validation all remain pending.
   element approximation. Neither scenario reproduces JPL's complete dynamical
   model or establishes long-horizon ephemeris agreement.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
-- Sequential Barnes--Hut uses monopoles and target-local acceptance, so it does
-  not preserve exact pairwise force symmetry. Theta `0.25` is provisional and
-  distribution-dependent; no OpenMP/CUDA tree, viewer path, or validated
-  50K--100K interactive force workload exists.
+- Sequential and OpenMP Barnes--Hut use the same monopoles and target-local
+  acceptance, so neither preserves exact pairwise force symmetry. Theta `0.25`
+  is provisional and distribution-dependent; no CUDA tree, viewer path, or
+  validated 50K--100K interactive force workload exists.
 - CUDA physics is T4-validated and the viewer has an opt-in batched CUDA path,
   but viewer CUDA compilation/runtime and a same-machine CPU/OpenMP/CUDA matrix
   remain unverified until an NVIDIA/CUDA host is available. MPI is implemented
@@ -1900,8 +2013,9 @@ and RTX 4050 compilation/runtime/performance validation all remain pending.
 3. Only in a separately authorized final session, acquire calibration, freeze the deterministic policy, acquire held-out evidence, and evaluate without refitting.
 4. Run the final Stage 6D native-window visual checklist in `docs/visualization.md`; the feature freeze closes after this gate.
 5. Do not tune the frozen policy, optimize backends, or pool historical cross-machine evidence during Stage 5B collection.
-6. Keep the independently reviewed Sequential Barnes--Hut semantics frozen;
-   authorize OpenMP and CUDA Barnes--Hut only as separate later increments.
+6. Keep the source-reviewed OpenMP Barnes--Hut Stage 2 implementation and
+   evidence frozen; authorize CUDA Barnes--Hut only as a separate later
+   increment.
 
 ## Commit references
 
@@ -1936,3 +2050,7 @@ and RTX 4050 compilation/runtime/performance validation all remain pending.
   selection contract, and focused regression suite.
 - `a035b3e` — exploratory Barnes--Hut benchmark harness plus hash-custodied
   accuracy/performance evidence.
+- `80d83f3` — OpenMP Barnes--Hut backend, bounded validation suite, exploratory
+  benchmark harness, and provenance verification tooling.
+- `c572be1` — 216-row exploratory OpenMP Barnes--Hut scaling evidence plus
+  source-manifest and Windows checkout line-ending custody.

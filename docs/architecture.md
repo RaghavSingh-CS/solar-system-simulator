@@ -26,7 +26,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  +-- OpenMP (implemented)
                         |                  +-- CUDA (validated on Tesla T4)
                         |                  +-- MPI / MPI+OpenMP (implemented, optional)
-                        |                  +-- sequential Barnes--Hut (implemented, opt-in)
+                        |                  +-- Sequential/OpenMP Barnes--Hut (implemented, opt-in)
                         +-> diagnostics -> CSV/headless benchmark
                         +-> immutable counterfactual snapshot
                               -> paired Sequential/OpenMP/CUDA runner
@@ -80,19 +80,31 @@ The interface is `ForceBackend::compute_accelerations(state, G)`. `sequential_fo
 
 `MpiForceBackend` also implements the shared interface. Every rank holds the same complete state; a deterministic contiguous partition assigns destination bodies, with any remainder assigned to lower ranks. Each rank computes only its local acceleration slice, then `MPI_Allgatherv` reconstructs the complete acceleration vector on every rank. An `MPI_Allreduce` propagates invalid-input status before that exchange. Consequently both force evaluations in Velocity Verlet see globally consistent positions and every rank applies identical drift/kick updates. Memory is O(N) per rank, local force work is O(N^2/P), and each force evaluation communicates O(N) acceleration data. The optional hybrid mode applies `schedule(static)` OpenMP parallelism only inside the local target loop; MPI calls occur outside parallel regions under `MPI_THREAD_FUNNELED`. A future one-rank-per-GPU design is only a conceptual extension, not an implemented or measured path.
 
-`SequentialBarnesHutForceBackend` is a separate optional force solver using the
-same acceleration contract and unchanged Velocity Verlet integrator. Its
+`SequentialBarnesHutForceBackend` and `OpenMpBarnesHutForceBackend` are
+optional force solvers using the same acceleration contract and unchanged
+Velocity Verlet integrator. Their shared
 index-based 3D octree uses stable octant partitioning, contiguous body ranges,
 monopole centers of mass, explicit target-range membership, and the standard
 `s / d < theta` opening criterion. Nodes containing the target are always
 opened. Checked node/memory budgets plus leaf occupancy, maximum depth, and
 minimum-cell termination prevent unbounded subdivision. Backend and solver are
-separate headless choices: Stage 1 accepts only `sequential + barnes-hut` and
-rejects unsupported combinations without fallback. Direct remains default;
-OpenMP/CUDA Barnes--Hut and viewer integration remain future stages. Full
-policy and evidence are in [barnes_hut.md](barnes_hut.md).
+separate headless choices. Stage 2 builds one tree per force call, then the
+OpenMP backend reads it concurrently while statically partitioning independent
+target traversals. Each target preserves Sequential child/leaf order and owns
+its compensated accumulator and output. Per-thread padded integer counters are
+merged after the region; exceptions are captured in-region and reported only
+outside it, with failed outputs/statistics discarded. Direct remains default;
+CUDA Barnes--Hut and viewer/counterfactual Barnes--Hut integration remain
+future stages. Full policy and evidence are in
+[barnes_hut.md](barnes_hut.md).
 
-OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the reference, headless runner, and sequential benchmark without finding or linking OpenMP. When explicitly enabled, CMake requires `OpenMP::OpenMP_CXX` and emits a targeted configuration error if unavailable.
+OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the
+reference, headless runner, and Sequential Barnes--Hut benchmark without
+finding or linking OpenMP; attempts to select either OpenMP direct or OpenMP
+Barnes--Hut fail explicitly. When enabled, CMake requires
+`OpenMP::OpenMP_CXX`, builds the direct and Barnes--Hut backends plus their
+focused tests/benchmark, and emits a targeted configuration error if OpenMP is
+unavailable.
 
 ## Deterministic synthetic scenario
 

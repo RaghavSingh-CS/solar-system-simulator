@@ -48,7 +48,7 @@ Initial thresholds for the analytic two-body CI test are implementation guards, 
 - Record omitted physics (relativity, oblateness, minor bodies) and do not attribute model error to numerical integration.
 - Use conservation diagnostics as internal checks, not as proof of ephemeris accuracy.
 
-## Sequential Barnes--Hut Stage 1 validation
+## Barnes--Hut Stage 1--2 validation
 
 The direct solver remains the numerical reference. Barnes--Hut tests retain
 absolute, RMS, maximum-relative, and 95th-percentile relative acceleration
@@ -71,8 +71,34 @@ synthetic checks do not establish long-horizon orbital or ephemeris accuracy.
 Resource tests require checked size arithmetic, explicit failures at node and
 memory limits, bounded depth for highly unbalanced trees, and rejection of
 non-finite/nonrepresentable geometry. A headless CTest exercises the supported
-`sequential + barnes-hut` composition; another requires an unsupported backend
-pairing to fail so fallback cannot be silent.
+`sequential + barnes-hut` composition. OpenMP builds also exercise
+`openmp + barnes-hut` and retain a separate `openmp + direct` CLI check;
+CPU-only builds require OpenMP selection to fail so fallback cannot be silent.
+
+The Stage 2 suite compares the shared Sequential and OpenMP tree/traversal at
+theta `0.25`, `0.5`, and `0.8` over uniform, clustered, and planar inputs. It
+requests 1, 2, 4, and 8 workers where supported and requires exact force,
+Velocity Verlet state, conservation diagnostic, and structural/work-counter
+agreement. It also covers boundary ties, unequal masses, extreme binary64
+coordinates, near/exact coincidence, depth/node/memory/traversal limits,
+repeated determinism, transactional last-success statistics, actual-capacity
+memory admission, and nested-region rejection with nesting both disabled and
+enabled. Strict-budget failures are repeated at 1/2/4/8 threads under actual
+static, dynamic, and guided schedules in a test-only `schedule(runtime)`
+compilation of the same implementation; production remains explicit static.
+A compare/exchange reservation proves reported attempt work never exceeds the
+configured cap. Separate charged-work counters cover reservations made before
+coincident/nonrepresentable-force failures, and empty success resets the
+attempt diagnostic. No replay receives a fresh budget, and no partial output
+or statistics may be published. Representation comparisons cover every
+diagnostics field individually (kinetic, potential, and total energy; linear
+and angular momentum; and center of mass) and include a signed-zero negative
+control. No sleep or timing assertion is part of correctness validation.
+
+Exploratory scaling records tree build, parallel traversal, complete force
+call, complete Velocity Verlet step, and direct-force comparators separately.
+It is not a CI performance gate, Stage 5 evidence, an automatic-selector input,
+or evidence of graphical FPS or 50K--100K feasibility.
 
 ## Reproducibility
 

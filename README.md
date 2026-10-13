@@ -7,7 +7,8 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 ## Current capabilities
 
 - Newtonian direct O(N^2) force evaluation in double precision plus an
-  accuracy-first sequential 3D Barnes--Hut monopole solver.
+  accuracy-first 3D Barnes--Hut monopole solver with Sequential and OpenMP
+  execution.
 - Shared force-backend interface with sequential and OpenMP implementations.
 - SI units and barycentric Cartesian coordinates.
 - Fixed-step Velocity Verlet integration.
@@ -160,22 +161,26 @@ Use `--help` for options. CSV comment lines document scenario, units, integrator
 time_s,body_index,name,mass_kg,x_m,y_m,z_m,vx_m_s,vy_m_s,vz_m_s
 ```
 
-Direct force remains the headless default. Stage 1 Barnes--Hut is selected
-independently from the execution backend and currently supports only the
-sequential backend:
+Direct force remains the headless default. Barnes--Hut is selected independently
+from the execution backend and supports Sequential and explicitly configured
+OpenMP execution:
 
 ```powershell
 .\build\cpu-release\nbody_headless.exe --backend sequential --solver barnes-hut `
   --theta 0.25 --steps 5000 --sample-every 50 --output orbit-bh.csv
+
+.\build\openmp-release\nbody_headless.exe --backend openmp --solver barnes-hut `
+  --threads 8 --theta 0.25 --steps 5000 --sample-every 50 --output orbit-omp-bh.csv
 ```
 
 The default accuracy-first policy uses `theta=0.25`, leaf capacity 8, maximum
 depth 64, minimum cell size `1e-6 m`, one million nodes, a 256 MiB working
 budget, and one billion visited-node/direct-interaction work units. Unsupported
 backend/solver combinations fail explicitly. See
-[Barnes--Hut Stage 1](docs/barnes_hut.md) for acceptance semantics, numerical
-limits, tests, and exploratory crossover evidence. This does not enable
-Barnes--Hut in the viewer or in OpenMP/CUDA, and it does not alter Stage 5.
+[Barnes--Hut Stages 1--2](docs/barnes_hut.md) for shared-tree architecture,
+acceptance semantics, numerical limits, exact Sequential/OpenMP agreement
+tests, and exploratory scaling evidence. This does not enable Barnes--Hut in
+the viewer, counterfactual engine, or CUDA, and it does not alter Stage 5.
 
 Run one reproducible benchmark configuration:
 
