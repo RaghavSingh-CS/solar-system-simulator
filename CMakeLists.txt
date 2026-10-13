@@ -44,12 +44,21 @@ target_include_directories(nbody_astronomy PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/i
 target_compile_features(nbody_astronomy PUBLIC cxx_std_17)
 target_link_libraries(nbody_astronomy PUBLIC nbody_core)
 
+add_library(nbody_barnes_hut
+    src/barnes_hut.cpp
+)
+target_include_directories(nbody_barnes_hut PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_features(nbody_barnes_hut PUBLIC cxx_std_17)
+target_link_libraries(nbody_barnes_hut PUBLIC nbody_core)
+
 if(MSVC)
     target_compile_options(nbody_core PRIVATE /W4 /permissive-)
     target_compile_options(nbody_astronomy PRIVATE /W4 /permissive-)
+    target_compile_options(nbody_barnes_hut PRIVATE /W4 /permissive-)
 else()
     target_compile_options(nbody_core PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(nbody_astronomy PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(nbody_barnes_hut PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 if(NBODY_ENABLE_CUDA)
@@ -95,7 +104,15 @@ if(NBODY_ENABLE_CUDA)
     )
 endif()
 add_executable(nbody_headless src/main.cpp)
-target_link_libraries(nbody_headless PRIVATE nbody_core)
+target_link_libraries(nbody_headless PRIVATE nbody_core nbody_barnes_hut)
+
+add_executable(nbody_barnes_hut_benchmark src/barnes_hut_benchmark.cpp)
+target_link_libraries(nbody_barnes_hut_benchmark PRIVATE nbody_barnes_hut)
+target_compile_definitions(nbody_barnes_hut_benchmark PRIVATE
+    NBODY_BUILD_CONFIGURATION="$<CONFIG>"
+    NBODY_CXX_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+    NBODY_CXX_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+)
 
 add_executable(nbody_benchmark src/benchmark.cpp)
 target_link_libraries(nbody_benchmark PRIVATE nbody_core)
@@ -344,6 +361,46 @@ if(BUILD_TESTING)
         target_compile_definitions(nbody_counterfactual_tests PRIVATE NBODY_TEST_HAS_CUDA=1)
     endif()
     add_test(NAME nbody_counterfactual COMMAND nbody_counterfactual_tests)
+
+    add_executable(nbody_barnes_hut_tests tests/test_barnes_hut.cpp)
+    target_link_libraries(nbody_barnes_hut_tests PRIVATE nbody_barnes_hut)
+    add_test(NAME nbody_barnes_hut COMMAND nbody_barnes_hut_tests)
+    add_test(
+        NAME nbody_barnes_hut_headless
+        COMMAND nbody_headless
+                --backend sequential
+                --solver barnes-hut
+                --theta 0.5
+                --steps 20
+                --sample-every 20
+                --output "${CMAKE_BINARY_DIR}/tmp/barnes_hut_headless.csv"
+    )
+    add_test(
+        NAME nbody_barnes_hut_rejects_unsupported_backend
+        COMMAND nbody_headless
+                --backend openmp
+                --solver barnes-hut
+                --steps 1
+                --sample-every 1
+                --output "${CMAKE_BINARY_DIR}/tmp/barnes_hut_invalid.csv"
+    )
+    set_tests_properties(
+        nbody_barnes_hut_rejects_unsupported_backend
+        PROPERTIES WILL_FAIL TRUE
+    )
+    add_test(
+        NAME nbody_direct_rejects_barnes_hut_options
+        COMMAND nbody_headless
+                --solver direct
+                --theta 0.25
+                --steps 1
+                --sample-every 1
+                --output "${CMAKE_BINARY_DIR}/tmp/direct_invalid_option.csv"
+    )
+    set_tests_properties(
+        nbody_direct_rejects_barnes_hut_options
+        PROPERTIES WILL_FAIL TRUE
+    )
 
     if(Python3_Interpreter_FOUND)
         add_test(
