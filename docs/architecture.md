@@ -93,9 +93,10 @@ OpenMP backend reads it concurrently while statically partitioning independent
 target traversals. Each target preserves Sequential child/leaf order and owns
 its compensated accumulator and output. Per-thread padded integer counters are
 merged after the region; exceptions are captured in-region and reported only
-outside it, with failed outputs/statistics discarded. Direct remains default;
-CUDA Barnes--Hut state advancement and viewer/counterfactual Barnes--Hut
-integration remain future stages. Full policy and evidence are in
+outside it, with failed outputs/statistics discarded. Direct remains default.
+CUDA Barnes--Hut state advancement is implemented as the separately selected
+Stage 3B path; viewer/counterfactual Barnes--Hut integration remains future
+work. Full policy and evidence are in
 [barnes_hut.md](barnes_hut.md).
 
 CUDA Barnes--Hut Stage 3A is isolated as a force-only source path. The shared
@@ -114,6 +115,27 @@ accounting if a release fails. No CUDA tree construction, Verlet integration,
 viewer, counterfactual, or automatic-selection connection is part of Stage 3A.
 Implementation `5e1864e` passed independent adversarial source review; CUDA
 compilation and runtime behavior remain NVIDIA-unverified.
+
+Stage 3B adds `CudaBarnesHutVelocityVerlet`, a transactional host orchestrator
+around that exact Stage 3A evaluator. It value-copies the input state, performs
+old-state force evaluation and drift, then performs a second force evaluation
+which necessarily rebuilds the deterministic tree from the drifted positions,
+and finally applies the average-acceleration kick. A noexcept move publishes
+the candidate only after finite-state, identity/mass, work, and memory checks.
+First- and second-force failure phases remain distinguishable; last-success
+statistics are not overwritten on failure. Nonterminal scientific/resource
+errors permit retry, while terminal Stage 3A runtime/ownership errors prohibit
+reuse. Per-evaluation traversal bounds remain unchanged and the per-step bound
+is their checked two-call sum. Integration scratch has its own host budget in
+addition to Stage 3A device and pinned/tree-staging budgets.
+Post-force output consistency, host-capacity, and combined-work checks publish
+a separate integration post-force-validation phase rather than misclassifying
+a successful force evaluation.
+Only a separately compiled CUDA test-library variant contains deterministic
+hooks for those otherwise allocator/invariant-dependent defensive checks; the
+production API and binary contain no integration test hook.
+Implementation `2cc2cb0` passed independent source-level review; CUDA
+translation-unit compilation and runtime behavior remain NVIDIA-unverified.
 
 OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the
 reference, headless runner, and Sequential Barnes--Hut benchmark without

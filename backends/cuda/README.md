@@ -85,4 +85,49 @@ characterize mixed absolute/relative, RMS, maximum-relative, and percentile
 errors against independent Sequential Barnes--Hut and direct-force references.
 No GPU equivalence, throughput, crossover, or 50K--100K claim is made.
 
+## Barnes--Hut Stage 3B (source-reviewed, GPU unverified)
+
+`CudaBarnesHutVelocityVerlet` composes the Stage 3A force evaluator with the
+unchanged host Velocity Verlet equations. Each step owns a full candidate copy,
+evaluates the old-state CUDA Barnes--Hut acceleration, drifts candidate
+positions, builds/transfers a new deterministic tree through a second complete
+force call, kicks velocities with the average acceleration, and moves the
+candidate into the caller only after all checks succeed. No GUI or
+counterfactual integration is hidden behind this class, and there is no CPU or
+direct-force fallback.
+
+The Stage 3A traversal limit remains strict per force evaluation. The Stage 3B
+per-step limit is the checked sum of exactly two per-evaluation limits; reported
+work is the checked sum of both completed calls. Device and pinned staging stay
+under the Stage 3A budgets. A separate host-integration budget admits the
+candidate body/name storage plus both returned acceleration arrays. CUDA
+allocator/context metadata, native stacks, and compiler-managed device local
+stack backing remain exclusions.
+
+Invalid timestep/state input fails before force work. A failed first or second
+force call, drift/kick non-finiteness, or resource failure leaves the caller and
+last-success integration statistics unchanged. Device-reported scientific and
+configured resource failures are reusable when Stage 3A remains nonterminal;
+CUDA runtime, synchronization, or checked-release failure terminalizes the
+owned evaluator and prevents reuse. Destruction retains the Stage 3A
+quiescence/quarantine policy and never performs `cudaDeviceReset()`.
+
+Post-force output consistency, host capacity, and combined-work checks use a
+distinct integration post-force-validation phase; they never inherit a
+successful force call's stale
+failure metadata. The CUDA integration test is linked to a separately compiled
+test-hook library which can fail at those otherwise allocator/invariant-
+dependent boundaries. The production library does not compile that hook.
+Drift and kick rollback use naturally reachable finite-input arithmetic cases,
+not injection. The direct-force characterization independently compares
+Sequential-Barnes--Hut/direct and CUDA-Barnes--Hut/direct maximum and RMS
+position/velocity separation under predeclared mixed tolerances.
+
+The headless runner now has explicit behavior for all backend/solver pairs.
+CUDA-enabled builds support `--backend cuda` with either `direct` or
+`barnes-hut`; CPU-only builds reject both with the compiled-support diagnostic.
+Implementation commit `2cc2cb0` passed independent source-level review. Its
+NVIDIA-only tests remain uncompiled and unexecuted on the AMD-only/no-nvcc
+development host. No CUDA correctness or performance result is claimed.
+
 Preparation commit `ae6117b` was compiled and validated on a Tesla T4; controlled evidence is under `data/benchmarks/stage4_cuda/`. See `docs/colab_cuda_workflow.md` for the repaired reproducible workflow. The local Windows host still lacks CUDA hardware/tooling.

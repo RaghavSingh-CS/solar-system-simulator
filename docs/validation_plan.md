@@ -141,6 +141,45 @@ cleanup, and actual persistent/local-memory resource usage. Performance remains
 unclaimed until tree-build, transfer, traversal, complete force, and later
 complete-step timings are measured separately under a controlled protocol.
 
+### CUDA Barnes--Hut Stage 3B gates
+
+The NVIDIA-only `nbody_barnes_hut_cuda_integration` test must execute genuine
+Stage 3A force kernels twice per step. It covers empty, inertial singleton,
+analytic two-body, unchanged legacy Solar, a real JPL-derived subset, uniform,
+clustered, planar, small/large-theta and multistep fixtures. Sequential
+Barnes--Hut is the same-solver reference under fixed mixed tolerances; direct
+force is a separate approximation-error characterization. Conservation checks
+remain bounded regression guards, not accuracy guarantees.
+
+Transactional tests must preserve the exact caller state and last-success
+statistics after invalid timestep, first-force failure, deliberately arranged
+second-force collision, naturally reached drift/kick non-finiteness,
+nonrepresentable geometry, stack/work/memory failure, and terminal live-release
+injection. They verify bitwise caller rollback, complete last-success statistics,
+phase-specific failure metadata, nonterminal retry, and terminal reuse
+rejection. A separately compiled test-library variant injects only at the
+otherwise allocator/invariant-dependent post-force resource boundaries and
+must prove the dedicated post-force-validation phase without exposing hooks in
+production. Per-step reported work must equal both force-call counters and
+remain under the checked two-evaluation limit. CPU-only CTest must reject both
+`cuda + direct` and `cuda + barnes-hut` headless selections.
+
+Direct-force characterization must use independently advanced direct and
+Sequential Barnes--Hut references from the same initial state, timestep, and
+horizon. CUDA-Barnes--Hut/direct maximum and RMS position/velocity separation,
+plus per-body separation vectors, must match the Sequential-Barnes--Hut/direct
+characterization under fixed mixed absolute/relative tolerances. Merely finite
+separation is not an acceptance test.
+
+CUDA configuration or skip 77 is not Stage 3B validation. RTX 4050 acceptance
+requires nvcc/MSVC compilation for architecture 89, actual execution without
+unexpected skips, numerical and conservation results, both-force rollback
+cases, repeated lifetime/cleanup, resource accounting, and separately reported
+tree-build, transfer, force, and complete-step timing.
+
+Implementation `2cc2cb0` passed the source-level commit gate. This records no
+CUDA compilation or execution result; every NVIDIA gate above remains open.
+
 ## Reproducibility
 
 Every result row must carry commit, build type, compiler/options, backend, hardware, scenario hash, seed, precision, N, dt, steps, repetition, and warm-up policy. Failed runs remain in raw data with a reason.

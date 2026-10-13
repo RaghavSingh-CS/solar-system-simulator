@@ -29,7 +29,7 @@ Last updated: 2026-10-13
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
-| Barnes--Hut large-N solver roadmap | **STAGE 3A CUDA FORCE SOURCE-REVIEWED / GPU UNVERIFIED** | Source-reviewed Sequential/OpenMP solver plus CPU-built pointer-free CUDA tree snapshot and genuine CUDA monopole traversal source; CUDA compilation/runtime and controlled large-N evaluation remain mandatory |
+| Barnes--Hut large-N solver roadmap | **STAGE 3B CUDA VERLET SOURCE-REVIEWED / GPU UNVERIFIED** | Source-reviewed Stage 3A force plus source-reviewed transactional two-tree/two-force CUDA Velocity Verlet and explicit headless selection; CUDA compilation/runtime and controlled large-N evaluation remain mandatory |
 
 ## Decisions and rationale
 
@@ -2058,6 +2058,53 @@ counterfactual regressions. An isolated CUDA-enabled configure under
 compiler" diagnostic and was removed. No CUDA target compiled and no GPU test
 ran or skipped. This is a source-reviewed, GPU-unverified milestone.
 
+## CUDA Barnes--Hut Stage 3B
+
+Implementation `2cc2cb0` starts from
+`8bacb069af70e1f68a850a38cec3d28ef9acbf9c` and adds
+`CudaBarnesHutVelocityVerlet`. It preserves the existing Velocity Verlet
+mathematics but applies it transactionally to a value-owned candidate: Stage 3A
+evaluates old-state acceleration, candidate positions drift, a second Stage 3A
+call rebuilds the deterministic tree at the new positions and evaluates new
+acceleration, and the average-acceleration kick completes before a noexcept
+move publishes the state. Names, ordering, masses, units, timestep, force law,
+theta rule, and zero-softening semantics remain unchanged. No viewer or
+counterfactual connection and no fallback were added.
+
+Invalid input fails before force work. Failures retain caller state and the
+previous successful integration statistics while recording whether validation,
+first force, drift, second force, integration post-force validation,
+kick, or commit was active. Configured or scientific Stage 3A errors remain
+reusable when the evaluator is nonterminal; runtime, synchronization, or
+checked-release terminal state prevents reuse. The Stage 3A quiescence, checked
+live-release, conservative quarantine, and no `cudaDeviceReset()` policies
+remain authoritative.
+
+The Stage 3A traversal ceiling remains strict per evaluation. The Stage 3B
+per-step ceiling is its checked two-evaluation sum, and successful statistics
+retain both counters and the total. A separate host-integration budget accounts
+for candidate body/name capacity and both acceleration arrays, while Stage 3A
+continues to admit device, pinned host, and packed-tree staging. Runtime/context
+metadata and native/compiler-managed stacks remain explicit exclusions.
+
+The headless runner now parses all six Sequential/OpenMP/CUDA crossed with
+direct/Barnes--Hut combinations. Availability is explicit: CPU-only builds
+reject both CUDA solvers, OpenMP remains build-gated, and CUDA builds link the
+existing direct integrator or new Barnes--Hut integrator according to the
+selected solver. CUDA-dependent tests specify zero/one/two-body, legacy Solar,
+JPL subset, distribution/theta/multistep, conservation/reference, invalid input,
+first/second-force rollback, naturally reached drift/kick rollback,
+nonrepresentable force geometry, explicitly classified post-force resource
+checks, stack/work/memory, terminal reuse, and lifetime coverage. Direct-force
+characterization compares independent Sequential-Barnes--Hut/direct and CUDA-
+Barnes--Hut/direct trajectory metrics under fixed mixed tolerances. Post-force
+injections exist only in a separately compiled test library; production has no
+integration test hook. Local Release validation passed `18/18` CPU and `22/22`
+OpenMP CTests; host syntax, layout, dependency, protected-scope, and whitespace
+checks passed. No CUDA translation unit compiled and no GPU test ran or skipped
+on this AMD-only/no-nvcc host. Independent adversarial source review passed;
+Stage 3B remains GPU-unverified.
+
 ## Known limitations
 
 - A sourced common-epoch 60-body JPL initial-condition snapshot now exists,
@@ -2067,8 +2114,8 @@ ran or skipped. This is a source-reviewed, GPU-unverified milestone.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - Sequential and OpenMP Barnes--Hut use the same monopoles and target-local
   acceptance, so neither preserves exact pairwise force symmetry. Theta `0.25`
-  is provisional and distribution-dependent; Stage 3A has only an uncompiled
-  CUDA traversal source using CPU-built trees, with no viewer path or validated
+  is provisional and distribution-dependent; Stage 3B has only uncompiled CUDA
+  force/integration source using CPU-built trees, with no viewer path or validated
   50K--100K interactive force workload.
 - CUDA physics is T4-validated and the viewer has an opt-in batched CUDA path,
   but viewer CUDA compilation/runtime and a same-machine CPU/OpenMP/CUDA matrix
@@ -2087,9 +2134,9 @@ ran or skipped. This is a source-reviewed, GPU-unverified milestone.
 3. Only in a separately authorized final session, acquire calibration, freeze the deterministic policy, acquire held-out evidence, and evaluate without refitting.
 4. Run the final Stage 6D native-window visual checklist in `docs/visualization.md`; the feature freeze closes after this gate.
 5. Do not tune the frozen policy, optimize backends, or pool historical cross-machine evidence during Stage 5B collection.
-6. Independently adversarially review CUDA Barnes--Hut Stage 3A source, then
-   compile and execute its strict numerical/resource suite on NVIDIA hardware
-   before authorizing Stage 3B integration.
+6. Compile and execute the strict source-reviewed Stage 3A/3B numerical and
+   resource suites on NVIDIA hardware before authorizing higher-layer
+   integration.
 
 ## Commit references
 
@@ -2128,3 +2175,5 @@ ran or skipped. This is a source-reviewed, GPU-unverified milestone.
   benchmark harness, and provenance verification tooling.
 - `c572be1` — 216-row exploratory OpenMP Barnes--Hut scaling evidence plus
   source-manifest and Windows checkout line-ending custody.
+- `2cc2cb0` — source-reviewed transactional CUDA Barnes--Hut Velocity Verlet,
+  headless selection, failure-phase reporting, and focused CPU/GPU tests.

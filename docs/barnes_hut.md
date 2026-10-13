@@ -1,4 +1,4 @@
-# Barnes--Hut solver (Sequential Stage 1 and OpenMP Stage 2)
+# Barnes--Hut solver (Sequential Stage 1, OpenMP Stage 2, CUDA Stages 3A--3B)
 
 ## Scope and selection contract
 
@@ -14,12 +14,15 @@ and force solver as separate choices:
 
 .\build\openmp-release\nbody_headless.exe --backend openmp --solver barnes-hut `
   --threads 8 --theta 0.25 --steps 5000 --sample-every 50 --output orbit-omp-bh.csv
+
+.\build\cuda-release\nbody_headless.exe --backend cuda --solver barnes-hut `
+  --cuda-device 0 --theta 0.25 --steps 5000 --sample-every 50 --output orbit-cuda-bh.csv
 ```
 
-`sequential + barnes-hut` and `openmp + barnes-hut` are implemented. A
-CPU-only build rejects OpenMP explicitly, and CUDA Barnes--Hut remains a
-mandatory later stage. No unsupported selection falls back to direct force or
-Sequential while reporting another backend.
+`sequential + barnes-hut`, `openmp + barnes-hut`, and optional
+`cuda + barnes-hut` are implemented. CPU-only builds reject unavailable OpenMP
+or CUDA choices explicitly. No unsupported selection falls back to direct force
+or Sequential while reporting another backend.
 
 ## OpenMP shared-tree architecture
 
@@ -298,10 +301,53 @@ Implementation `5e1864e` passed independent adversarial source review. CUDA
 translation-unit compilation and kernel execution were unavailable on the
 AMD-only/no-nvcc host and remain NVIDIA validation gates.
 
+## CUDA Stage 3B transactional integration
+
+Stage 3B introduces `CudaBarnesHutVelocityVerlet` without changing either the
+CPU builder or the Stage 3A approximation. For one timestep it validates the
+complete input and timestep, copies the caller-owned state, obtains the old
+acceleration from Stage 3A, applies the existing `r += v*dt + 0.5*a*dt^2`
+drift, invokes Stage 3A again so a new tree is constructed from those new
+positions, and applies `v += 0.5*(a_old+a_new)*dt`. Body order, names, masses,
+and timestep meaning are unchanged. The candidate is moved into the caller only
+after both force calls and all finite-state/resource checks succeed.
+
+Failure records distinguish input validation, first force, drift, second force,
+integration post-force validation, kick, and commit. Last-success
+statistics are transactional. Invalid inputs and nonterminal tree,
+nonrepresentable geometry, singularity, stack, work, or admission failures
+allow reuse; a terminal Stage 3A CUDA runtime, synchronization, or release
+failure makes the integrator permanently unusable. The same owned stream/buffer
+lifetime rules, checked live release, conservative uncertain-quiescence
+quarantine, and no device-wide reset policy remain in force.
+
+`maximum_traversal_work` remains a hard per-force-evaluation ceiling. A complete
+step admits exactly two such evaluations, so its derived hard ceiling is the
+checked value `2 * maximum_traversal_work`; successful statistics report each
+call and their checked sum. The separate integration-host budget includes the
+candidate body vector, dynamic body-name capacity, and both returned
+acceleration-vector capacities. Stage 3A separately admits persistent device,
+pinned-host, and temporary packed-tree staging. Allocator metadata, native host
+stacks, CUDA context storage, and compiler-managed per-thread local-stack
+backing are not claimed.
+
+The CUDA-only integration suite specifies zero/one/two-body, legacy Solar,
+JPL-derived subset, uniform/clustered/planar, theta, multistep, conservation,
+Sequential Barnes--Hut, matched Sequential-Barnes--Hut/direct versus CUDA-
+Barnes--Hut/direct trajectory characterization, invalid timestep, naturally
+reached drift and kick overflow, nonrepresentable force geometry, first- and
+second-force singularities, stack/work/memory exhaustion, rollback, terminal
+reuse rejection, and repeated lifetime cases. Post-force defensive resource
+checks use a separately compiled test-only library variant; the production
+library does not contain those hooks. Strict device enumeration cannot convert
+a CUDA error into skip 77. This suite has not compiled or run on the AMD-only/
+no-nvcc host. Implementation `2cc2cb0` passed independent source-level review;
+Stage 3B remains GPU-unverified.
+
 ## Remaining stages
 
-- Compile and adversarially validate the Stage 3A CUDA traversal on NVIDIA
-  hardware before integrating it with any state-advancement path.
+- Compile and adversarially validate the Stage 3A force and Stage 3B
+  transactional integration paths on NVIDIA hardware before higher-layer use.
 - Evaluate GPU-resident/parallel tree construction separately; do not present
   the Stage 3A CPU build plus transfer as a fully GPU-resident solver.
 - Run controlled broader large-N performance and accuracy evaluation before

@@ -162,8 +162,8 @@ time_s,body_index,name,mass_kg,x_m,y_m,z_m,vx_m_s,vy_m_s,vz_m_s
 ```
 
 Direct force remains the headless default. Barnes--Hut is selected independently
-from the execution backend and supports Sequential and explicitly configured
-OpenMP execution:
+from the execution backend and supports Sequential, explicitly configured
+OpenMP, and optional CUDA execution:
 
 ```powershell
 .\build\cpu-release\nbody_headless.exe --backend sequential --solver barnes-hut `
@@ -171,16 +171,22 @@ OpenMP execution:
 
 .\build\openmp-release\nbody_headless.exe --backend openmp --solver barnes-hut `
   --threads 8 --theta 0.25 --steps 5000 --sample-every 50 --output orbit-omp-bh.csv
+
+# Requires a CUDA-enabled build and NVIDIA validation.
+.\build\cuda-release\nbody_headless.exe --backend cuda --solver barnes-hut `
+  --cuda-device 0 --theta 0.25 --steps 5000 --sample-every 50 --output orbit-cuda-bh.csv
 ```
 
 The default accuracy-first policy uses `theta=0.25`, leaf capacity 8, maximum
 depth 64, minimum cell size `1e-6 m`, one million nodes, a 256 MiB working
 budget, and one billion visited-node/direct-interaction work units. Unsupported
 backend/solver combinations fail explicitly. See
-[Barnes--Hut Stages 1--2](docs/barnes_hut.md) for shared-tree architecture,
+[Barnes--Hut Stages 1--3B](docs/barnes_hut.md) for shared-tree architecture,
 acceptance semantics, numerical limits, exact Sequential/OpenMP agreement
-tests, and exploratory scaling evidence. This does not enable Barnes--Hut in
-the viewer, counterfactual engine, or CUDA, and it does not alter Stage 5.
+tests, transactional CUDA integration design, and exploratory scaling evidence.
+CUDA Barnes--Hut Stage 3B is source-reviewed but remains GPU-unverified and is
+not enabled in the viewer or counterfactual engine. None of these paths alter
+Stage 5.
 
 Run one reproducible benchmark configuration:
 
