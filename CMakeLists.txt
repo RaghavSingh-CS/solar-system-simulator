@@ -147,6 +147,24 @@ if(NBODY_ENABLE_OPENMP)
         NBODY_STAGE5_OPENMP_LIBRARIES="${nbody_stage5_openmp_libraries}"
     )
     target_link_libraries(nbody_benchmark PRIVATE nbody_openmp)
+    target_compile_definitions(nbody_headless PRIVATE NBODY_HEADLESS_HAS_OPENMP=1)
+    target_link_libraries(nbody_headless PRIVATE nbody_openmp)
+    target_compile_definitions(nbody_barnes_hut PRIVATE NBODY_HAS_OPENMP=1)
+    target_link_libraries(nbody_barnes_hut PUBLIC OpenMP::OpenMP_CXX)
+
+    add_executable(nbody_barnes_hut_openmp_benchmark
+        src/barnes_hut_openmp_benchmark.cpp
+    )
+    target_link_libraries(nbody_barnes_hut_openmp_benchmark PRIVATE
+        nbody_barnes_hut
+        nbody_openmp
+    )
+    target_compile_definitions(nbody_barnes_hut_openmp_benchmark PRIVATE
+        NBODY_BUILD_CONFIGURATION="$<CONFIG>"
+        NBODY_CXX_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+        NBODY_CXX_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+        NBODY_OPENMP_SPECIFICATION="${OpenMP_CXX_SPEC_DATE}"
+    )
 
     if(MSVC)
         target_compile_options(nbody_openmp PRIVATE /W4 /permissive-)
@@ -375,19 +393,27 @@ if(BUILD_TESTING)
                 --sample-every 20
                 --output "${CMAKE_BINARY_DIR}/tmp/barnes_hut_headless.csv"
     )
-    add_test(
-        NAME nbody_barnes_hut_rejects_unsupported_backend
-        COMMAND nbody_headless
-                --backend openmp
-                --solver barnes-hut
-                --steps 1
-                --sample-every 1
-                --output "${CMAKE_BINARY_DIR}/tmp/barnes_hut_invalid.csv"
-    )
-    set_tests_properties(
-        nbody_barnes_hut_rejects_unsupported_backend
-        PROPERTIES WILL_FAIL TRUE
-    )
+    if(NBODY_ENABLE_OPENMP)
+        add_test(
+            NAME nbody_barnes_hut_openmp_headless
+            COMMAND nbody_headless
+                    --backend openmp
+                    --solver barnes-hut
+                    --threads 4
+                    --theta 0.5
+                    --steps 20
+                    --sample-every 20
+                    --output "${CMAKE_BINARY_DIR}/tmp/barnes_hut_openmp_headless.csv"
+        )
+    else()
+        add_test(
+            NAME nbody_barnes_hut_rejects_unavailable_openmp
+            COMMAND "${CMAKE_COMMAND}"
+                    "-DNBODY_HEADLESS=$<TARGET_FILE:nbody_headless>"
+                    "-DNBODY_OUTPUT=${CMAKE_BINARY_DIR}/tmp/barnes_hut_invalid.csv"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/verify_openmp_unavailable.cmake"
+        )
+    endif()
     add_test(
         NAME nbody_direct_rejects_barnes_hut_options
         COMMAND nbody_headless
@@ -416,6 +442,83 @@ if(BUILD_TESTING)
         target_compile_definitions(nbody_openmp_tests PRIVATE NBODY_BUILD_CONFIGURATION="$<CONFIG>")
         nbody_embed_stage5_identity(nbody_openmp_tests)
         add_test(NAME nbody_openmp_validation COMMAND nbody_openmp_tests)
+
+        add_test(
+            NAME nbody_openmp_direct_headless
+            COMMAND nbody_headless
+                    --backend openmp
+                    --solver direct
+                    --threads 4
+                    --steps 20
+                    --sample-every 20
+                    --output "${CMAKE_BINARY_DIR}/tmp/openmp_direct_headless.csv"
+        )
+
+        add_executable(nbody_barnes_hut_openmp_tests
+            tests/test_barnes_hut_openmp.cpp
+        )
+        target_link_libraries(nbody_barnes_hut_openmp_tests PRIVATE
+            nbody_barnes_hut
+            nbody_openmp
+        )
+        add_test(
+            NAME nbody_barnes_hut_openmp
+            COMMAND nbody_barnes_hut_openmp_tests
+        )
+
+        # A test-only compilation of the exact Barnes-Hut implementation uses
+        # schedule(runtime) so the same traversal can genuinely be exercised
+        # with static, dynamic, and guided policies. Production continues to
+        # compile nbody_barnes_hut with an explicit schedule(static).
+        add_library(nbody_barnes_hut_openmp_schedule_test_impl STATIC
+            src/barnes_hut.cpp
+        )
+        target_include_directories(
+            nbody_barnes_hut_openmp_schedule_test_impl
+            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        )
+        target_compile_features(
+            nbody_barnes_hut_openmp_schedule_test_impl PUBLIC cxx_std_17
+        )
+        target_compile_definitions(
+            nbody_barnes_hut_openmp_schedule_test_impl
+            PRIVATE
+                NBODY_HAS_OPENMP=1
+                NBODY_BARNES_HUT_TEST_RUNTIME_SCHEDULE=1
+        )
+        target_link_libraries(
+            nbody_barnes_hut_openmp_schedule_test_impl
+            PUBLIC nbody_core OpenMP::OpenMP_CXX
+        )
+        if(MSVC)
+            target_compile_options(
+                nbody_barnes_hut_openmp_schedule_test_impl
+                PRIVATE /W4 /permissive-
+            )
+        else()
+            target_compile_options(
+                nbody_barnes_hut_openmp_schedule_test_impl
+                PRIVATE -Wall -Wextra -Wpedantic
+            )
+        endif()
+
+        add_executable(nbody_barnes_hut_openmp_schedule_tests
+            tests/test_barnes_hut_openmp.cpp
+        )
+        target_compile_definitions(
+            nbody_barnes_hut_openmp_schedule_tests
+            PRIVATE NBODY_BARNES_HUT_EXPECT_RUNTIME_SCHEDULE=1
+        )
+        target_link_libraries(
+            nbody_barnes_hut_openmp_schedule_tests
+            PRIVATE
+                nbody_barnes_hut_openmp_schedule_test_impl
+                nbody_openmp
+        )
+        add_test(
+            NAME nbody_barnes_hut_openmp_schedules
+            COMMAND nbody_barnes_hut_openmp_schedule_tests
+        )
     endif()
 
     if(NBODY_ENABLE_CUDA)

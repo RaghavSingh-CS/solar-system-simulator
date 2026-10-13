@@ -2,6 +2,10 @@
 #include "nbody/diagnostics.hpp"
 #include "nbody/scenarios.hpp"
 
+#ifdef NBODY_HEADLESS_HAS_OPENMP
+#include "nbody/openmp_backend.hpp"
+#endif
+
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
@@ -20,21 +24,24 @@ struct Options {
     std::string output_path{"orbit.csv"};
     std::string backend{"sequential"};
     std::string solver{"direct"};
+    int threads{1};
     nbody::BarnesHutConfiguration barnes_hut;
     bool barnes_hut_option_seen{false};
+    bool threads_option_seen{false};
 };
 
 void print_usage(const char* program) {
     std::cout
         << "Usage: " << program
-        << " [--backend sequential] [--solver direct|barnes-hut] [options]\n"
+        << " [--backend sequential|openmp] [--solver direct|barnes-hut] [options]\n"
         << "Options: --steps N --dt SECONDS --sample-every N --output PATH\n"
+        << "         --threads N (OpenMP only; default 1)\n"
         << "Barnes-Hut: --theta X --leaf-capacity N --max-depth N\n"
         << "            --minimum-cell-size METRES --max-nodes N\n"
         << "            --max-traversal-work N --memory-budget-bytes N\n"
         << "Runs the deterministic analytic circular two-body scenario.\n"
-        << "The backend and force solver are separate choices. Stage 1 supports\n"
-        << "Barnes-Hut only with the sequential backend; direct remains the default.\n"
+        << "The backend and force solver are separate choices. OpenMP selections\n"
+        << "require an OpenMP-enabled build; direct remains the default solver.\n"
         << "If --dt is omitted, the timestep is one orbital period / --steps.\n";
 }
 
@@ -62,6 +69,9 @@ Options parse_options(int argc, char** argv) {
             options.backend = value;
         } else if (argument == "--solver") {
             options.solver = value;
+        } else if (argument == "--threads") {
+            options.threads_option_seen = true;
+            options.threads = std::stoi(value);
         } else if (argument == "--theta") {
             options.barnes_hut_option_seen = true;
             options.barnes_hut.theta = std::stod(value);
@@ -90,9 +100,8 @@ Options parse_options(int argc, char** argv) {
     if (options.steps == 0 || options.sample_every == 0) {
         throw std::invalid_argument("steps and sample-every must be positive");
     }
-    if (options.backend != "sequential") {
-        throw std::invalid_argument(
-            "headless backend must be sequential; no backend fallback is performed");
+    if (options.backend != "sequential" && options.backend != "openmp") {
+        throw std::invalid_argument("backend must be sequential or openmp");
     }
     if (options.solver != "direct" && options.solver != "barnes-hut") {
         throw std::invalid_argument("solver must be direct or barnes-hut");
@@ -100,6 +109,12 @@ Options parse_options(int argc, char** argv) {
     if (options.solver == "direct" && options.barnes_hut_option_seen) {
         throw std::invalid_argument(
             "Barnes-Hut options require --solver barnes-hut; no option is silently ignored");
+    }
+    if (options.backend == "sequential" && options.threads_option_seen) {
+        throw std::invalid_argument("--threads requires --backend openmp");
+    }
+    if (options.threads <= 0) {
+        throw std::invalid_argument("OpenMP thread count must be positive");
     }
     return options;
 }
@@ -126,11 +141,26 @@ int main(int argc, char** argv) {
             : scenario.orbital_period_s / static_cast<double>(options.steps);
 
         std::unique_ptr<nbody::ForceBackend> owned_force_backend;
-        const nbody::ForceBackend* force_backend = &nbody::sequential_force_backend();
-        if (options.solver == "barnes-hut") {
+        const nbody::ForceBackend* force_backend = nullptr;
+        if (options.backend == "sequential" && options.solver == "direct") {
+            force_backend = &nbody::sequential_force_backend();
+        } else if (options.backend == "sequential" && options.solver == "barnes-hut") {
             owned_force_backend =
                 std::make_unique<nbody::SequentialBarnesHutForceBackend>(options.barnes_hut);
             force_backend = owned_force_backend.get();
+        } else if (options.backend == "openmp") {
+#ifdef NBODY_HEADLESS_HAS_OPENMP
+            if (options.solver == "direct") {
+                owned_force_backend = std::make_unique<nbody::OpenMpForceBackend>(options.threads);
+            } else {
+                owned_force_backend = std::make_unique<nbody::OpenMpBarnesHutForceBackend>(
+                    options.threads, options.barnes_hut);
+            }
+            force_backend = owned_force_backend.get();
+#else
+            throw std::runtime_error(
+                "OpenMP backend is unavailable in this build; configure with NBODY_ENABLE_OPENMP=ON");
+#endif
         }
 
         std::ofstream output(options.output_path);
@@ -145,6 +175,7 @@ int main(int argc, char** argv) {
                << "# integrator=velocity_verlet\n"
                << "# backend=" << options.backend << '\n'
                << "# force_solver=" << options.solver << '\n'
+               << "# threads=" << (options.backend == "openmp" ? options.threads : 1) << '\n'
                << "# gravitational_constant_m3_kg-1_s-2=" << nbody::gravitational_constant << '\n'
                << "# dt_s=" << dt_s << '\n';
         if (options.solver == "barnes-hut") {

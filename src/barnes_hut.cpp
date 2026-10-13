@@ -2,19 +2,27 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#ifdef NBODY_HAS_OPENMP
+#include <omp.h>
+#endif
+
 namespace nbody {
 namespace {
 
 constexpr std::size_t no_node = std::numeric_limits<std::size_t>::max();
+constexpr int maximum_openmp_barnes_hut_threads = 256;
 
 std::size_t checked_add(std::size_t lhs, std::size_t rhs, const char* context) {
     if (lhs > std::numeric_limits<std::size_t>::max() - rhs) {
@@ -86,6 +94,122 @@ struct CompensatedVec3 {
     }
 };
 
+struct TraversalStatistics {
+    // Counts every successful work-budget reservation, including work whose
+    // numerical evaluation subsequently throws. This is intentionally
+    // separate from the completed-work statistics published on success.
+    std::size_t charged_work{0};
+    std::size_t visited_nodes{0};
+    std::size_t approximated_nodes{0};
+    std::size_t direct_body_interactions{0};
+};
+
+template <typename TraversalBudget>
+void reserve_traversal_work(
+    TraversalBudget& budget,
+    TraversalStatistics& statistics) {
+    budget.consume();
+    statistics.charged_work = checked_add(
+        statistics.charged_work, 1, "Barnes-Hut charged traversal work");
+}
+
+class SequentialTraversalBudget {
+public:
+    explicit SequentialTraversalBudget(std::size_t limit) : limit_(limit) {}
+
+    void consume() {
+        if (consumed_ >= limit_) {
+            throw std::length_error("Barnes-Hut traversal work budget exceeded");
+        }
+        ++consumed_;
+    }
+
+    std::size_t consumed() const noexcept { return consumed_; }
+
+private:
+    std::size_t limit_{0};
+    std::size_t consumed_{0};
+};
+
+#ifdef NBODY_HAS_OPENMP
+struct alignas(64) ThreadTraversalStatistics {
+    TraversalStatistics values;
+};
+
+class ParallelTraversalBudget {
+public:
+    ParallelTraversalBudget(std::size_t limit, bool requires_runtime_tracking)
+        : limit_(limit), requires_runtime_tracking_(requires_runtime_tracking) {}
+
+    void consume() {
+        if (!requires_runtime_tracking_) {
+            return;
+        }
+        std::size_t current = consumed_.load(std::memory_order_relaxed);
+        while (true) {
+            if (exhausted_.load(std::memory_order_relaxed) || current >= limit_) {
+                exhausted_.store(true, std::memory_order_relaxed);
+                throw std::length_error("Barnes-Hut traversal work budget exceeded");
+            }
+            if (consumed_.compare_exchange_weak(
+                    current,
+                    current + 1,
+                    std::memory_order_relaxed,
+                    std::memory_order_relaxed)) {
+                return;
+            }
+        }
+    }
+
+    bool exhausted() const noexcept {
+        if (!requires_runtime_tracking_) {
+            return false;
+        }
+        return exhausted_.load(std::memory_order_relaxed);
+    }
+
+    std::size_t consumed() const noexcept {
+        return consumed_.load(std::memory_order_relaxed);
+    }
+
+    bool requires_runtime_tracking() const noexcept {
+        return requires_runtime_tracking_;
+    }
+
+private:
+    std::size_t limit_{0};
+    bool requires_runtime_tracking_{false};
+    std::atomic<std::size_t> consumed_{0};
+    std::atomic<bool> exhausted_{false};
+};
+#endif
+
+std::size_t actual_vector_bytes(
+    std::size_t capacity,
+    std::size_t element_size,
+    const char* context) {
+    return checked_multiply(capacity, element_size, context);
+}
+
+std::size_t fixed_storage_lower_bound(
+    std::size_t body_count,
+    std::size_t requested_additional_bytes) {
+    return checked_add(
+        barnes_hut_fixed_memory_bytes(body_count),
+        requested_additional_bytes,
+        "Barnes-Hut fixed storage lower bound");
+}
+
+void validate_fixed_storage_lower_bound(
+    std::size_t body_count,
+    std::size_t requested_additional_bytes,
+    std::size_t memory_budget_bytes) {
+    if (fixed_storage_lower_bound(body_count, requested_additional_bytes) >
+        memory_budget_bytes) {
+        throw std::length_error("Barnes-Hut fixed working storage exceeds memory budget");
+    }
+}
+
 struct OctreeNode {
     Vec3 center_m;
     Vec3 center_of_mass_m;
@@ -106,26 +230,51 @@ struct Tree {
     std::vector<std::size_t> scratch;
     std::vector<std::size_t> rank;
     std::size_t effective_maximum_nodes{0};
+    std::size_t accounted_fixed_bytes{0};
     BarnesHutStatistics statistics;
 
-    Tree(const SimulationState& input_state, const BarnesHutConfiguration& input_configuration)
+    Tree(
+        const SimulationState& input_state,
+        const BarnesHutConfiguration& input_configuration,
+        std::size_t output_capacity_bytes,
+        std::size_t additional_capacity_bytes = 0)
         : state(input_state), configuration(input_configuration) {
         const std::size_t count = state.bodies.size();
-        const std::size_t fixed_bytes = barnes_hut_fixed_memory_bytes(count);
-        if (fixed_bytes > configuration.memory_budget_bytes) {
-            throw std::length_error("Barnes-Hut fixed working storage exceeds memory budget");
+        permutation.resize(count);
+        scratch.resize(count);
+        rank.resize(count);
+        accounted_fixed_bytes = checked_add(
+            checked_add(
+                actual_vector_bytes(
+                    permutation.capacity(),
+                    sizeof(std::size_t),
+                    "Barnes-Hut permutation capacity"),
+                actual_vector_bytes(
+                    scratch.capacity(),
+                    sizeof(std::size_t),
+                    "Barnes-Hut scratch capacity"),
+                "Barnes-Hut index capacity"),
+            actual_vector_bytes(
+                rank.capacity(), sizeof(std::size_t), "Barnes-Hut rank capacity"),
+            "Barnes-Hut index capacity");
+        accounted_fixed_bytes = checked_add(
+            accounted_fixed_bytes, output_capacity_bytes, "Barnes-Hut output capacity");
+        accounted_fixed_bytes = checked_add(
+            accounted_fixed_bytes,
+            additional_capacity_bytes,
+            "Barnes-Hut additional capacity");
+        if (accounted_fixed_bytes > configuration.memory_budget_bytes) {
+            throw std::length_error(
+                "Barnes-Hut actual fixed vector capacity exceeds memory budget");
         }
-        const std::size_t node_bytes = configuration.memory_budget_bytes - fixed_bytes;
+        const std::size_t node_bytes =
+            configuration.memory_budget_bytes - accounted_fixed_bytes;
         effective_maximum_nodes = std::min(
             configuration.maximum_nodes,
             node_bytes / sizeof(OctreeNode));
         if (count != 0 && effective_maximum_nodes == 0) {
             throw std::length_error("Barnes-Hut memory budget cannot hold the root node");
         }
-
-        permutation.resize(count);
-        scratch.resize(count);
-        rank.resize(count);
         for (std::size_t index = 0; index < count; ++index) {
             permutation[index] = index;
         }
@@ -141,6 +290,16 @@ struct Tree {
             throw std::length_error("Barnes-Hut node budget exceeded");
         }
         nodes.reserve(requested);
+        const std::size_t admitted_bytes = checked_add(
+            accounted_fixed_bytes,
+            actual_vector_bytes(
+                nodes.capacity(), sizeof(OctreeNode), "Barnes-Hut node capacity"),
+            "Barnes-Hut working memory");
+        if (nodes.capacity() > effective_maximum_nodes ||
+            admitted_bytes > configuration.memory_budget_bytes) {
+            throw std::length_error(
+                "Barnes-Hut actual node capacity exceeds memory budget");
+        }
     }
 
     std::size_t append_node(OctreeNode node) {
@@ -292,9 +451,12 @@ struct Tree {
         }
         statistics.node_count = nodes.size();
         statistics.working_memory_bytes = checked_add(
-            barnes_hut_fixed_memory_bytes(state.bodies.size()),
+            accounted_fixed_bytes,
             checked_multiply(nodes.capacity(), sizeof(OctreeNode), "Barnes-Hut node memory"),
             "Barnes-Hut working memory");
+        if (statistics.working_memory_bytes > configuration.memory_budget_bytes) {
+            throw std::length_error("Barnes-Hut reserved storage exceeds memory budget");
+        }
     }
 };
 
@@ -405,23 +567,16 @@ void validate_state(const SimulationState& state, double gravitational_constant_
     }
 }
 
+template <typename TraversalBudget>
 void accumulate_node(
     const Tree& tree,
     std::size_t node_index,
     std::size_t target_index,
     double gravitational_constant_value,
     CompensatedVec3& acceleration,
-    BarnesHutStatistics& statistics) {
-    const auto consume_work = [&]() {
-        const std::size_t used = checked_add(
-            statistics.visited_nodes,
-            statistics.direct_body_interactions,
-            "Barnes-Hut traversal work");
-        if (used >= tree.configuration.maximum_traversal_work) {
-            throw std::length_error("Barnes-Hut traversal work budget exceeded");
-        }
-    };
-    consume_work();
+    TraversalStatistics& statistics,
+    TraversalBudget& budget) {
+    reserve_traversal_work(budget, statistics);
     const OctreeNode& node = tree.nodes[node_index];
     ++statistics.visited_nodes;
     const std::size_t target_rank = tree.rank[target_index];
@@ -433,6 +588,7 @@ void accumulate_node(
             if (source_index == target_index) {
                 continue;
             }
+            reserve_traversal_work(budget, statistics);
             const Vec3 displacement =
                 tree.state.bodies[source_index].position_m -
                 tree.state.bodies[target_index].position_m;
@@ -440,7 +596,6 @@ void accumulate_node(
                 displacement,
                 tree.state.bodies[source_index].mass_kg,
                 gravitational_constant_value));
-            consume_work();
             ++statistics.direct_body_interactions;
         }
         return;
@@ -465,10 +620,45 @@ void accumulate_node(
                 target_index,
                 gravitational_constant_value,
                 acceleration,
-                statistics);
+                statistics,
+                budget);
         }
     }
 }
+
+void merge_traversal_statistics(
+    BarnesHutStatistics& destination,
+    const TraversalStatistics& source) {
+    destination.visited_nodes = checked_add(
+        destination.visited_nodes, source.visited_nodes, "Barnes-Hut visited-node count");
+    destination.approximated_nodes = checked_add(
+        destination.approximated_nodes,
+        source.approximated_nodes,
+        "Barnes-Hut approximated-node count");
+    destination.direct_body_interactions = checked_add(
+        destination.direct_body_interactions,
+        source.direct_body_interactions,
+        "Barnes-Hut direct-interaction count");
+}
+
+#ifdef NBODY_HAS_OPENMP
+bool parallel_traversal_requires_runtime_budget(
+    std::size_t body_count,
+    std::size_t node_count,
+    std::size_t limit) {
+    try {
+        const std::size_t per_target = checked_add(
+            node_count,
+            body_count == 0 ? 0 : body_count - 1,
+            "Barnes-Hut parallel traversal bound");
+        const std::size_t maximum_work = checked_multiply(
+            body_count, per_target, "Barnes-Hut parallel traversal bound");
+        return maximum_work > limit;
+    } catch (const std::length_error&) {
+        return true;
+    }
+}
+#endif
 
 }  // namespace
 
@@ -500,17 +690,24 @@ std::vector<Vec3> SequentialBarnesHutForceBackend::compute_accelerations(
         return {};
     }
 
+    validate_fixed_storage_lower_bound(
+        state.bodies.size(), 0, configuration_.memory_budget_bytes);
+    std::vector<Vec3> accelerations(state.bodies.size());
+    const std::size_t output_capacity_bytes = actual_vector_bytes(
+        accelerations.capacity(), sizeof(Vec3), "Barnes-Hut output capacity");
     const auto build_start = std::chrono::steady_clock::now();
-    Tree tree(state, configuration_);
+    Tree tree(state, configuration_, output_capacity_bytes);
     tree.build();
     const auto build_end = std::chrono::steady_clock::now();
     candidate_statistics = tree.statistics;
     candidate_statistics.body_count = state.bodies.size();
+    candidate_statistics.worker_threads = 1;
     candidate_statistics.tree_build_seconds =
         std::chrono::duration<double>(build_end - build_start).count();
 
     const auto force_start = std::chrono::steady_clock::now();
-    std::vector<Vec3> accelerations(state.bodies.size());
+    TraversalStatistics traversal_statistics;
+    SequentialTraversalBudget budget(configuration_.maximum_traversal_work);
     for (std::size_t target = 0; target < state.bodies.size(); ++target) {
         CompensatedVec3 acceleration;
         accumulate_node(
@@ -519,17 +716,201 @@ std::vector<Vec3> SequentialBarnesHutForceBackend::compute_accelerations(
             target,
             gravitational_constant_value,
             acceleration,
-            candidate_statistics);
+            traversal_statistics,
+            budget);
         if (!finite(acceleration.sum)) {
             throw std::domain_error("Barnes-Hut accumulated acceleration is not representable");
         }
         accelerations[target] = acceleration.sum;
     }
+    merge_traversal_statistics(candidate_statistics, traversal_statistics);
     const auto force_end = std::chrono::steady_clock::now();
     candidate_statistics.force_evaluation_seconds =
         std::chrono::duration<double>(force_end - force_start).count();
     last_statistics_ = candidate_statistics;
     return accelerations;
 }
+
+OpenMpBarnesHutForceBackend::OpenMpBarnesHutForceBackend(
+    int thread_count,
+    BarnesHutConfiguration configuration)
+    : thread_count_(thread_count), configuration_(configuration) {
+    validate_configuration(configuration_);
+    if (thread_count_ <= 0 || thread_count_ > maximum_openmp_barnes_hut_threads) {
+        throw std::invalid_argument("OpenMP Barnes-Hut thread count must be in [1, 256]");
+    }
+#ifdef NBODY_HAS_OPENMP
+    if (thread_count_ > omp_get_thread_limit()) {
+        throw std::invalid_argument("OpenMP Barnes-Hut thread count exceeds runtime limit");
+    }
+#endif
+}
+
+bool openmp_barnes_hut_compiled() noexcept {
+#ifdef NBODY_HAS_OPENMP
+    return true;
+#else
+    return false;
+#endif
+}
+
+std::vector<Vec3> OpenMpBarnesHutForceBackend::compute_accelerations(
+    const SimulationState& state,
+    double gravitational_constant_value) const {
+#ifndef NBODY_HAS_OPENMP
+    (void)state;
+    (void)gravitational_constant_value;
+    throw std::runtime_error(
+        "OpenMP Barnes-Hut is unavailable in this build; configure with NBODY_ENABLE_OPENMP=ON");
+#else
+    validate_state(state, gravitational_constant_value);
+    if (omp_in_parallel() != 0) {
+        throw std::runtime_error(
+            "OpenMP Barnes-Hut cannot be called from an active OpenMP parallel region");
+    }
+
+    BarnesHutStatistics candidate_statistics;
+    candidate_statistics.body_count = state.bodies.size();
+    if (state.bodies.empty()) {
+        last_statistics_ = candidate_statistics;
+        last_attempt_traversal_work_ = 0;
+        return {};
+    }
+    if (state.bodies.size() > static_cast<std::size_t>(
+            std::numeric_limits<std::int64_t>::max())) {
+        throw std::length_error("OpenMP Barnes-Hut body count exceeds loop index range");
+    }
+
+    const std::size_t requested_thread_storage_bytes = checked_multiply(
+        static_cast<std::size_t>(thread_count_),
+        sizeof(ThreadTraversalStatistics),
+        "OpenMP Barnes-Hut thread statistics");
+    validate_fixed_storage_lower_bound(
+        state.bodies.size(),
+        requested_thread_storage_bytes,
+        configuration_.memory_budget_bytes);
+    std::vector<Vec3> accelerations(state.bodies.size());
+    std::vector<ThreadTraversalStatistics> thread_statistics(
+        static_cast<std::size_t>(thread_count_));
+    const std::size_t output_capacity_bytes = actual_vector_bytes(
+        accelerations.capacity(), sizeof(Vec3), "Barnes-Hut output capacity");
+    const std::size_t thread_storage_bytes = checked_multiply(
+        thread_statistics.capacity(),
+        sizeof(ThreadTraversalStatistics),
+        "OpenMP Barnes-Hut thread statistics");
+    const auto build_start = std::chrono::steady_clock::now();
+    Tree tree(
+        state, configuration_, output_capacity_bytes, thread_storage_bytes);
+    tree.build();
+    const auto build_end = std::chrono::steady_clock::now();
+    candidate_statistics = tree.statistics;
+    candidate_statistics.body_count = state.bodies.size();
+    candidate_statistics.tree_build_seconds =
+        std::chrono::duration<double>(build_end - build_start).count();
+
+    ParallelTraversalBudget budget(
+        configuration_.maximum_traversal_work,
+        parallel_traversal_requires_runtime_budget(
+            state.bodies.size(), tree.nodes.size(), configuration_.maximum_traversal_work));
+    std::exception_ptr first_failure;
+    std::size_t first_failure_target = std::numeric_limits<std::size_t>::max();
+    int effective_threads = 0;
+    const std::int64_t body_count = static_cast<std::int64_t>(state.bodies.size());
+
+    const auto force_start = std::chrono::steady_clock::now();
+#pragma omp parallel num_threads(thread_count_)
+    {
+        const int thread_index = omp_get_thread_num();
+#pragma omp single
+        effective_threads = omp_get_num_threads();
+
+        TraversalStatistics& local_statistics =
+            thread_statistics[static_cast<std::size_t>(thread_index)].values;
+#ifdef NBODY_BARNES_HUT_TEST_RUNTIME_SCHEDULE
+#pragma omp for schedule(runtime)
+#else
+#pragma omp for schedule(static)
+#endif
+        for (std::int64_t raw_target = 0; raw_target < body_count; ++raw_target) {
+            if (budget.exhausted()) {
+                continue;
+            }
+            const std::size_t target = static_cast<std::size_t>(raw_target);
+            try {
+                CompensatedVec3 acceleration;
+                accumulate_node(
+                    tree,
+                    0,
+                    target,
+                    gravitational_constant_value,
+                    acceleration,
+                    local_statistics,
+                    budget);
+                if (!finite(acceleration.sum)) {
+                    throw std::domain_error(
+                        "Barnes-Hut accumulated acceleration is not representable");
+                }
+                accelerations[target] = acceleration.sum;
+            } catch (...) {
+                if (budget.exhausted()) {
+                    continue;
+                }
+                const std::exception_ptr candidate_failure = std::current_exception();
+#pragma omp critical(nbody_barnes_hut_failure)
+                {
+                    if (target < first_failure_target) {
+                        first_failure_target = target;
+                        first_failure = candidate_failure;
+                    }
+                }
+            }
+        }
+    }
+    const auto force_end = std::chrono::steady_clock::now();
+
+    std::size_t observed_work = budget.consumed();
+    if (!budget.requires_runtime_tracking()) {
+        observed_work = 0;
+        for (int thread = 0; thread < effective_threads; ++thread) {
+            const auto& values =
+                thread_statistics[static_cast<std::size_t>(thread)].values;
+            observed_work = checked_add(
+                observed_work, values.charged_work, "OpenMP Barnes-Hut attempt work");
+        }
+    }
+    last_attempt_traversal_work_ = observed_work;
+
+    if (effective_threads != thread_count_) {
+        throw std::runtime_error(
+            "OpenMP runtime did not honor the configured Barnes-Hut thread count");
+    }
+    if (budget.exhausted()) {
+        throw std::length_error("Barnes-Hut traversal work budget exceeded");
+    }
+    if (first_failure) {
+        std::rethrow_exception(first_failure);
+    }
+    for (int thread = 0; thread < effective_threads; ++thread) {
+        merge_traversal_statistics(
+            candidate_statistics,
+            thread_statistics[static_cast<std::size_t>(thread)].values);
+    }
+    candidate_statistics.worker_threads = effective_threads;
+    candidate_statistics.force_evaluation_seconds =
+        std::chrono::duration<double>(force_end - force_start).count();
+    last_statistics_ = candidate_statistics;
+    return accelerations;
+#endif
+}
+
+#ifdef NBODY_BARNES_HUT_TEST_RUNTIME_SCHEDULE
+// Deliberately absent from production builds. The schedule-variation test
+// calls this symbol to prove that it linked the schedule(runtime) variant of
+// this exact implementation rather than the production schedule(static)
+// object or a duplicated traversal.
+bool openmp_barnes_hut_runtime_schedule_test_hook_enabled() noexcept {
+    return true;
+}
+#endif
 
 }  // namespace nbody

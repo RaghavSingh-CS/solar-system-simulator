@@ -522,6 +522,20 @@ void test_rejections_and_resource_budgets() {
     require(rejected, "negative gravitational constant was accepted");
 }
 
+void test_cpu_only_openmp_rejection() {
+    if (nbody::openmp_barnes_hut_compiled()) {
+        return;
+    }
+    nbody::OpenMpBarnesHutForceBackend backend(1, test_configuration());
+    bool rejected = false;
+    try {
+        (void)backend.compute_accelerations(nbody::make_seeded_synthetic_system(2, 1));
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    require(rejected, "CPU-only Barnes-Hut build silently accepted OpenMP execution");
+}
+
 double maximum_position_difference(
     const nbody::SimulationState& first,
     const nbody::SimulationState& second) {
@@ -630,6 +644,7 @@ int main() {
         test_geometries_translation_scaling_and_order();
         test_extreme_scales_and_degenerate_paths();
         test_rejections_and_resource_budgets();
+        test_cpu_only_openmp_rejection();
         test_trajectory_and_conservation_characterization();
         std::cout << "all Barnes-Hut tests passed\n";
         return 0;
