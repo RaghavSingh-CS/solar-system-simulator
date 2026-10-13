@@ -5,7 +5,10 @@
 - Newtonian point masses in an inertial barycentric Cartesian frame.
 - SI base units: kilograms, metres, seconds. Output records units explicitly in its header.
 - Pair acceleration: `a_i = G * sum(j != i) m_j (r_j-r_i) / |r_j-r_i|^3`.
-- The direct-force implementations use no gravitational softening; coincident bodies are rejected. The viewer's largest workloads remain presentation/inspection cases rather than implying an approximate solver.
+- The direct-force implementations and Stage 1 sequential Barnes--Hut solver
+  use no gravitational softening; coincident bodies are rejected. Barnes--Hut
+  is opt-in in the headless runner and does not change the viewer workload
+  gates.
 - `G = 6.67430e-11 m^3 kg^-1 s^-2`, the 2022 CODATA recommended value (unchanged numerically from 2018), sourced from [NIST](https://physics.nist.gov/constants).
 
 ## Integrator decision
@@ -23,6 +26,7 @@ scenario/data -> SimulationState -> IForceBackend -> VelocityVerlet
                         |                  +-- OpenMP (implemented)
                         |                  +-- CUDA (validated on Tesla T4)
                         |                  +-- MPI / MPI+OpenMP (implemented, optional)
+                        |                  +-- sequential Barnes--Hut (implemented, opt-in)
                         +-> diagnostics -> CSV/headless benchmark
                         +-> immutable counterfactual snapshot
                               -> paired Sequential/OpenMP/CUDA runner
@@ -75,6 +79,18 @@ The interface is `ForceBackend::compute_accelerations(state, G)`. `sequential_fo
 `CudaForceBackend` implements the same interface with one CUDA thread per destination body and ascending source traversal. `CudaVelocityVerlet` adds a reusable device-resident execution path: old acceleration, position update, new acceleration, and velocity update remain on the GPU for every step. This avoids presenting a force-only kernel as complete integration timing while retaining the shared force contract for correctness tests.
 
 `MpiForceBackend` also implements the shared interface. Every rank holds the same complete state; a deterministic contiguous partition assigns destination bodies, with any remainder assigned to lower ranks. Each rank computes only its local acceleration slice, then `MPI_Allgatherv` reconstructs the complete acceleration vector on every rank. An `MPI_Allreduce` propagates invalid-input status before that exchange. Consequently both force evaluations in Velocity Verlet see globally consistent positions and every rank applies identical drift/kick updates. Memory is O(N) per rank, local force work is O(N^2/P), and each force evaluation communicates O(N) acceleration data. The optional hybrid mode applies `schedule(static)` OpenMP parallelism only inside the local target loop; MPI calls occur outside parallel regions under `MPI_THREAD_FUNNELED`. A future one-rank-per-GPU design is only a conceptual extension, not an implemented or measured path.
+
+`SequentialBarnesHutForceBackend` is a separate optional force solver using the
+same acceleration contract and unchanged Velocity Verlet integrator. Its
+index-based 3D octree uses stable octant partitioning, contiguous body ranges,
+monopole centers of mass, explicit target-range membership, and the standard
+`s / d < theta` opening criterion. Nodes containing the target are always
+opened. Checked node/memory budgets plus leaf occupancy, maximum depth, and
+minimum-cell termination prevent unbounded subdivision. Backend and solver are
+separate headless choices: Stage 1 accepts only `sequential + barnes-hut` and
+rejects unsupported combinations without fallback. Direct remains default;
+OpenMP/CUDA Barnes--Hut and viewer integration remain future stages. Full
+policy and evidence are in [barnes_hut.md](barnes_hut.md).
 
 OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the reference, headless runner, and sequential benchmark without finding or linking OpenMP. When explicitly enabled, CMake requires `OpenMP::OpenMP_CXX` and emits a targeted configuration error if unavailable.
 

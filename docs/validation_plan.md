@@ -48,6 +48,32 @@ Initial thresholds for the analytic two-body CI test are implementation guards, 
 - Record omitted physics (relativity, oblateness, minor bodies) and do not attribute model error to numerical integration.
 - Use conservation diagnostics as internal checks, not as proof of ephemeris accuracy.
 
+## Sequential Barnes--Hut Stage 1 validation
+
+The direct solver remains the numerical reference. Barnes--Hut tests retain
+absolute, RMS, maximum-relative, and 95th-percentile relative acceleration
+errors because relative error alone is unstable for near-zero net forces.
+Coverage includes empty and singleton states, analytic two-body equivalence,
+seeded asymmetric clusters, planar/collinear distributions, translation and
+consistent mass/length scaling, extreme representable binary64 coordinates,
+near-coincident and exact-coincident inputs, and maximum-depth/node/traversal/
+memory termination. Repeated builds must reproduce forces and structural traversal
+counters exactly.
+
+The accuracy-first baseline is `theta=0.25`; `theta=0.5` and `0.8` are retained
+as exploratory tradeoff points, not globally valid accuracy settings. A
+near-zero theta test requires all non-self pairs to reach direct leaves and
+agree with direct force within floating-point accumulation tolerance. A short
+48-body trajectory compares direct and approximate results under identical
+Velocity Verlet timesteps and characterizes energy drift. These bounded
+synthetic checks do not establish long-horizon orbital or ephemeris accuracy.
+
+Resource tests require checked size arithmetic, explicit failures at node and
+memory limits, bounded depth for highly unbalanced trees, and rejection of
+non-finite/nonrepresentable geometry. A headless CTest exercises the supported
+`sequential + barnes-hut` composition; another requires an unsupported backend
+pairing to fail so fallback cannot be silent.
+
 ## Reproducibility
 
 Every result row must carry commit, build type, compiler/options, backend, hardware, scenario hash, seed, precision, N, dt, steps, repetition, and warm-up policy. Failed runs remain in raw data with a reason.

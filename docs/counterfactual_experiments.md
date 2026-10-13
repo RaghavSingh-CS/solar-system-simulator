@@ -255,8 +255,10 @@ without fallback, context reset, state corruption, or deadlock. Archive the
 configure cache, complete test output, executable/source identity, and
 hardware/toolchain provenance with the validation record. No GPU accuracy or
 performance claim exists until that gate passes.
-Barnes--Hut remains mandatory future work for Sequential, OpenMP, and
-CUDA with direct-force verification and controlled large-N evaluation.
+Sequential Barnes--Hut now exists as a separate Stage 1 headless force solver,
+but this counterfactual engine remains direct-force-only. OpenMP/CUDA
+Barnes--Hut, counterfactual integration, direct-force verification at broader
+scales, and controlled large-N evaluation remain future work.
 
 Frozen Stage 5 benchmark code, protocols, policy, scripts, and evidence are not
 dependencies of this engine and remain unchanged.

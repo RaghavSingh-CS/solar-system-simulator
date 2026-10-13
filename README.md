@@ -6,7 +6,8 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 
 ## Current capabilities
 
-- Newtonian O(N^2) force evaluation in double precision.
+- Newtonian direct O(N^2) force evaluation in double precision plus an
+  accuracy-first sequential 3D Barnes--Hut monopole solver.
 - Shared force-backend interface with sequential and OpenMP implementations.
 - SI units and barycentric Cartesian coordinates.
 - Fixed-step Velocity Verlet integration.
@@ -159,6 +160,23 @@ Use `--help` for options. CSV comment lines document scenario, units, integrator
 time_s,body_index,name,mass_kg,x_m,y_m,z_m,vx_m_s,vy_m_s,vz_m_s
 ```
 
+Direct force remains the headless default. Stage 1 Barnes--Hut is selected
+independently from the execution backend and currently supports only the
+sequential backend:
+
+```powershell
+.\build\cpu-release\nbody_headless.exe --backend sequential --solver barnes-hut `
+  --theta 0.25 --steps 5000 --sample-every 50 --output orbit-bh.csv
+```
+
+The default accuracy-first policy uses `theta=0.25`, leaf capacity 8, maximum
+depth 64, minimum cell size `1e-6 m`, one million nodes, a 256 MiB working
+budget, and one billion visited-node/direct-interaction work units. Unsupported
+backend/solver combinations fail explicitly. See
+[Barnes--Hut Stage 1](docs/barnes_hut.md) for acceptance semantics, numerical
+limits, tests, and exploratory crossover evidence. This does not enable
+Barnes--Hut in the viewer or in OpenMP/CUDA, and it does not alter Stage 5.
+
 Run one reproducible benchmark configuration:
 
 ```powershell
@@ -215,6 +233,7 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/visualization.md`: final viewer provenance, presentation policy, controls, and validation boundary.
 - `docs/repository_layout.md`: canonical build policy, historical-build inventory, and safe cleanup manifest.
 - `docs/mpi_and_large_n.md`: MPI/hybrid architecture, workload safety policy, and bounded pilot protocol.
+- `docs/barnes_hut.md`: sequential tree/acceptance policy, numerical validation, resource bounds, and exploratory timings.
 - `docs/MASTER_LEDGER.md`: status, decisions, evidence, limitations, and next actions.
 - `scripts/run_cpu_benchmarks.py`: controlled CPU experiment and statistical-summary runner.
 - `scripts/prepare_stage5_build.py`: fresh source-bound build, tool/topology capture, CTest, and manifest.

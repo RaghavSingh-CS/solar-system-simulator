@@ -29,7 +29,7 @@ Last updated: 2026-10-13
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
-| Barnes--Hut large-N solver roadmap | **REQUIRED / UNIMPLEMENTED** | Sequential, OpenMP, and CUDA Barnes--Hut implementations, numerical verification against direct force, and controlled large-N performance evaluation are mandatory future work |
+| Barnes--Hut large-N solver roadmap | **STAGE 1 SEQUENTIAL IMPLEMENTED / REVIEW PENDING** | Deterministic bounded sequential octree, direct-force comparison, headless selection, and exploratory 128--4096-body evidence; OpenMP/CUDA variants and controlled large-N evaluation remain mandatory |
 
 ## Decisions and rationale
 
@@ -53,11 +53,11 @@ Last updated: 2026-10-13
 - Stage 6C remains optional and one-way dependent on the simulation core; presentation geometry cannot affect physics, display timing is never benchmark evidence, and no Auto backend selector exists.
 - Stage 6D MPI uses replicated global state, deterministic contiguous force-target partitions, and full acceleration exchange. Hybrid OpenMP is confined to local target work under `MPI_THREAD_FUNNELED`.
 - Stage 6D large-N display support does not change the exact O(N^2) algorithm: continuous viewer computation ends above N=1024, manual direct-force steps end above N=8192, and larger workloads are display-only.
-- Barnes--Hut is the required future approximate-force path for large-N work,
-  not an optional enhancement. Its Sequential implementation must establish the
-  reference tree/acceptance semantics before matched OpenMP and CUDA variants;
-  all three require numerical verification against direct force and a separate
-  controlled large-N performance evaluation. None is implemented or validated.
+- Barnes--Hut is the required approximate-force path for large-N work, not an
+  optional enhancement. Stage 1 implements the Sequential reference
+  tree/acceptance semantics and validates it against direct force. Matched
+  OpenMP and CUDA variants plus a separate controlled large-N performance
+  evaluation remain mandatory and unimplemented.
 - CUDA viewer execution reuses the existing `CudaVelocityVerlet` allocation and
   advances one complete fixed-step frame batch per call. Host
   `SimulationState` remains authoritative at completed advancement boundaries;
@@ -1778,6 +1778,100 @@ cleanrooms, `solar-system-simulator.zip`, frozen Stage 5, and the JPL dataset
 remain preserved. No physics, integrator, CUDA-kernel, benchmark, protocol, or
 scientific-data source file changed in this cleanup milestone.
 
+## Sequential Barnes--Hut Stage 1
+
+### Implementation record
+
+Stage 1 was developed on `feature/cuda-visualizer` from
+`b3b83fb967910f5476baec9796cc4fe3c58dc98f`. The solver was committed as
+`eb6dac75012f47d60a87417f6ccecf6df7c4576a` and its exploratory evidence as
+`a035b3ed6b60f11ce3377358f47e6b6dc2ba9231`. It implements the required
+Sequential Barnes--Hut reference without changing the direct Sequential,
+OpenMP, CUDA, MPI, or Velocity Verlet implementations. `nbody_barnes_hut` is a
+separate library implementing the existing `ForceBackend` acceleration
+contract. The headless runner exposes backend and solver as distinct choices;
+direct remains default, only `sequential + barnes-hut` is supported, and
+unsupported combinations or Barnes--Hut options supplied to direct force fail
+without fallback.
+
+The deterministic 3D octree stores nodes in a contiguous vector and child
+indices rather than pointers. Stable octant partitioning produces contiguous
+body ranges and an inverse-rank map; this lets traversal prove whether a node
+contains the target after permutation and prevents aggregate self force. Nodes
+store compensated mass sums and online weighted monopole centers without
+forming overflow-prone mass-position products. The standard strict
+`side / distance < theta` criterion accepts only nodes that do not contain the
+target; opened leaves evaluate non-self members directly under the unchanged
+unsoftened Newtonian law.
+
+Termination is bounded by preferred leaf occupancy 8, maximum depth 64,
+minimum cell size `1e-6 m`, one million nodes, one billion traversal work
+units, and 256 MiB of accounted index/output/node-arena storage. Checked
+`size_t` arithmetic rejects size overflow. Exact coincidences reach a bounded
+termination leaf and are rejected as singular; near coincidences remain direct.
+Stable norms, bounded child-center shifts, compensated mass summation, and a
+binary64 exponent-scaled component fallback handle representable extreme
+coordinates/forces without assuming that MSVC `long double` has extra range.
+Non-finite or genuinely nonrepresentable inputs/results fail explicitly.
+
+### Numerical and performance status
+
+The accuracy-first provisional default is `theta=0.25`; it is not a universal
+optimum. Focused regression covers empty/single/two-body, asymmetric, symmetric,
+clustered, planar, collinear, translated, scaled, near-coincident, exact-
+coincident, near-maximum, very small/large, mass-ratio, nonrepresentable, deeply
+unbalanced, deterministic-order, self-exclusion, monopole mass/center, and all
+resource-boundary cases. Near-zero theta opens every non-self pair to a direct
+leaf. Absolute, RMS, maximum-relative, and 95th-percentile force errors are
+retained together so cancellation does not turn a near-zero reference force
+into a misleading standalone maximum-relative claim.
+
+The 48-body 3000-second synthetic trajectory characterization uses identical
+Velocity Verlet settings at both 25-second and 12.5-second timesteps. At 25
+seconds, observed direct/Barnes--Hut maximum position separation was exactly
+zero at represented precision for `theta=0.25` and `0.21823208696368748 m` for
+`theta=0.8`. Relative energy drift was `1.9898432656444739e-15` and
+`3.4913597995655239e-8`; normalized angular-momentum drift was
+`7.7249125581288963e-16` and `2.10959820353425e-6`. The 12.5-second results were
+consistent (`0`/`0.21823184885520824 m`, `9.1838919952821884e-16`/
+`3.4913596465006577e-8`, and `2.1029529340356154e-15`/
+`2.1095982030977879e-6`). These are bounded synthetic regression observations,
+not long-horizon accuracy or ephemeris claims.
+
+The retained 108-row exploratory Release matrix covers uniform, clustered, and
+planar distributions at `N=128,512,2048,4096`, theta `0.25,0.5,0.8`, one
+warm-up, and three repetitions. It separately records direct-force wall time,
+tree-build time, tree-force time, Barnes--Hut force-call wall time, complete
+two-force Velocity Verlet step time, tree/work/memory counters, and four error
+metrics. Raw CSV SHA-256 is
+`226730b66c96a75822520a962199404c3bb27a1d5b76b9f3d2fd74890d621846`.
+At 4096 bodies, median direct-force time divided by the full Barnes--Hut
+force-call wall time (tree build plus traversal) was
+`0.23x/0.31x/1.27x` for uniform/clustered/planar at theta `0.25`,
+`0.76x/0.78x/2.84x` at theta `0.5`, and `2.15x/1.22x/5.67x` at theta `0.8`.
+At theta `0.25`, corresponding 95th-percentile relative acceleration errors
+were `6.07e-4`, `2.81e-4`, and `3.84e-3`. Distribution and theta sensitivity
+preclude a universal crossover; nothing is extrapolated to 50K--100K.
+
+Final local Release validation of this uncommitted candidate passed all
+`16/16` canonical CPU CTests and all `17/17` canonical OpenMP CTests. The
+OpenMP configuration exercises the unchanged OpenMP direct-force backend; it
+does **not** implement or validate an OpenMP Barnes--Hut backend. The focused
+astronomical catalog/dataset/snapshot integrity subset passed `3/3`, the
+repository-layout and pinned-dependency-cache checks passed, and explicit
+headless smoke runs completed for Sequential direct and Sequential
+Barnes--Hut. Unsupported `openmp + barnes-hut` and Barnes--Hut-only options
+supplied to the direct solver both failed with diagnostics as required.
+
+This matrix is explicitly exploratory, single-machine, three-repetition,
+uncontrolled-host evidence measured immediately before commit from the source
+captured byte-identically by `eb6dac75012f47d60a87417f6ccecf6df7c4576a`.
+It is not frozen Stage 5 evidence, does not alter any Stage 5 policy, and cannot
+justify an automatic selector. Independent source-level adversarial review
+passed on 2026-10-13 without a P1 blocker. OpenMP Barnes--Hut, CUDA
+Barnes--Hut, counterfactual/viewer integration, controlled large-N evaluation,
+and RTX 4050 compilation/runtime/performance validation all remain pending.
+
 ## Known limitations
 
 - A sourced common-epoch 60-body JPL initial-condition snapshot now exists,
@@ -1785,6 +1879,10 @@ scientific-data source file changed in this cleanup milestone.
   element approximation. Neither scenario reproduces JPL's complete dynamical
   model or establishes long-horizon ephemeris agreement.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
+- Sequential Barnes--Hut uses monopoles and target-local acceptance, so it does
+  not preserve exact pairwise force symmetry. Theta `0.25` is provisional and
+  distribution-dependent; no OpenMP/CUDA tree, viewer path, or validated
+  50K--100K interactive force workload exists.
 - CUDA physics is T4-validated and the viewer has an opt-in batched CUDA path,
   but viewer CUDA compilation/runtime and a same-machine CPU/OpenMP/CUDA matrix
   remain unverified until an NVIDIA/CUDA host is available. MPI is implemented
@@ -1802,6 +1900,8 @@ scientific-data source file changed in this cleanup milestone.
 3. Only in a separately authorized final session, acquire calibration, freeze the deterministic policy, acquire held-out evidence, and evaluate without refitting.
 4. Run the final Stage 6D native-window visual checklist in `docs/visualization.md`; the feature freeze closes after this gate.
 5. Do not tune the frozen policy, optimize backends, or pool historical cross-machine evidence during Stage 5B collection.
+6. Keep the independently reviewed Sequential Barnes--Hut semantics frozen;
+   authorize OpenMP and CUDA Barnes--Hut only as separate later increments.
 
 ## Commit references
 
@@ -1832,3 +1932,7 @@ scientific-data source file changed in this cleanup milestone.
   focused GUI/worker tests.
 - `dade679` — counterfactual GUI architecture, validation boundary, scientific
   limitations, and ledger documentation.
+- `eb6dac7` — deterministic bounded Sequential Barnes--Hut solver, headless
+  selection contract, and focused regression suite.
+- `a035b3e` — exploratory Barnes--Hut benchmark harness plus hash-custodied
+  accuracy/performance evidence.
