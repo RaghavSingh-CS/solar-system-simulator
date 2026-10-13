@@ -13,6 +13,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace nbody {
@@ -1098,8 +1099,352 @@ CudaBarnesHutFailure CudaBarnesHutForceBackend::last_failure() const noexcept {
     return impl_->last_failure_;
 }
 
+bool CudaBarnesHutForceBackend::is_terminal() const noexcept {
+    return impl_->terminal_;
+}
+
 CudaDeviceInfo CudaBarnesHutForceBackend::device_info() const {
     return impl_->device_info_;
+}
+
+namespace {
+
+std::size_t integration_body_storage_bytes(const SimulationState& state) {
+    std::size_t result = checked_multiply(
+        state.bodies.capacity(), sizeof(Body),
+        "CUDA Barnes-Hut integration body storage");
+    for (const Body& body : state.bodies) {
+        result = checked_add(
+            result,
+            checked_add(
+                body.name.capacity(), 1U,
+                "CUDA Barnes-Hut integration body name storage"),
+            "CUDA Barnes-Hut integration body storage");
+    }
+    return result;
+}
+
+std::size_t integration_vector_storage_bytes(
+    const std::vector<Vec3>& values,
+    const char* context) {
+    return checked_multiply(values.capacity(), sizeof(Vec3), context);
+}
+
+std::size_t integration_storage_lower_bound(const SimulationState& state) {
+    std::size_t result = checked_multiply(
+        state.bodies.size(), sizeof(Body),
+        "CUDA Barnes-Hut integration body lower bound");
+    for (const Body& body : state.bodies) {
+        result = checked_add(
+            result,
+            checked_add(
+                body.name.size(), 1U,
+                "CUDA Barnes-Hut integration body-name lower bound"),
+            "CUDA Barnes-Hut integration lower bound");
+    }
+    const std::size_t acceleration_bytes = checked_multiply(
+        state.bodies.size(), sizeof(Vec3),
+        "CUDA Barnes-Hut integration acceleration lower bound");
+    result = checked_add(
+        result, acceleration_bytes,
+        "CUDA Barnes-Hut integration lower bound");
+    return checked_add(
+        result, acceleration_bytes,
+        "CUDA Barnes-Hut integration lower bound");
+}
+
+void validate_integration_inputs(
+    const SimulationState& state,
+    double dt_s,
+    double gravitational_constant_value,
+    const CudaBarnesHutIntegrationConfiguration& configuration) {
+    if (!(dt_s > 0.0) || !std::isfinite(dt_s)) {
+        throw std::invalid_argument("time step must be finite and positive");
+    }
+    if (!(gravitational_constant_value > 0.0) ||
+        !std::isfinite(gravitational_constant_value)) {
+        throw std::invalid_argument(
+            "gravitational constant must be finite and positive");
+    }
+    if (!std::isfinite(state.time_s)) {
+        throw std::invalid_argument("simulation time must be finite");
+    }
+    const double half_dt_squared = 0.5 * dt_s * dt_s;
+    const double next_time = state.time_s + dt_s;
+    if (!std::isfinite(half_dt_squared) || !std::isfinite(next_time)) {
+        throw std::invalid_argument(
+            "time step produces nonrepresentable integration arithmetic");
+    }
+    for (const Body& body : state.bodies) {
+        if (!(body.mass_kg > 0.0) || !std::isfinite(body.mass_kg) ||
+            !std::isfinite(body.position_m.x) ||
+            !std::isfinite(body.position_m.y) ||
+            !std::isfinite(body.position_m.z) ||
+            !std::isfinite(body.velocity_m_s.x) ||
+            !std::isfinite(body.velocity_m_s.y) ||
+            !std::isfinite(body.velocity_m_s.z)) {
+            throw std::invalid_argument(
+                "integration state must contain finite positions, velocities, and positive masses");
+        }
+    }
+    if (configuration.host_integration_memory_budget_bytes == 0U) {
+        throw std::invalid_argument(
+            "CUDA Barnes-Hut integration memory budget must be positive");
+    }
+    if (integration_storage_lower_bound(state) >
+        configuration.host_integration_memory_budget_bytes) {
+        throw std::length_error(
+            "CUDA Barnes-Hut integration state exceeds host memory budget");
+    }
+}
+
+void require_finite_integration_vector(const Vec3& value, const char* context) {
+    if (!std::isfinite(value.x) || !std::isfinite(value.y) ||
+        !std::isfinite(value.z)) {
+        throw std::domain_error(context);
+    }
+}
+
+}  // namespace
+
+class CudaBarnesHutVelocityVerlet::Impl {
+public:
+    explicit Impl(const CudaBarnesHutIntegrationConfiguration& configuration)
+        : force(configuration.force) {}
+
+    void publish_failure(CudaBarnesHutIntegrationPhase phase) noexcept {
+        last_failure.phase = phase;
+        last_failure.executor_terminal = force.is_terminal();
+        if (phase == CudaBarnesHutIntegrationPhase::first_force_evaluation ||
+            phase == CudaBarnesHutIntegrationPhase::second_force_evaluation ||
+            last_failure.executor_terminal) {
+            last_failure.force_failure = force.last_failure();
+        } else {
+            last_failure.force_failure = {};
+        }
+    }
+
+    CudaBarnesHutForceBackend force;
+    CudaBarnesHutIntegrationStatistics last_statistics;
+    CudaBarnesHutIntegrationFailure last_failure;
+#ifdef NBODY_CUDA_BARNES_HUT_ENABLE_TEST_HOOKS
+    std::size_t advance_attempts{0};
+#endif
+};
+
+CudaBarnesHutVelocityVerlet::CudaBarnesHutVelocityVerlet(
+    CudaBarnesHutIntegrationConfiguration configuration)
+    : configuration_(std::move(configuration)) {
+    if (configuration_.host_integration_memory_budget_bytes == 0U) {
+        throw std::invalid_argument(
+            "CUDA Barnes-Hut integration memory budget must be positive");
+    }
+    (void)cuda_barnes_hut_step_traversal_work_limit(configuration_.force);
+    impl_ = std::make_unique<Impl>(configuration_);
+}
+
+CudaBarnesHutVelocityVerlet::~CudaBarnesHutVelocityVerlet() = default;
+CudaBarnesHutVelocityVerlet::CudaBarnesHutVelocityVerlet(
+    CudaBarnesHutVelocityVerlet&&) noexcept = default;
+CudaBarnesHutVelocityVerlet& CudaBarnesHutVelocityVerlet::operator=(
+    CudaBarnesHutVelocityVerlet&&) noexcept = default;
+
+void CudaBarnesHutVelocityVerlet::advance(
+    SimulationState& state,
+    double dt_s,
+    double gravitational_constant_value) {
+    static_assert(
+        std::is_nothrow_move_assignable<SimulationState>::value,
+        "transactional state commit must be noexcept");
+
+    CudaBarnesHutIntegrationPhase phase =
+        CudaBarnesHutIntegrationPhase::input_validation;
+    try {
+#ifdef NBODY_CUDA_BARNES_HUT_ENABLE_TEST_HOOKS
+        if (impl_->advance_attempts == std::numeric_limits<std::size_t>::max()) {
+            throw std::length_error(
+                "CUDA Barnes-Hut integration test-hook attempt counter overflow");
+        }
+        const std::size_t advance_attempt = ++impl_->advance_attempts;
+#endif
+        if (impl_->force.is_terminal()) {
+            throw std::runtime_error(
+                "CUDA Barnes-Hut integrator is terminal after a runtime failure; restart the process before further GPU work");
+        }
+        validate_integration_inputs(
+            state, dt_s, gravitational_constant_value, configuration_);
+
+        SimulationState candidate = state;
+        const std::size_t candidate_body_bytes =
+            integration_body_storage_bytes(candidate);
+        const std::size_t acceleration_lower_bound = checked_multiply(
+            state.bodies.size(), sizeof(Vec3),
+            "CUDA Barnes-Hut integration acceleration lower bound");
+        const std::size_t pre_force_storage = checked_add(
+            checked_add(
+                candidate_body_bytes, acceleration_lower_bound,
+                "CUDA Barnes-Hut integration storage"),
+            acceleration_lower_bound,
+            "CUDA Barnes-Hut integration storage");
+        if (pre_force_storage >
+            configuration_.host_integration_memory_budget_bytes) {
+            throw std::length_error(
+                "CUDA Barnes-Hut actual candidate capacity exceeds host integration memory budget");
+        }
+
+        phase = CudaBarnesHutIntegrationPhase::first_force_evaluation;
+        std::vector<Vec3> old_accelerations =
+            impl_->force.compute_accelerations(
+                candidate, gravitational_constant_value);
+        phase = CudaBarnesHutIntegrationPhase::
+            integration_post_force_validation;
+        if (old_accelerations.size() != candidate.bodies.size()) {
+            throw std::logic_error(
+                "CUDA Barnes-Hut first force result has the wrong body count");
+        }
+        const CudaBarnesHutStatistics first_force =
+            impl_->force.last_statistics();
+#ifdef NBODY_CUDA_BARNES_HUT_ENABLE_TEST_HOOKS
+        if (configuration_.test_resource_failure_point ==
+                CudaBarnesHutIntegrationConfiguration::
+                    TestResourceFailurePoint::after_first_force &&
+            advance_attempt ==
+                configuration_.test_resource_failure_advance) {
+            throw std::length_error(
+                "injected CUDA Barnes-Hut integration resource failure after first force evaluation");
+        }
+#endif
+        const std::size_t after_first_storage = checked_add(
+            checked_add(
+                candidate_body_bytes,
+                integration_vector_storage_bytes(
+                    old_accelerations,
+                    "CUDA Barnes-Hut old acceleration storage"),
+                "CUDA Barnes-Hut integration storage"),
+            acceleration_lower_bound,
+            "CUDA Barnes-Hut integration storage");
+        if (after_first_storage >
+            configuration_.host_integration_memory_budget_bytes) {
+            throw std::length_error(
+                "CUDA Barnes-Hut old acceleration capacity exceeds host integration memory budget");
+        }
+
+        phase = CudaBarnesHutIntegrationPhase::position_update;
+        const double half_dt_squared = 0.5 * dt_s * dt_s;
+        for (std::size_t index = 0; index < candidate.bodies.size(); ++index) {
+            candidate.bodies[index].position_m +=
+                candidate.bodies[index].velocity_m_s * dt_s +
+                old_accelerations[index] * half_dt_squared;
+            require_finite_integration_vector(
+                candidate.bodies[index].position_m,
+                "CUDA Barnes-Hut position update produced non-finite state");
+        }
+
+        phase = CudaBarnesHutIntegrationPhase::second_force_evaluation;
+        std::vector<Vec3> new_accelerations =
+            impl_->force.compute_accelerations(
+                candidate, gravitational_constant_value);
+        phase = CudaBarnesHutIntegrationPhase::
+            integration_post_force_validation;
+        if (new_accelerations.size() != candidate.bodies.size()) {
+            throw std::logic_error(
+                "CUDA Barnes-Hut second force result has the wrong body count");
+        }
+        const CudaBarnesHutStatistics second_force =
+            impl_->force.last_statistics();
+
+#ifdef NBODY_CUDA_BARNES_HUT_ENABLE_TEST_HOOKS
+        if (configuration_.test_resource_failure_point ==
+                CudaBarnesHutIntegrationConfiguration::
+                    TestResourceFailurePoint::after_second_force &&
+            advance_attempt ==
+                configuration_.test_resource_failure_advance) {
+            throw std::length_error(
+                "injected CUDA Barnes-Hut integration resource failure after second force evaluation");
+        }
+#endif
+        const std::size_t actual_integration_storage = checked_add(
+            checked_add(
+                candidate_body_bytes,
+                integration_vector_storage_bytes(
+                    old_accelerations,
+                    "CUDA Barnes-Hut old acceleration storage"),
+                "CUDA Barnes-Hut integration storage"),
+            integration_vector_storage_bytes(
+                new_accelerations,
+                "CUDA Barnes-Hut new acceleration storage"),
+            "CUDA Barnes-Hut integration storage");
+        if (actual_integration_storage >
+            configuration_.host_integration_memory_budget_bytes) {
+            throw std::length_error(
+                "CUDA Barnes-Hut acceleration capacity exceeds host integration memory budget");
+        }
+
+        const std::size_t step_work = checked_add(
+            first_force.traversal_work,
+            second_force.traversal_work,
+            "CUDA Barnes-Hut per-step traversal work");
+        const std::size_t step_work_limit =
+            cuda_barnes_hut_step_traversal_work_limit(configuration_.force);
+        if (step_work > step_work_limit) {
+            throw std::logic_error(
+                "CUDA Barnes-Hut per-step traversal work exceeded its hard limit");
+        }
+
+        phase = CudaBarnesHutIntegrationPhase::velocity_update;
+        const double half_dt = 0.5 * dt_s;
+        for (std::size_t index = 0; index < candidate.bodies.size(); ++index) {
+            candidate.bodies[index].velocity_m_s +=
+                (old_accelerations[index] + new_accelerations[index]) * half_dt;
+            require_finite_integration_vector(
+                candidate.bodies[index].velocity_m_s,
+                "CUDA Barnes-Hut velocity update produced non-finite state");
+            if (candidate.bodies[index].mass_kg != state.bodies[index].mass_kg ||
+                candidate.bodies[index].name != state.bodies[index].name) {
+                throw std::logic_error(
+                    "CUDA Barnes-Hut integration changed body identity or mass");
+            }
+        }
+        candidate.time_s += dt_s;
+        if (!std::isfinite(candidate.time_s)) {
+            throw std::domain_error(
+                "CUDA Barnes-Hut integration produced non-finite simulation time");
+        }
+
+        CudaBarnesHutIntegrationStatistics successful_statistics;
+        successful_statistics.first_force = first_force;
+        successful_statistics.second_force = second_force;
+        successful_statistics.step_traversal_work = step_work;
+        successful_statistics.step_traversal_work_limit = step_work_limit;
+        successful_statistics.host_integration_storage_bytes =
+            actual_integration_storage;
+
+        phase = CudaBarnesHutIntegrationPhase::state_commit;
+        state = std::move(candidate);
+        impl_->last_statistics = successful_statistics;
+        impl_->last_failure = {};
+    } catch (...) {
+        impl_->publish_failure(phase);
+        throw;
+    }
+}
+
+CudaBarnesHutIntegrationStatistics
+CudaBarnesHutVelocityVerlet::last_statistics() const noexcept {
+    return impl_->last_statistics;
+}
+
+CudaBarnesHutIntegrationFailure
+CudaBarnesHutVelocityVerlet::last_failure() const noexcept {
+    return impl_->last_failure;
+}
+
+bool CudaBarnesHutVelocityVerlet::is_terminal() const noexcept {
+    return impl_->force.is_terminal();
+}
+
+CudaDeviceInfo CudaBarnesHutVelocityVerlet::device_info() const {
+    return impl_->force.device_info();
 }
 
 }  // namespace nbody

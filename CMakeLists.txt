@@ -124,6 +124,10 @@ if(NBODY_ENABLE_CUDA)
 endif()
 add_executable(nbody_headless src/main.cpp)
 target_link_libraries(nbody_headless PRIVATE nbody_core nbody_barnes_hut)
+if(NBODY_ENABLE_CUDA)
+    target_compile_definitions(nbody_headless PRIVATE NBODY_HEADLESS_HAS_CUDA=1)
+    target_link_libraries(nbody_headless PRIVATE nbody_cuda_barnes_hut)
+endif()
 
 add_executable(nbody_barnes_hut_benchmark src/barnes_hut_benchmark.cpp)
 target_link_libraries(nbody_barnes_hut_benchmark PRIVATE nbody_barnes_hut)
@@ -459,6 +463,15 @@ if(BUILD_TESTING)
         nbody_direct_rejects_barnes_hut_options
         PROPERTIES WILL_FAIL TRUE
     )
+    if(NOT NBODY_ENABLE_CUDA)
+        add_test(
+            NAME nbody_headless_rejects_unavailable_cuda
+            COMMAND "${CMAKE_COMMAND}"
+                    "-DNBODY_HEADLESS=$<TARGET_FILE:nbody_headless>"
+                    "-DNBODY_OUTPUT_ROOT=${CMAKE_BINARY_DIR}/tmp/cuda_unavailable"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/verify_cuda_unavailable.cmake"
+        )
+    endif()
 
     if(Python3_Interpreter_FOUND)
         add_test(
@@ -575,6 +588,50 @@ if(BUILD_TESTING)
         )
         set_tests_properties(
             nbody_barnes_hut_cuda
+            PROPERTIES SKIP_RETURN_CODE 77
+        )
+
+        add_executable(
+            nbody_barnes_hut_cuda_integration_tests
+            tests/test_barnes_hut_cuda_integration.cpp
+        )
+        add_library(
+            nbody_cuda_barnes_hut_integration_test_hooks
+            backends/cuda/cuda_barnes_hut.cu
+        )
+        target_include_directories(
+            nbody_cuda_barnes_hut_integration_test_hooks
+            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        )
+        target_compile_features(
+            nbody_cuda_barnes_hut_integration_test_hooks
+            PUBLIC cxx_std_17
+        )
+        target_compile_definitions(
+            nbody_cuda_barnes_hut_integration_test_hooks
+            PUBLIC NBODY_CUDA_BARNES_HUT_ENABLE_TEST_HOOKS=1
+        )
+        target_link_libraries(
+            nbody_cuda_barnes_hut_integration_test_hooks
+            PUBLIC nbody_cuda nbody_barnes_hut
+        )
+        set_target_properties(
+            nbody_cuda_barnes_hut_integration_test_hooks
+            PROPERTIES
+                CUDA_STANDARD 17
+                CUDA_STANDARD_REQUIRED YES
+                CUDA_EXTENSIONS NO
+        )
+        target_link_libraries(
+            nbody_barnes_hut_cuda_integration_tests
+            PRIVATE nbody_cuda_barnes_hut_integration_test_hooks nbody_astronomy
+        )
+        add_test(
+            NAME nbody_barnes_hut_cuda_integration
+            COMMAND nbody_barnes_hut_cuda_integration_tests
+        )
+        set_tests_properties(
+            nbody_barnes_hut_cuda_integration
             PROPERTIES SKIP_RETURN_CODE 77
         )
 

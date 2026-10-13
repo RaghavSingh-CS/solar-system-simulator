@@ -289,6 +289,21 @@ void test_cuda_header_contract() {
     require(configuration.device_memory_budget_bytes > 0 &&
                 configuration.host_staging_memory_budget_bytes > 0,
             "CUDA memory budgets must be explicit and positive");
+
+    const nbody::CudaBarnesHutIntegrationConfiguration integration;
+    require(integration.host_integration_memory_budget_bytes > 0,
+            "CUDA integration host memory budget must be explicit and positive");
+    require(nbody::cuda_barnes_hut_step_traversal_work_limit(
+                integration.force) ==
+                integration.force.tree.maximum_traversal_work * 2U,
+            "CUDA integration did not account for both force evaluations");
+
+    auto overflow = integration.force;
+    overflow.tree.maximum_traversal_work =
+        std::numeric_limits<std::size_t>::max();
+    require_throws<std::length_error>(
+        [&] { (void)nbody::cuda_barnes_hut_step_traversal_work_limit(overflow); },
+        "CUDA integration accepted an overflowing per-step traversal limit");
 }
 
 }  // namespace
