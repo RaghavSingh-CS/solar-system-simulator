@@ -1,0 +1,83 @@
+{
+  "study": "openmp_barnes_hut_stage2_exploratory",
+  "stage5_evidence": false,
+  "completed_local": "2026-10-13T10:29:21.7790147+05:30",
+  "source_base_commit": "1f276505e5766d718e2979f4998831189f6865c8",
+  "source_state": "measured from the final uncommitted Stage 2 remediation candidate; source_manifest.sha256 identifies every solver, harness, scenario, direct-reference, build, provenance, and configuration input affecting the measured computation",
+  "platform": {
+    "system": "Windows 11",
+    "machine": "AMD64",
+    "cpu": "AMD Ryzen 7 5700U with Radeon Graphics",
+    "physical_cores": 8,
+    "logical_processors": 16
+  },
+  "build": {
+    "preset": "openmp-release",
+    "configuration": "Release",
+    "compiler_id": "GNU",
+    "compiler_version": "15.1.0",
+    "openmp_specification_date": 201511,
+    "openmp_runtime_processor_count": 16,
+    "openmp_runtime_max_threads": 16,
+    "cuda": false
+  },
+  "protocol": {
+    "distributions": ["uniform", "clustered", "planar"],
+    "body_counts": [256, 1024, 4096],
+    "theta_values": [0.25, 0.5, 0.8],
+    "requested_threads": [1, 2, 4, 8],
+    "effective_threads": [1, 2, 4, 8],
+    "leaf_capacity": 8,
+    "maximum_depth": 64,
+    "minimum_cell_size_m": 1e-6,
+    "maximum_nodes": 1000000,
+    "maximum_traversal_work": 1000000000,
+    "memory_budget_bytes": 268435456,
+    "seed_formula": "0x4f4d5042485332 + body_count",
+    "warmups_per_configuration": 1,
+    "repetitions_per_configuration": 2,
+    "velocity_verlet_step_seconds": 10.0,
+    "timer_scope": "separate Sequential/OpenMP direct force, Sequential/OpenMP Barnes-Hut tree build and traversal, complete force-call wall time, and one complete OpenMP Barnes-Hut Velocity Verlet step"
+  },
+  "command": ".\\build\\openmp-release\\nbody_barnes_hut_openmp_benchmark.exe --output data\\benchmarks\\barnes_hut_openmp_stage2\\raw.csv --repetitions 2",
+  "outputs": {
+    "raw_csv": "raw.csv",
+    "raw_csv_sha256": "11fb34ae4d3b4f87687cf177f1668139d7f5bad57ec944f78b316048f2f96760",
+    "raw_rows": 216,
+    "build_provenance": "build_provenance.json",
+    "build_provenance_sha256": "3b4f33cc83ff6f25b2954d1722d259c5e2fa0c3211c165e8eaf8c9ee19cab2c2",
+    "benchmark_source": "src/barnes_hut_openmp_benchmark.cpp",
+    "benchmark_source_sha256": "d3a0cf2c14338ffaea63e8628d322dc2e9e034b592653420f524232fe4e64f9b",
+    "solver_source": "src/barnes_hut.cpp",
+    "solver_source_sha256": "0198b08cefbc630600a5e6a11dadeb40499dba5e947fa01264a4ac87c9eb1aab",
+    "solver_header": "include/nbody/barnes_hut.hpp",
+    "solver_header_sha256": "a6c410f5fcdcfd154f199feb3d3cb67610240e84d1c4f0437ce206e59aef842b",
+    "candidate_source_manifest": "source_manifest.sha256",
+    "candidate_source_manifest_sha256": "853de3784315ded6c90a046144d882ae5806ad43df553fdb04683276f295b255"
+  },
+  "derived_summary": {
+    "bh_speedup_vs_sequential_at_n4096": {
+      "4": {
+        "minimum": 3.2510164987899306,
+        "maximum": 3.977787438377961
+      },
+      "8": {
+        "minimum": 4.280280201986416,
+        "maximum": 7.513544622304984
+      }
+    },
+    "theta_0_25_bh_speedup_vs_openmp_direct_at_n4096_threads8": {
+      "uniform": 0.25799093232701686,
+      "clustered": 0.35263863035661197,
+      "planar": 1.2371940878431893
+    }
+  },
+  "limitations": [
+    "Exploratory single-machine measurements, not frozen Stage 5 evidence.",
+    "Only two repetitions per configuration; scheduling, clocks, affinity, host load, and thermals were uncontrolled.",
+    "The captured compiler, flags, commands, and OpenMP linkage identify this build but do not guarantee reproducible machine-level performance.",
+    "The matrix stops at 4096 bodies and cannot support 50000- or 100000-body performance or graphical-FPS claims.",
+    "Sequential timings are repeated across thread rows within a repetition because each reference call was intentionally measured once before the four OpenMP measurements.",
+    "The benchmark asserts bitwise Sequential/OpenMP Barnes-Hut force equality but relies on the separate Stage 1 evidence for approximation error against direct force."
+  ]
+}

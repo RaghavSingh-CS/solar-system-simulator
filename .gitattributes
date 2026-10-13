@@ -9,3 +9,27 @@ src/astronomy/generated/solar_system_60_v1.generated.inc text eol=lf
 data/benchmarks/barnes_hut_stage1/raw.csv -text
 data/benchmarks/barnes_hut_stage1/*.json text eol=lf
 data/benchmarks/barnes_hut_stage1/*.md text eol=lf
+
+# OpenMP Barnes-Hut Stage 2 source-manifest inputs require stable checkout bytes.
+CMakeLists.txt text eol=lf
+CMakePresets.json text eol=lf
+cmake/verify_openmp_unavailable.cmake text eol=lf
+backends/openmp/openmp_backend.cpp text eol=lf
+include/nbody/barnes_hut.hpp text eol=lf
+include/nbody/body.hpp text eol=lf
+include/nbody/direct_force.hpp text eol=lf
+include/nbody/openmp_backend.hpp text eol=lf
+include/nbody/scenarios.hpp text eol=lf
+include/nbody/simulation.hpp text eol=lf
+include/nbody/vector3.hpp text eol=lf
+src/barnes_hut.cpp text eol=lf
+src/barnes_hut_openmp_benchmark.cpp text eol=lf
+src/scenarios.cpp text eol=lf
+src/simulation.cpp text eol=lf
+scripts/capture_barnes_hut_openmp_provenance.py text eol=lf
+scripts/verify_barnes_hut_openmp_stage2.py text eol=lf
+
+data/benchmarks/barnes_hut_openmp_stage2/raw.csv -text
+data/benchmarks/barnes_hut_openmp_stage2/*.json text eol=lf
+data/benchmarks/barnes_hut_openmp_stage2/*.md text eol=lf
+data/benchmarks/barnes_hut_openmp_stage2/*.sha256 text eol=lf

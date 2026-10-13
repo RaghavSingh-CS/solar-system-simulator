@@ -1,0 +1,59 @@
+{
+  "cmake_cache": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "C:/msys64/ucrt64/bin/c++.exe",
+    "CMAKE_CXX_COMPILER_AR": "C:/msys64/ucrt64/bin/gcc-ar.exe",
+    "CMAKE_CXX_COMPILER_RANLIB": "C:/msys64/ucrt64/bin/gcc-ranlib.exe",
+    "CMAKE_CXX_FLAGS": "",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "CMAKE_EXE_LINKER_FLAGS": "",
+    "CMAKE_EXE_LINKER_FLAGS_RELEASE": "",
+    "CMAKE_GENERATOR": "Ninja",
+    "CMAKE_GENERATOR_INSTANCE": "",
+    "CMAKE_GENERATOR_PLATFORM": "",
+    "CMAKE_GENERATOR_TOOLSET": "",
+    "CMAKE_MAKE_PROGRAM": "C:/msys64/ucrt64/bin/ninja.exe",
+    "NBODY_ENABLE_CUDA": "OFF",
+    "NBODY_ENABLE_MPI": "OFF",
+    "NBODY_ENABLE_OPENMP": "ON",
+    "OpenMP_COMPILE_RESULT_CXX_fopenmp": "TRUE",
+    "OpenMP_CXX_FLAGS": "-fopenmp",
+    "OpenMP_CXX_LIB_NAMES": "gomp;mingwthrd",
+    "OpenMP_CXX_SPEC_DATE": "201511",
+    "OpenMP_SPECTEST_CXX_": "TRUE",
+    "OpenMP_gomp_LIBRARY": "C:/msys64/ucrt64/lib/libgomp.dll.a",
+    "OpenMP_mingwthrd_LIBRARY": "C:/msys64/ucrt64/lib/libmingwthrd.a"
+  },
+  "effective_commands": {
+    "benchmark_link": "C:\\WINDOWS\\system32\\cmd.exe /C \"cd . && C:\\msys64\\ucrt64\\bin\\c++.exe -O3 -DNDEBUG  CMakeFiles/nbody_barnes_hut_openmp_benchmark.dir/src/barnes_hut_openmp_benchmark.cpp.obj -o nbody_barnes_hut_openmp_benchmark.exe -Wl,--out-implib,libnbody_barnes_hut_openmp_benchmark.dll.a -Wl,--major-image-version,0,--minor-image-version,0  libnbody_barnes_hut.a  libnbody_openmp.a  libnbody_core.a  C:/msys64/ucrt64/lib/libgomp.dll.a  C:/msys64/ucrt64/lib/libmingwthrd.a  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd .\"",
+    "compile": {
+      "backends/openmp/openmp_backend.cpp": "C:\\msys64\\ucrt64\\bin\\c++.exe -I${REPOSITORY_ROOT}/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -fopenmp -o CMakeFiles\\nbody_openmp.dir\\backends\\openmp\\openmp_backend.cpp.obj -c ${REPOSITORY_ROOT}\\backends\\openmp\\openmp_backend.cpp",
+      "src/barnes_hut.cpp": "C:\\msys64\\ucrt64\\bin\\c++.exe -DNBODY_HAS_OPENMP=1 -I${REPOSITORY_ROOT}/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -fopenmp -o CMakeFiles\\nbody_barnes_hut.dir\\src\\barnes_hut.cpp.obj -c ${REPOSITORY_ROOT}\\src\\barnes_hut.cpp",
+      "src/barnes_hut_openmp_benchmark.cpp": "C:\\msys64\\ucrt64\\bin\\c++.exe -DNBODY_BUILD_CONFIGURATION=\\\"Release\\\" -DNBODY_CXX_COMPILER_ID=\\\"GNU\\\" -DNBODY_CXX_COMPILER_VERSION=\\\"15.1.0\\\" -DNBODY_OPENMP_SPECIFICATION=\\\"201511\\\" -I${REPOSITORY_ROOT}/include -O3 -DNDEBUG -fopenmp -o CMakeFiles\\nbody_barnes_hut_openmp_benchmark.dir\\src\\barnes_hut_openmp_benchmark.cpp.obj -c ${REPOSITORY_ROOT}\\src\\barnes_hut_openmp_benchmark.cpp",
+      "src/scenarios.cpp": "C:\\msys64\\ucrt64\\bin\\c++.exe -I${REPOSITORY_ROOT}/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -o CMakeFiles\\nbody_core.dir\\src\\scenarios.cpp.obj -c ${REPOSITORY_ROOT}\\src\\scenarios.cpp",
+      "src/simulation.cpp": "C:\\msys64\\ucrt64\\bin\\c++.exe -I${REPOSITORY_ROOT}/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -o CMakeFiles\\nbody_core.dir\\src\\simulation.cpp.obj -c ${REPOSITORY_ROOT}\\src\\simulation.cpp"
+    }
+  },
+  "limitations": [
+    "This records one effective local build; it does not guarantee bitwise-reproducible timings on another machine.",
+    "Host scheduling, affinity, clocks, thermals, and background load remain uncontrolled."
+  ],
+  "sanitization": {
+    "build_directory": "${BUILD_DIR}",
+    "note": "Only repository/build absolute paths are replaced; toolchain and runtime paths remain recorded.",
+    "repository_root": "${REPOSITORY_ROOT}"
+  },
+  "schema_version": 1,
+  "scope": "OpenMP Barnes-Hut Stage 2 exploratory benchmark build",
+  "toolchain": {
+    "cmake_executable": "${REPOSITORY_ROOT}\\.tools\\cmake-4.4.3-windows-x86_64\\bin\\cmake.exe",
+    "cmake_version_output": "cmake version 4.4.3",
+    "compiler_executable": "C:\\msys64\\ucrt64\\bin\\c++.exe",
+    "compiler_id": "GNU",
+    "compiler_version": "15.1.0",
+    "compiler_version_output": "c++.exe (Rev5, Built by MSYS2 project) 15.1.0\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "generator": "Ninja",
+    "ninja_executable": "C:\\msys64\\ucrt64\\bin\\ninja.exe",
+    "ninja_version": "1.13.2"
+  }
+}
