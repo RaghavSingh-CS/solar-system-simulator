@@ -100,6 +100,47 @@ call, complete Velocity Verlet step, and direct-force comparators separately.
 It is not a CI performance gate, Stage 5 evidence, an automatic-selector input,
 or evidence of graphical FPS or 50K--100K feasibility.
 
+### CUDA Barnes--Hut Stage 3A gates
+
+Implementation `5e1864e` passed the independent source-level commit gate. This
+does not satisfy CUDA compilation or NVIDIA execution gates.
+
+CPU-only CI validates the pointer-free packed-tree representation independently
+of CUDA: standard-layout/trivial-copyability, deterministic node and body order,
+parent-before-child ranges, inverse-rank identity, finite monopoles/bounds,
+empty, single-body, explicit two-body, coincident, and near-degenerate cases,
+input rejection, contiguous child-range coverage, and separate packing-memory
+admission. CPU and OpenMP full suites must remain independent of CUDA tooling.
+
+The CUDA-only `nbody_barnes_hut_cuda` executable is registered only in CUDA
+builds and uses the strict runtime gate shared by existing GPU tests. Exit 77 is
+valid only when successful enumeration reports zero devices. Enumeration,
+allocation, transfer, launch, kernel, synchronization, or readback errors are
+failures. No host mock may satisfy the CUDA execution gate.
+
+Required NVIDIA fixtures cover single/two-body, uniform, clustered, planar,
+unequal-mass, octant-boundary, coincident, near-coincident, extreme binary64,
+small/large theta, maximum-depth termination, node/host/device-memory limits,
+traversal-stack and traversal-work exhaustion, and repeated executor lifetime.
+Every successful output must be finite. Sequential Barnes--Hut is the force
+equivalence reference under predeclared mixed absolute/relative tolerance;
+direct force independently characterizes absolute, RMS, maximum-relative, and
+95th-percentile approximation error. CUDA compilation or a skipped test is not
+GPU numerical validation.
+
+Device-failure validation repeats highly contended singular and work-budget
+failures without assuming which thread wins. Each completed record must have an
+allowed code and target/node indices inside the exact fixture/tree, while the
+throwing API must leave caller-owned output unchanged. A deterministic
+host-side live-release injection must preserve last-success statistics,
+terminalize the executor before replacement allocation, and reject reuse.
+
+RTX validation must also audit device architecture/toolchain provenance,
+stream synchronization and terminal-failure quarantine, repeated allocation
+cleanup, and actual persistent/local-memory resource usage. Performance remains
+unclaimed until tree-build, transfer, traversal, complete force, and later
+complete-step timings are measured separately under a controlled protocol.
+
 ## Reproducibility
 
 Every result row must carry commit, build type, compiler/options, backend, hardware, scenario hash, seed, precision, N, dt, steps, repetition, and warm-up policy. Failed runs remain in raw data with a reason.

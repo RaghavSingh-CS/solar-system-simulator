@@ -29,7 +29,7 @@ Last updated: 2026-10-13
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
-| Barnes--Hut large-N solver roadmap | **STAGES 1--2 SEQUENTIAL/OPENMP IMPLEMENTED AND SOURCE-REVIEWED** | Deterministic bounded shared octree, exact Sequential/OpenMP agreement, headless selection, and separately custodied exploratory evidence; CUDA and controlled large-N evaluation remain mandatory |
+| Barnes--Hut large-N solver roadmap | **STAGE 3A CUDA FORCE SOURCE-REVIEWED / GPU UNVERIFIED** | Source-reviewed Sequential/OpenMP solver plus CPU-built pointer-free CUDA tree snapshot and genuine CUDA monopole traversal source; CUDA compilation/runtime and controlled large-N evaluation remain mandatory |
 
 ## Decisions and rationale
 
@@ -1985,6 +1985,79 @@ CUDA Barnes--Hut, GUI/counterfactual solver integration, controlled large-N
 evaluation, and RTX 4050 validation remain pending. CUDA compilation/runtime
 was not attempted or claimed in this AMD-only Stage 2 increment.
 
+## CUDA Barnes--Hut Stage 3A
+
+### Source architecture and scope
+
+Committed implementation `5e1864e` begins from
+`94967e03632f098f81575599dc2eaf3b54889c4c`. It minimally exposes the existing
+deterministic CPU builder as `build_barnes_hut_packed_tree()`, producing
+fixed-width, standard-layout nodes with cell bounds, monopole data, eight child
+indices, deterministic leaf ranges, original body-index permutation, and
+inverse rank. The packer has a separate checked budget and preserves the Stage
+1/2 construction algorithm rather than cloning it. CPU tests cover layout,
+ordering, relationships, identity mapping, finite aggregates, determinism, and
+budget/input failures.
+
+`CudaBarnesHutForceBackend` is a separate force-only executor. It is not wired
+to Velocity Verlet, headless selection, the viewer, counterfactual execution,
+or automatic backend choice. The genuine CUDA kernel assigns one target per
+logical work item, uses double precision and unchanged zero-softening Newtonian
+gravity, applies the same strict monopole opening rule, always opens a node
+containing the target, excludes self indices in leaves, and pushes children in
+reverse order to retain CPU depth-first accumulation order. A compiled
+1024-entry per-work-item stack and a configurable logical limit make overflow
+explicit. A 64-bit compare/exchange counter enforces the global traversal-work
+ceiling without overshoot. Device failures distinguish malformed trees,
+singular/nonrepresentable geometry, nonrepresentable acceleration, stack
+exhaustion, and work exhaustion; no CPU/direct fallback or partial output is
+published.
+
+The first independent adversarial source review identified two P1 failure-path
+defects: ordinary device reads raced with atomic failure publication, and live
+capacity replacement ignored CUDA deallocation errors. The committed
+implementation uses an atomic claim plus fenced atomic publication record. All
+concurrent device readers inspect only the atomic publication word, and the
+host accepts metadata only after synchronization and completeness checks. Live
+resize checks every device/pinned deallocation; failure preserves remaining
+handles and accounting, terminalizes the executor, and prevents replacement
+allocation. Partial allocation failure is likewise terminal and checked, while
+destruction remains noexcept and quarantine remains mandatory when quiescence
+cannot be established. Independent adversarial source review passed; NVIDIA
+compilation and execution remain pending.
+
+Persistent device arrays and pinned host staging arrays are reusable and
+separately budgeted with checked arithmetic. Host accounting includes the
+temporary packed snapshot. Persistent-device accounting excludes CUDA
+allocator/context metadata and compiler-managed backing for the bounded local
+stack, which is reported separately as 4096 bytes per work item. One owned
+stream orders all transfers, launch, and readback. Device-selection or
+synchronization failure makes the executor terminal; if quiescence cannot be
+proved, all referenced storage is quarantined until process/context teardown.
+No `cudaDeviceReset()` is issued because the primary context may be shared.
+
+CUDA-only tests are registered for single/two-body, uniform, clustered,
+planar, unequal-mass, boundary, coincident/near-coincident, extreme binary64,
+theta/depth, node/host/device-memory, stack/work, CPU-reference, and repeated
+lifetime cases. CPU packed-tree coverage now explicitly includes two-body,
+coincident, and near-degenerate snapshots with deterministic mappings,
+contiguous child ranges, and per-node aggregate checks. CUDA tests repeat
+contended singular/work failures, validate permissible target/node metadata,
+prove caller output is not partially published, and inject a host-side live
+release failure to verify terminal ownership and preserved last-success
+statistics. Strict enumeration permits skip code 77 only after successful
+zero-device enumeration. CUDA compilation, kernel execution, numerical
+agreement, cleanup behavior on NVIDIA, and GPU performance remain unverified
+on this AMD-only/no-nvcc host. The CPU-built tree and per-force host-to-device
+transfer may dominate at large N; no 50K/100K throughput or FPS claim is made.
+Canonical Release validation passed `17/17` CPU CTests and `21/21` OpenMP
+CTests, including the new packed-tree/API contract test and all existing
+Barnes--Hut, legacy Solar, astronomical data, Stage 5, visualization, and
+counterfactual regressions. An isolated CUDA-enabled configure under
+`build/scratch` failed at compiler discovery with the expected "no usable CUDA
+compiler" diagnostic and was removed. No CUDA target compiled and no GPU test
+ran or skipped. This is a source-reviewed, GPU-unverified milestone.
+
 ## Known limitations
 
 - A sourced common-epoch 60-body JPL initial-condition snapshot now exists,
@@ -1994,8 +2067,9 @@ was not attempted or claimed in this AMD-only Stage 2 increment.
 - No close-encounter regularization, softening, relativistic effects, or adaptive timesteps.
 - Sequential and OpenMP Barnes--Hut use the same monopoles and target-local
   acceptance, so neither preserves exact pairwise force symmetry. Theta `0.25`
-  is provisional and distribution-dependent; no CUDA tree, viewer path, or
-  validated 50K--100K interactive force workload exists.
+  is provisional and distribution-dependent; Stage 3A has only an uncompiled
+  CUDA traversal source using CPU-built trees, with no viewer path or validated
+  50K--100K interactive force workload.
 - CUDA physics is T4-validated and the viewer has an opt-in batched CUDA path,
   but viewer CUDA compilation/runtime and a same-machine CPU/OpenMP/CUDA matrix
   remain unverified until an NVIDIA/CUDA host is available. MPI is implemented
@@ -2013,9 +2087,9 @@ was not attempted or claimed in this AMD-only Stage 2 increment.
 3. Only in a separately authorized final session, acquire calibration, freeze the deterministic policy, acquire held-out evidence, and evaluate without refitting.
 4. Run the final Stage 6D native-window visual checklist in `docs/visualization.md`; the feature freeze closes after this gate.
 5. Do not tune the frozen policy, optimize backends, or pool historical cross-machine evidence during Stage 5B collection.
-6. Keep the source-reviewed OpenMP Barnes--Hut Stage 2 implementation and
-   evidence frozen; authorize CUDA Barnes--Hut only as a separate later
-   increment.
+6. Independently adversarially review CUDA Barnes--Hut Stage 3A source, then
+   compile and execute its strict numerical/resource suite on NVIDIA hardware
+   before authorizing Stage 3B integration.
 
 ## Commit references
 

@@ -230,10 +230,80 @@ or claimed on this AMD-only machine. The final independent source-custody gate
 passed on 2026-10-13, including an actual Git-materialized
 `core.autocrlf=true` checkout with matching source and evidence bytes.
 
+## CUDA Stage 3A source-reviewed architecture
+
+Stage 3A adds a standalone `CudaBarnesHutForceBackend` source implementation;
+it does not connect Barnes--Hut to Velocity Verlet, the headless solver
+selector, viewer, or counterfactual engine. The existing CPU builder remains
+the only tree constructor. `build_barnes_hut_packed_tree()` converts its
+completed deterministic tree to fixed-width, pointer-free nodes containing
+cell center/side bounds, monopole mass and center, eight child indices, leaf
+permutation ranges, and an inverse-rank map. Body ordering remains the caller's
+original index ordering, so higher-layer stable IDs retain their existing
+mapping. Packing has a separate checked host-memory budget and rejects any body
+or node count outside its 32-bit device-index representation.
+
+The CUDA kernel consumes that immutable snapshot and assigns one target body to
+each logical work item. It uses double precision, the same gravitational
+constant supplied by the caller, zero softening, compensated accumulation, the
+strict `side / distance < theta` opening rule, and no aggregate approximation
+for nodes whose permutation range contains the target. Leaf evaluation excludes
+the target's original body index. Children are pushed in reverse slot order so
+the per-target depth-first accumulation order matches the CPU traversal. CPU
+and GPU compilers can nevertheless differ through contraction/FMA and other
+platform details; future validation uses fixed mixed tolerances and reports
+absolute, RMS, maximum-relative, and percentile errors rather than requiring
+bit identity.
+
+Each work item has a compiled 1024-entry (`4096` byte) local index stack plus a
+configurable logical limit. Stack overflow is an explicit device failure. A
+global 64-bit compare/exchange reservation enforces the traversal-work budget
+without overshoot. Malformed packed nodes, singular/overflowed geometry,
+nonrepresentable acceleration, stack exhaustion, and work exhaustion are
+reported through a bounded device record. Host code synchronizes before reading
+that record and never publishes partial force output. There is no CPU or direct
+fallback.
+
+The record uses separate atomic claim and publication words. The winning
+thread writes code and target/node metadata, applies a device fence, and only
+then atomically publishes completion. Concurrent threads perform atomic loads
+of the publication word and never read partially initialized metadata. The
+host rejects incomplete or invalid records after stream synchronization.
+
+Persistent device storage and pinned host staging have separate checked
+budgets. Accounting includes masses, positions, packed nodes, permutation,
+inverse rank, accelerations, error record, and work counter; host accounting
+also includes the temporary packed snapshot. It excludes CUDA allocator/context
+metadata and compiler-managed backing for the bounded per-thread local stack.
+All asynchronous operations use one owned stream. If device selection or
+synchronization cannot prove quiescence, the executor becomes terminal and its
+stream-referenced allocations are quarantined until process/context teardown;
+no automatic device reset is issued.
+
+Live capacity replacement is stricter than destructor cleanup. After the
+stream is quiescent, each `cudaFree`/`cudaFreeHost` result is checked. A failed
+release leaves that and all not-yet-released handles plus the prior accounting
+intact, marks the executor terminal, and prevents replacement allocation.
+Partial allocation failure is also terminal and uses the checked cleanup path.
+The destructor remains noexcept and either releases after proven quiescence or
+conservatively retains storage until context/process teardown. A deterministic
+host-only fault-injection mode exercises the live-release terminal contract;
+it is not evidence of CUDA device-failure recovery.
+
+This CPU-built-tree design minimizes scientific duplication but transfers a new
+tree every force call. Its build and transfer overhead may dominate, especially
+for 50K+ bodies. No CUDA compilation, kernel execution, numerical-equivalence,
+throughput, crossover, or FPS result exists from the AMD-only development host.
+Implementation `5e1864e` passed independent adversarial source review. CUDA
+translation-unit compilation and kernel execution were unavailable on the
+AMD-only/no-nvcc host and remain NVIDIA validation gates.
+
 ## Remaining stages
 
-- Design a CUDA-resident tree/build/traversal implementation; do not relabel a
-  CPU tree plus GPU direct kernel as CUDA Barnes--Hut.
+- Compile and adversarially validate the Stage 3A CUDA traversal on NVIDIA
+  hardware before integrating it with any state-advancement path.
+- Evaluate GPU-resident/parallel tree construction separately; do not present
+  the Stage 3A CPU build plus transfer as a fully GPU-resident solver.
 - Run controlled broader large-N performance and accuracy evaluation before
   changing viewer workload gates or promising interactive 50K--100K physics.
 - Evaluate higher multipoles only as a separately justified scientific stage.

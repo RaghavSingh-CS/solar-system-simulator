@@ -94,9 +94,26 @@ target traversals. Each target preserves Sequential child/leaf order and owns
 its compensated accumulator and output. Per-thread padded integer counters are
 merged after the region; exceptions are captured in-region and reported only
 outside it, with failed outputs/statistics discarded. Direct remains default;
-CUDA Barnes--Hut and viewer/counterfactual Barnes--Hut integration remain
-future stages. Full policy and evidence are in
+CUDA Barnes--Hut state advancement and viewer/counterfactual Barnes--Hut
+integration remain future stages. Full policy and evidence are in
 [barnes_hut.md](barnes_hut.md).
+
+CUDA Barnes--Hut Stage 3A is isolated as a force-only source path. The shared
+CPU builder exports a fixed-width, pointer-free packed tree after construction;
+the CUDA library transfers that immutable tree and evaluates one target per
+logical GPU work item. Nodes retain deterministic child order, leaf permutation
+ranges, and inverse-rank containment so the device can exclude self force and
+must open any node containing the target. A bounded local traversal stack,
+strict global work reservation, device failure record, separate device/host
+budgets, and terminal quarantine on unproven stream quiescence define the
+resource contract. Failure metadata is written by one atomic claimant and
+becomes visible only through a fenced atomic publication word; all concurrent
+device readers use that publication word atomically. Live capacity replacement
+checks every deallocation and terminalizes without losing retained handles or
+accounting if a release fails. No CUDA tree construction, Verlet integration,
+viewer, counterfactual, or automatic-selection connection is part of Stage 3A.
+Implementation `5e1864e` passed independent adversarial source review; CUDA
+compilation and runtime behavior remain NVIDIA-unverified.
 
 OpenMP is optional at configure time. `NBODY_ENABLE_OPENMP=OFF` builds the
 reference, headless runner, and Sequential Barnes--Hut benchmark without
