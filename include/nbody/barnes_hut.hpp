@@ -3,6 +3,8 @@
 #include "nbody/simulation.hpp"
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace nbody {
@@ -38,6 +40,62 @@ struct BarnesHutStatistics {
 // acceleration output used before allocation. Actual vector capacities are
 // charged separately after allocation. Throws std::length_error on overflow.
 std::size_t barnes_hut_fixed_memory_bytes(std::size_t body_count);
+
+// Pointer-free, fixed-width representation shared with CUDA Barnes--Hut.
+// Node zero is the root for non-empty trees. Cell center plus side length
+// defines the spatial bounds. begin/end index the deterministic permutation;
+// the inverse rank array lets a traversal determine whether a node contains
+// its target without relying on geometric roundoff.
+inline constexpr std::uint32_t barnes_hut_no_packed_index =
+    std::numeric_limits<std::uint32_t>::max();
+
+struct BarnesHutPackedNode {
+    double center_x_m{0.0};
+    double center_y_m{0.0};
+    double center_z_m{0.0};
+    double center_of_mass_x_m{0.0};
+    double center_of_mass_y_m{0.0};
+    double center_of_mass_z_m{0.0};
+    double side_length_m{0.0};
+    double mass_kg{0.0};
+    std::uint32_t begin{0};
+    std::uint32_t end{0};
+    std::uint32_t children[8]{
+        barnes_hut_no_packed_index,
+        barnes_hut_no_packed_index,
+        barnes_hut_no_packed_index,
+        barnes_hut_no_packed_index,
+        barnes_hut_no_packed_index,
+        barnes_hut_no_packed_index,
+        barnes_hut_no_packed_index,
+        barnes_hut_no_packed_index,
+    };
+    std::uint32_t leaf{1};
+};
+
+struct BarnesHutPackedTree {
+    std::vector<BarnesHutPackedNode> nodes;
+    std::vector<std::uint32_t> permutation;
+    std::vector<std::uint32_t> inverse_rank;
+    BarnesHutStatistics statistics;
+    std::size_t storage_bytes{0};
+};
+
+// Size-only lower bound for the pointer-free node/permutation/rank snapshot.
+// Actual vector capacities are checked by build_barnes_hut_packed_tree().
+// Throws std::length_error if the calculation is not representable.
+std::size_t barnes_hut_packed_memory_bytes(
+    std::size_t body_count,
+    std::size_t node_count);
+
+// Reuses the validated deterministic CPU builder and converts its completed
+// immutable tree into the GPU-readable representation. The packed budget is
+// separate from BarnesHutConfiguration::memory_budget_bytes, which continues
+// to bound transient CPU tree construction. No force evaluation occurs here.
+BarnesHutPackedTree build_barnes_hut_packed_tree(
+    const SimulationState& state,
+    const BarnesHutConfiguration& configuration = {},
+    std::size_t packed_memory_budget_bytes = 256U * 1024U * 1024U);
 
 class SequentialBarnesHutForceBackend final : public ForceBackend {
 public:

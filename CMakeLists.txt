@@ -83,6 +83,25 @@ if(NBODY_ENABLE_CUDA)
         CUDA_EXTENSIONS NO
     )
 
+    add_library(
+        nbody_cuda_barnes_hut
+        backends/cuda/cuda_barnes_hut.cu
+    )
+    target_include_directories(
+        nbody_cuda_barnes_hut
+        PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    target_compile_features(nbody_cuda_barnes_hut PUBLIC cxx_std_17)
+    target_link_libraries(
+        nbody_cuda_barnes_hut
+        PUBLIC nbody_cuda nbody_barnes_hut
+    )
+    set_target_properties(nbody_cuda_barnes_hut PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED YES
+        CUDA_EXTENSIONS NO
+    )
+
     add_executable(nbody_cuda_benchmark src/cuda_benchmark.cpp)
     target_link_libraries(nbody_cuda_benchmark PRIVATE nbody_cuda)
     target_compile_definitions(nbody_cuda_benchmark PRIVATE
@@ -383,6 +402,19 @@ if(BUILD_TESTING)
     add_executable(nbody_barnes_hut_tests tests/test_barnes_hut.cpp)
     target_link_libraries(nbody_barnes_hut_tests PRIVATE nbody_barnes_hut)
     add_test(NAME nbody_barnes_hut COMMAND nbody_barnes_hut_tests)
+
+    add_executable(
+        nbody_barnes_hut_packed_tests
+        tests/test_barnes_hut_packed.cpp
+    )
+    target_link_libraries(
+        nbody_barnes_hut_packed_tests
+        PRIVATE nbody_barnes_hut
+    )
+    add_test(
+        NAME nbody_barnes_hut_packed
+        COMMAND nbody_barnes_hut_packed_tests
+    )
     add_test(
         NAME nbody_barnes_hut_headless
         COMMAND nbody_headless
@@ -528,6 +560,23 @@ if(BUILD_TESTING)
         nbody_embed_stage5_identity(nbody_cuda_tests)
         add_test(NAME nbody_cuda_validation COMMAND nbody_cuda_tests)
         set_tests_properties(nbody_cuda_validation PROPERTIES SKIP_RETURN_CODE 77)
+
+        add_executable(
+            nbody_barnes_hut_cuda_tests
+            tests/test_barnes_hut_cuda.cpp
+        )
+        target_link_libraries(
+            nbody_barnes_hut_cuda_tests
+            PRIVATE nbody_cuda_barnes_hut
+        )
+        add_test(
+            NAME nbody_barnes_hut_cuda
+            COMMAND nbody_barnes_hut_cuda_tests
+        )
+        set_tests_properties(
+            nbody_barnes_hut_cuda
+            PROPERTIES SKIP_RETURN_CODE 77
+        )
 
         add_executable(
             nbody_counterfactual_cuda_tests

@@ -672,6 +672,112 @@ std::size_t barnes_hut_fixed_memory_bytes(std::size_t body_count) {
     return checked_add(index_bytes, output_bytes, "Barnes-Hut fixed storage");
 }
 
+std::size_t barnes_hut_packed_memory_bytes(
+    std::size_t body_count,
+    std::size_t node_count) {
+    const std::size_t body_index_bytes = checked_multiply(
+        checked_multiply(body_count, 2, "Barnes-Hut packed body-index arrays"),
+        sizeof(std::uint32_t),
+        "Barnes-Hut packed body-index arrays");
+    const std::size_t node_bytes = checked_multiply(
+        node_count,
+        sizeof(BarnesHutPackedNode),
+        "Barnes-Hut packed nodes");
+    return checked_add(body_index_bytes, node_bytes, "Barnes-Hut packed storage");
+}
+
+BarnesHutPackedTree build_barnes_hut_packed_tree(
+    const SimulationState& state,
+    const BarnesHutConfiguration& configuration,
+    std::size_t packed_memory_budget_bytes) {
+    validate_configuration(configuration);
+    validate_state(state, gravitational_constant);
+    if (packed_memory_budget_bytes == 0) {
+        throw std::invalid_argument("Barnes-Hut packed memory budget must be positive");
+    }
+    if (state.bodies.size() >=
+        static_cast<std::size_t>(barnes_hut_no_packed_index)) {
+        throw std::length_error("Barnes-Hut body count exceeds packed index range");
+    }
+
+    BarnesHutPackedTree packed;
+    packed.statistics.body_count = state.bodies.size();
+    if (state.bodies.empty()) {
+        return packed;
+    }
+
+    validate_fixed_storage_lower_bound(
+        state.bodies.size(), 0, configuration.memory_budget_bytes);
+    Tree tree(state, configuration, 0);
+    tree.build();
+    if (tree.nodes.size() >=
+        static_cast<std::size_t>(barnes_hut_no_packed_index)) {
+        throw std::length_error("Barnes-Hut node count exceeds packed index range");
+    }
+
+    const std::size_t lower_bound = barnes_hut_packed_memory_bytes(
+        state.bodies.size(), tree.nodes.size());
+    if (lower_bound > packed_memory_budget_bytes) {
+        throw std::length_error("Barnes-Hut packed tree exceeds memory budget");
+    }
+
+    packed.nodes.resize(tree.nodes.size());
+    packed.permutation.resize(tree.permutation.size());
+    packed.inverse_rank.resize(tree.rank.size());
+    packed.storage_bytes = checked_add(
+        checked_add(
+            actual_vector_bytes(
+                packed.nodes.capacity(),
+                sizeof(BarnesHutPackedNode),
+                "Barnes-Hut packed node capacity"),
+            actual_vector_bytes(
+                packed.permutation.capacity(),
+                sizeof(std::uint32_t),
+                "Barnes-Hut packed permutation capacity"),
+            "Barnes-Hut packed capacity"),
+        actual_vector_bytes(
+            packed.inverse_rank.capacity(),
+            sizeof(std::uint32_t),
+            "Barnes-Hut packed inverse-rank capacity"),
+        "Barnes-Hut packed capacity");
+    if (packed.storage_bytes > packed_memory_budget_bytes) {
+        throw std::length_error(
+            "Barnes-Hut actual packed vector capacity exceeds memory budget");
+    }
+
+    for (std::size_t index = 0; index < tree.nodes.size(); ++index) {
+        const OctreeNode& source = tree.nodes[index];
+        BarnesHutPackedNode& destination = packed.nodes[index];
+        destination.center_x_m = source.center_m.x;
+        destination.center_y_m = source.center_m.y;
+        destination.center_z_m = source.center_m.z;
+        destination.center_of_mass_x_m = source.center_of_mass_m.x;
+        destination.center_of_mass_y_m = source.center_of_mass_m.y;
+        destination.center_of_mass_z_m = source.center_of_mass_m.z;
+        destination.side_length_m = source.side_length_m;
+        destination.mass_kg = source.mass_kg;
+        destination.begin = static_cast<std::uint32_t>(source.begin);
+        destination.end = static_cast<std::uint32_t>(source.end);
+        destination.leaf = source.leaf ? 1U : 0U;
+        for (std::size_t child = 0; child < source.children.size(); ++child) {
+            destination.children[child] = source.children[child] == no_node
+                ? barnes_hut_no_packed_index
+                : static_cast<std::uint32_t>(source.children[child]);
+        }
+    }
+    for (std::size_t index = 0; index < tree.permutation.size(); ++index) {
+        packed.permutation[index] =
+            static_cast<std::uint32_t>(tree.permutation[index]);
+        packed.inverse_rank[index] =
+            static_cast<std::uint32_t>(tree.rank[index]);
+    }
+
+    packed.statistics = tree.statistics;
+    packed.statistics.body_count = state.bodies.size();
+    packed.statistics.worker_threads = 1;
+    return packed;
+}
+
 SequentialBarnesHutForceBackend::SequentialBarnesHutForceBackend(
     BarnesHutConfiguration configuration)
     : configuration_(configuration) {
