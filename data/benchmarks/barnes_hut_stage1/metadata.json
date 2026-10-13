@@ -1,0 +1,51 @@
+{
+  "study": "sequential_barnes_hut_stage1_exploratory",
+  "stage5_evidence": false,
+  "completed_local": "2026-10-13T08:04:26.8742792+05:30",
+  "source_base_commit": "b3b83fb967910f5476baec9796cc4fe3c58dc98f",
+  "solver_source_commit": "eb6dac75012f47d60a87417f6ccecf6df7c4576a",
+  "source_state": "measured from the byte-identical pre-commit candidate; solver source was subsequently committed without changes and the benchmark harness is archived with this evidence",
+  "platform": {
+    "system": "Windows 11",
+    "machine": "AMD64",
+    "cpu": "AMD Ryzen 7 5700U with Radeon Graphics",
+    "physical_cores": 8,
+    "logical_processors": 16
+  },
+  "build": {
+    "preset": "cpu-release",
+    "configuration": "Release",
+    "compiler_id": "GNU",
+    "compiler_version": "15.1.0",
+    "openmp": false,
+    "cuda": false
+  },
+  "protocol": {
+    "distributions": ["uniform", "clustered", "planar"],
+    "body_counts": [128, 512, 2048, 4096],
+    "theta_values": [0.25, 0.5, 0.8],
+    "leaf_capacity": 8,
+    "maximum_depth": 64,
+    "minimum_cell_size_m": 1e-6,
+    "maximum_nodes": 1000000,
+    "maximum_traversal_work": 1000000000,
+    "memory_budget_bytes": 268435456,
+    "seed_formula": "0x42485f5354414745 + body_count",
+    "warmups_per_configuration": 1,
+    "repetitions_per_configuration": 3,
+    "velocity_verlet_step_seconds": 10.0,
+    "timer_scope": "separate direct force, Barnes-Hut tree build/force, and one complete Barnes-Hut Velocity Verlet step"
+  },
+  "command": ".\\build\\cpu-release\\nbody_barnes_hut_benchmark.exe --output data\\benchmarks\\barnes_hut_stage1\\raw.csv --repetitions 3",
+  "outputs": {
+    "raw_csv": "raw.csv",
+    "raw_csv_sha256": "226730b66c96a75822520a962199404c3bb27a1d5b76b9f3d2fd74890d621846",
+    "raw_rows": 108
+  },
+  "limitations": [
+    "Exploratory single-machine measurements, not frozen Stage 5 evidence.",
+    "Only three repetitions per configuration; scheduling, clocks, affinity, and thermals were uncontrolled.",
+    "The maximum per-body relative error is ill-conditioned where the direct acceleration is near zero; absolute, RMS, and percentile metrics must be inspected together.",
+    "Measurements preceded the source commit; the recorded solver commit contains the byte-identical implementation, while this evidence record archives the harness and raw hash."
+  ]
+}
