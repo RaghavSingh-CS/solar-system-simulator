@@ -1,6 +1,11 @@
 # Counterfactual gravitational experiments
 
-## Implemented direct-force engine
+## Implemented paired Direct and CPU Barnes--Hut engine
+
+Stage 4B implementation `2ec090d` is committed and independently source-reviewed.
+Canonical Release validation passed CPU `18/18` and OpenMP `22/22` CTests on
+2026-10-14. CUDA/Barnes--Hut counterfactual execution remains unavailable and
+GPU-unverified.
 
 The counterfactual engine is a headless model component. It has no graphics
 dependency and does not retain references to `SimulationController` state. An
@@ -26,19 +31,24 @@ Every survivor is checked for exact initial state equality and mapped by stable
 ID after vector compaction. Initial support is restricted to one planet or
 dwarf-planet candidate marked by the snapshot adapter. Sun removal, multiple
 removal, and massless stand-ins are rejected. Removal is physical: the erased
-body is absent from both direct-force evaluations in the counterfactual branch.
+body is absent from both force evaluations in the counterfactual branch.
 
-Sequential and optional OpenMP modes call the existing `ForceBackend` and
-`velocity_verlet_step` APIs. Optional CUDA mode owns two independent existing
+Sequential and optional OpenMP modes explicitly select Direct or Barnes--Hut
+through the existing `ForceBackend` and `velocity_verlet_step` APIs. Direct is
+the unchanged default. Barnes--Hut owns separate backend objects for the full
+and compacted branches, applies the same captured theta/resource policy to
+both, and publishes separate last-force statistics; an octree is never shared
+between physical states. Optional CUDA mode remains direct-only and owns two independent existing
 `CudaVelocityVerlet` executors, with persistent allocations sized separately
 for the full baseline and compacted counterfactual branches. It invokes the
 unchanged double-precision direct-force and Velocity Verlet kernels, downloads
 both completed branch states, and only then applies either to the transactional
 candidate result. The two CUDA streams are used sequentially; this increment
 does not introduce concurrent-stream scheduling or CUDA/OpenGL interoperability.
-All three modes use the same fixed timestep and Velocity Verlet configuration.
+All supported modes use the same fixed timestep and Velocity Verlet configuration.
 OpenMP and CUDA requests are rejected when their support or selected device is
-unavailable; there is no silent backend fallback. Each bounded batch advances private copies,
+unavailable; CUDA/Barnes--Hut is also rejected explicitly. There is no silent
+backend or solver fallback. Each bounded batch advances private copies,
 checks both branches, and publishes states, metrics, histories, and completed
 step count only after the pair succeeds. A failed batch leaves the last
 published pair, conservation diagnostics, warnings, dropped-warning count, and
@@ -56,6 +66,21 @@ immutable to the GUI: running updates contain bounded progress and shared
 identity metadata, while one bounded full result is published at completion,
 cancellation, or engine failure. Worker exceptions are contained as bounded
 terminal worker metadata; window shutdown joins the thread.
+
+The terminal record also carries a typed optional branch and bounded execution
+phase. CPU force attribution is supplied by a non-owning proxy around the real
+branch backend: the unchanged Velocity Verlet function still performs both
+force calls, while the proxy identifies the old-position and new-position
+calls. Other phases are set immediately around their actual operations. Unknown
+context remains explicitly unspecified; exception strings are never parsed and
+the original message is retained.
+
+Deterministic fault injection is compile-time isolated from this production
+path. `nbody_experiments` contains the proxy and real failure attribution but
+no injection API, fields, checks, or symbols. The separate
+`nbody_experiments_test_hooks` variant exposes the guarded controls only to the
+focused counterfactual engine tests; it is not linked into the viewer,
+visualization model, or production worker.
 
 If either CUDA branch, a subsequent synchronized-time check, or a scientific
 guard fails, both CUDA executors are destroyed. The last committed host pair,
@@ -82,7 +107,8 @@ The graphical panel is available only for the legacy and catalog astronomical
 scenarios. It captures a value-owned snapshot from either the scenario's
 initial state or the current synchronized controller state. It exposes one
 curated non-Sun removal, Sequential/OpenMP/CUDA selection when available,
-horizon, sampling cadence,
+explicit Direct/Barnes--Hut selection, Barnes--Hut theta, horizon, sampling
+cadence,
 absolute and fixed-scale normalized thresholds, persistence, and monitored
 stable IDs. Preflight displays the same checked step/sample/direct-work and
 conservative retained-memory estimates used for admission. Invalid or excessive
@@ -90,6 +116,9 @@ requests cannot start.
 CUDA is displayed only by CUDA-enabled applications. It remains disabled when
 the selected device is unavailable, and immutable run metadata records the
 actual CUDA backend and device index.
+Barnes--Hut is available only with Sequential/OpenMP and the panel states that
+one approximate run cannot separate physical removal response from solver
+approximation error.
 
 The viewer remains responsive while the worker advances. Scenario replacement
 requests cancellation and increments an application-owned scenario generation,
@@ -106,7 +135,8 @@ current.
 Every pending, running, cancelled, failed, or completed publication carries one
 shared immutable run descriptor. It records both generations, current/initial
 snapshot choice, captured absolute time, provenance and coordinate contract,
-scenario/dataset identity, removed stable ID, backend/thread/device request, physical
+scenario/dataset identity, removed stable ID, backend/thread/device request,
+solver and complete Barnes--Hut policy, physical
 timestep, horizon and accepted step count, cadence, monitored and hidden-frame
 IDs, both thresholds, persistence, and checked work/memory estimates. Mutable
 controls are explicitly settings for the next run; historical labels are read
@@ -179,7 +209,9 @@ and resource-limit violations. The following limits are explicit:
   allocator-exact upper bound;
 - issue-record and aggregate issue-message byte caps, with an explicit dropped
   issue counter;
-- direct-force interaction-work estimate.
+- a direct-equivalent interaction-work admission estimate. For Barnes--Hut
+  this remains a conservative policy count, not a performance prediction;
+- Barnes--Hut's separate node, depth, traversal-work, and working-memory caps.
 
 Durations and cadences are admitted only when their ratio to the fixed timestep
 is integral within a tightly bounded absolute tolerance. Counts are limited to
@@ -205,7 +237,13 @@ warnings, not manufactured trajectory significance. Non-finite/coincident
 integration, invalid time progression, and excess per-branch conservation
 drift invalidate and roll back the batch.
 Insufficient timestep convergence is recorded separately from both numerical
-invalidity and dynamical significance.
+invalidity and dynamical significance. Barnes--Hut runs may retain the same
+bounded diagnostic issue, but the viewer's mandatory approximation notice does
+not depend on that buffer. It is derived from the accepted immutable run
+descriptor and states that reported branch separation includes physical removal
+response plus solver discrepancy unless compared with a matched Direct
+reference. Reset, scenario-generation invalidation, stable-ID mismatch, and a
+new Direct job suppress or replace the old notice.
 
 The catalog adapter deliberately retains the provisional 60-second timestep
 and a conservative initial one-day experiment-horizon policy. The one-day
@@ -255,10 +293,10 @@ without fallback, context reset, state corruption, or deadlock. Archive the
 configure cache, complete test output, executable/source identity, and
 hardware/toolchain provenance with the validation record. No GPU accuracy or
 performance claim exists until that gate passes.
-Sequential Barnes--Hut now exists as a separate Stage 1 headless force solver,
-but this counterfactual engine remains direct-force-only. OpenMP/CUDA
-Barnes--Hut, counterfactual integration, direct-force verification at broader
-scales, and controlled large-N evaluation remain future work.
+Sequential and OpenMP Barnes--Hut counterfactual execution is implemented and
+locally CPU-validated. CUDA Barnes--Hut counterfactual execution, broader-scale
+Direct verification, controlled large-N evaluation, and NVIDIA validation
+remain future work.
 
 Frozen Stage 5 benchmark code, protocols, policy, scripts, and evidence are not
 dependencies of this engine and remain unchanged.

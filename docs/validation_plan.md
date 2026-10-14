@@ -237,3 +237,49 @@ repository/dependency checks, and an independent source-level gate on
 2026-10-14. The prior real OpenGL launch is not a substitute for subjective
 visual inspection. CUDA/Barnes--Hut build and runtime validation remain an
 RTX/NVIDIA gate.
+
+## Barnes--Hut counterfactual Stage 4B validation
+
+Implementation `2ec090d` passed the final focused independent source-level gate
+and canonical Release CPU `18/18` and OpenMP `22/22` CTest suites on
+2026-10-14. This is a local CPU/OpenMP result; CUDA compilation/runtime and
+human visual approval are not claimed.
+
+CPU acceptance must retain bit-for-bit default Direct behavior for the
+deterministic fixtures and execute genuine paired Sequential/Barnes--Hut and
+OpenMP/Barnes--Hut advancement. Tests inspect every retained time boundary,
+stable-ID compaction, matched timestamps, full/removed body counts, immutable
+theta/resource metadata, and separate per-branch force/tree statistics.
+Sequential and OpenMP Barnes--Hut must agree exactly under the established
+shared-tree/per-target contract; nondeterministic timing fields are excluded.
+
+An accuracy-first and a looser theta are each compared against a matched Direct
+reference under declared bounded fixture tolerances. Passing those fixtures is
+not a universal error guarantee. On the eight-step legacy fixture (six-hour
+steps, Jupiter removed), the current Release run measured maximum final-position
+differences across both branches of `0.351136 m` at theta `0.25` and `52.3632 m`
+at theta `0.8`; the bounded regression gates are `10 m` and `1000 m`,
+respectively. Resource tests cover invalid node/memory policies, traversal-work
+exhaustion, nonrepresentable geometry, and rejection
+when removal would leave fewer than two gravitating bodies. Deterministic
+host-side injection after a successful real force evaluation covers the full
+baseline/counterfactual by old-position/new-position matrix under Sequential
+and OpenMP. Every case begins after a committed paired batch and compares all
+states, samples, summaries, conservation values, warnings, counters, and prior
+branch statistics exactly. Injection is available only in the separately
+compiled `nbody_experiments_test_hooks` target. Compile-time assertions verify
+the test executable sees the matching hook-enabled class layout and the
+production-linked worker sees no hook macro or callable CPU hook API; link and
+symbol inspection verify the viewer/worker use only `nbody_experiments`.
+A natural traversal-budget failure verifies typed
+context through the worker publication. Worker tests execute Barnes--Hut through
+the real publication path, retain captured solver/theta after caller edits,
+cancel at paired boundaries, exercise reset/stale-generation rejection, and run
+the OpenMP Barnes--Hut path where compiled. A saturated warning buffer also
+proves that the production approximation-notice decision uses immutable
+accepted-job metadata and that Direct, stale, reset, and mismatched-composition
+publications do not display it.
+
+CUDA/Barnes--Hut counterfactual selection must fail explicitly. No local CUDA
+compile/runtime result is inferred from CPU acceptance, and no skipped or
+mocked test satisfies the future NVIDIA gate.

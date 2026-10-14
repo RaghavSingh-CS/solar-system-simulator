@@ -354,9 +354,9 @@ Stage 3B remains GPU-unverified.
   changing viewer workload gates or promising interactive 50K--100K physics.
 - Evaluate higher multipoles only as a separately justified scientific stage.
 
-The JPL catalog, legacy nine-body initial state, counterfactual engine,
-direct-force kernels, Velocity Verlet equations, and frozen Stage 5 research
-artifacts are outside Stages 1--3B and unchanged.
+The JPL catalog, legacy nine-body initial state, direct-force kernels, Velocity
+Verlet equations, and frozen Stage 5 research artifacts are outside Stages
+1--3B and unchanged.
 
 ## Stage 4A viewer integration
 
@@ -383,9 +383,64 @@ not claim a new graphical crossover or interactive 50K--100K capability.
 CUDA/direct is unchanged. Although the source-reviewed Stage 3B headless
 executor exists, CUDA/Barnes--Hut is intentionally unavailable in the viewer
 until compilation and execution on NVIDIA hardware complete. The separate
-counterfactual runner remains direct-force-only in this stage.
+counterfactual runner remains direct-force-only in Stage 4A.
 
 Stage 4A implementation `c9e9500` passed independent source-level review and
 canonical local CPU/OpenMP validation on 2026-10-14. This status does not imply
 CUDA compilation, NVIDIA execution, subjective visual approval, or a large-N
 performance result.
+
+## Stage 4B CPU counterfactual integration
+
+Implementation `2ec090d` is committed and passed the final focused independent
+source-level gate plus canonical CPU `18/18` and OpenMP `22/22` CTest suites on
+2026-10-14. CUDA compilation/runtime and human visual approval remain
+unverified.
+
+The paired counterfactual runner now treats execution backend and force solver
+as independent captured settings. Direct remains the default. The supported
+matrix is Sequential/direct, Sequential/Barnes--Hut, OpenMP/direct, and
+OpenMP/Barnes--Hut. CUDA/direct remains unchanged; CUDA/Barnes--Hut
+counterfactual execution is rejected explicitly and cannot fall back to CPU or
+direct force.
+
+Each CPU Barnes--Hut run owns two backend objects. Velocity Verlet therefore
+builds a fresh state-specific tree for every force evaluation of the complete
+reference branch and a separate tree for every force evaluation of the compact
+body-removed branch. Both branches receive the same immutable theta, leaf,
+depth, minimum-cell, node, traversal-work, and solver-memory settings. The
+last successful final-position force evaluation of each branch publishes its
+own bounded statistics. A batch publishes states, histories, diagnostics, and
+statistics only after both branches and all scientific checks succeed.
+
+Typed terminal metadata identifies baseline versus compact counterfactual when
+known and records the reliable execution phase. A non-owning contextual proxy
+observes the two real force calls made by the unchanged Velocity Verlet
+function, so old-position and new-position failures are distinguishable without
+duplicating integration mathematics. Failed speculative backend statistics are
+not published over the last committed pair.
+
+The proxy and typed failure attribution remain production behavior, but the
+deterministic failure controls do not. Their declarations, object state,
+branches, and implementations are compile-time guarded and exist only in the
+separate `nbody_experiments_test_hooks` library used by the focused engine
+tests. The viewer and production worker link only `nbody_experiments`.
+
+The existing experiment workload limit remains a conservative direct-
+equivalent admission count; it is not a Barnes--Hut timing estimate. The tree
+implementation independently enforces node, traversal-work, depth, and 256 MiB
+default per-evaluation working-memory limits. The worker descriptor captures
+the effective solver and full Barnes--Hut policy at launch, so later GUI theta
+or solver edits cannot relabel an active or completed result. Reset,
+cancellation, and scenario/worker generation gates are unchanged.
+
+A Barnes--Hut counterfactual result does not independently identify how much
+of a trajectory separation is caused by body removal versus approximation.
+The viewer always derives an explicit notice from the immutable, generation-
+accepted executed solver metadata, even if bounded diagnostic storage is full;
+scientific use requires comparison with a matched direct-force run. Theta `0.25` remains an
+accuracy-first provisional default, while looser theta values are documented
+accuracy/performance choices rather than universal optima. Matched timestamps,
+stable-ID survivor mapping, common inertial coordinates, parent-relative
+metrics, point-mass limitations, and the provisional catalog timestep retain
+their prior meanings.

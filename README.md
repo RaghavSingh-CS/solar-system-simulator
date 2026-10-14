@@ -92,6 +92,10 @@ successful force statistics. CUDA/direct remains available as before;
 CUDA/Barnes--Hut is rejected rather than falling back until NVIDIA validation.
 Stage 4A viewer integration is committed as `c9e9500` and passed independent
 local CPU/OpenMP source-level review; CUDA/Barnes--Hut remains GPU-unverified.
+Stage 4B counterfactual integration is committed as `2ec090d` and passed its
+focused independent source-level gate plus canonical CPU/OpenMP validation.
+CUDA/Barnes--Hut counterfactual execution remains unavailable and
+GPU-unverified.
 
 On a machine with a compatible CUDA toolkit and NVIDIA device, run
 `.\scripts\test-local.ps1 -Configuration CUDA` and then
@@ -137,11 +141,14 @@ Controls:
   transform.
 - The `Counterfactual Experiment` panel captures either the current or initial
   astronomical state, removes one explicitly eligible non-Sun body from an
-  independent paired direct-force run, and publishes bounded baseline/counterfactual
+  independent paired run, and publishes bounded baseline/counterfactual
   trajectories from a dedicated worker. Visibility never changes solver
   inclusion. Scenario and worker generations suppress stale publications, and
   every publication retains the immutable executed configuration rather than
-  later editor values. The overlay uses a solid baseline and dashed altered
+  later editor values. Direct remains the experiment default; Sequential and
+  OpenMP can explicitly use Barnes--Hut with one captured theta/resource policy
+  applied to two independent state-specific trees. The overlay uses a solid
+  baseline and dashed altered
   path in one common frame; unmonitored local origins use separately retained
   matched-time baseline references, while unavailable origins suppress the
   overlay explicitly. Responsive controls keep labels separate from numeric
@@ -150,9 +157,20 @@ Controls:
   independent per-branch conservation diagnostics, and collapsible immutable
   provenance. Missing metrics are shown as `N/A`; terminal failures remain
   prominent. Sequential and OpenMP are available in their corresponding CPU
-  builds. CUDA appears only in a CUDA-enabled build with an available device;
+  builds. Barnes--Hut results warn that removal response and approximation
+  error are not separated by one run; a matched Direct reference is required
+  for interpretation. That notice is derived from the immutable executed job,
+  so bounded diagnostic saturation or later control edits cannot hide or
+  relabel it. Terminal failures report a typed branch and execution phase when
+  the runner can establish them without guessing. The production force proxy
+  retains that attribution but contains no fault-injection API or state;
+  deterministic injection is compiled only into a separate library used by
+  the focused engine tests and is never linked into the viewer or worker.
+  CUDA appears only in a CUDA-enabled build with an
+  available device;
   it owns separate persistent baseline/counterfactual allocations and never
-  silently falls back to CPU. Separation is not labeled as escape.
+  silently falls back to CPU. CUDA/Barnes--Hut counterfactual execution remains
+  unavailable. Separation is not labeled as escape.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
 - Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.
@@ -204,9 +222,9 @@ backend/solver combinations fail explicitly. See
 acceptance semantics, numerical limits, exact Sequential/OpenMP agreement
 tests, transactional CUDA integration design, and exploratory scaling evidence.
 CUDA Barnes--Hut Stage 3B is source-reviewed but remains GPU-unverified and is
-not enabled in the viewer or counterfactual engine. The viewer instead uses
-the CPU-reviewed Sequential/OpenMP Barnes--Hut backends; none of these paths
-alter Stage 5.
+not enabled in either graphical path. The viewer and counterfactual engine use
+only the CPU-reviewed Sequential/OpenMP Barnes--Hut backends; none of these
+paths alter Stage 5.
 
 Run one reproducible benchmark configuration:
 

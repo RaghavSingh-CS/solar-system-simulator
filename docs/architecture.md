@@ -95,8 +95,9 @@ its compensated accumulator and output. Per-thread padded integer counters are
 merged after the region; exceptions are captured in-region and reported only
 outside it, with failed outputs/statistics discarded. Direct remains default.
 CUDA Barnes--Hut state advancement is implemented as the separately selected
-Stage 3B path; viewer/counterfactual Barnes--Hut integration remains future
-work. Full policy and evidence are in
+Stage 3B path. Stages 4A and 4B connect the reviewed Sequential/OpenMP solver
+to the viewer and paired counterfactual engine; CUDA/Barnes--Hut remains
+unavailable in both graphical paths. Full policy and evidence are in
 [barnes_hut.md](barnes_hut.md).
 
 CUDA Barnes--Hut Stage 3A is isolated as a force-only source path. The shared
@@ -168,8 +169,11 @@ SimulationState + ForceBackend
 `SimulationController` calls the existing CPU `velocity_verlet_step` for Sequential/OpenMP and the existing batched `CudaVelocityVerlet` executor for CUDA; no gravitational calculation exists in renderer code. CUDA allocations are reused while the body count is unchanged, and each requested frame batch completes its device integration and returns an authoritative host state before diagnostics or rendering. There is no CUDA/OpenGL interoperability. The application processes events, advances a named integer count of fixed simulation steps, samples physical state, prepares a snapshot, renders, and swaps buffers. Render frame duration is not passed to the integrator. Trails remain in physical coordinates until rendering, and display radii/materials/rings never feed back into physics. Static orbit guides are sampled from the same documented JPL mean-element model but never drive body motion. Camera presets, label decluttering, health mapping, scenario switching, diagnostics, trails, and render transformation are independently headless-testable. A later renderer can replace per-body sphere draws with points or instancing without changing physics.
 
 The headless counterfactual runner owns two private branches and publishes only
-complete paired batches. Sequential/OpenMP use the existing force backend;
-optional CUDA owns two separate `CudaVelocityVerlet` objects with persistent
+complete paired batches. Sequential/OpenMP select direct or Barnes--Hut
+explicitly. Barnes--Hut owns distinct full/removed backend instances, so both
+Velocity Verlet force evaluations build from the correct branch state and no
+tree/statistics state is shared. Optional CUDA owns two separate
+`CudaVelocityVerlet` objects with persistent
 full/compacted allocations. Each CUDA step returns both synchronized host
 states before either enters the candidate result. CUDA calls are serialized,
 not placed in simultaneous streams. Failed CUDA or post-integration scientific
@@ -248,17 +252,70 @@ restoring the scenario-defined initial state.
 
 The main viewer loop is synchronous and UI-thread-owned; Stage 4A does not add
 a simulation thread. The separate counterfactual worker continues to own an
-immutable direct-force experiment snapshot and its existing scenario/worker
-generation gates. Viewer backend, solver, and theta edits neither alias nor
-retarget an in-flight experiment. Reset requests cooperative cancellation,
+immutable experiment snapshot and its existing scenario/worker generation
+gates. Stage 4B captures the experiment's own direct/Barnes--Hut choice and
+full theta/resource policy; viewer or next-run edits neither alias nor retarget
+an in-flight experiment. Reset requests cooperative cancellation,
 invalidates the accepted worker generation, and clears publication-derived
 progress, result, warning, frame, and overlay caches before restoring the live
 state; delayed progress or terminal completion therefore cannot republish.
-Counterfactual Barnes--Hut is a later stage.
+Sequential/OpenMP Barnes--Hut counterfactual execution is supported;
+CUDA/Barnes--Hut remains unavailable and GPU-unverified.
 
 Stage 4A implementation `c9e9500` passed independent source-level review and
 local CPU/OpenMP validation on 2026-10-14. CUDA/Barnes--Hut viewer execution
 remains disabled and GPU-unverified pending NVIDIA validation.
+
+## Counterfactual Barnes--Hut execution model (Stage 4B)
+
+Implementation `2ec090d` passed the final focused independent source-level
+commit gate and canonical CPU/OpenMP validation on 2026-10-14. CUDA compilation,
+NVIDIA execution, and human visual approval are not claimed.
+
+`CounterfactualExperimentConfiguration` adds a solver dimension without
+changing its direct default. The runner constructs replacement resources
+before execution: direct Sequential uses the stateless reference backend,
+direct OpenMP owns two configured backends, and each CPU Barnes--Hut choice
+owns one backend per branch. Both branches share only immutable configuration,
+never an octree. They use the same gravitational constant, fixed timestep,
+Velocity Verlet function, theta/policy, batch boundary, and scientific guards.
+
+The candidate result is still a value copy of the last committed pair. A full-
+branch or removed-branch exception leaves both committed states, histories,
+metrics, conservation values, warnings, counters, and prior branch statistics
+unchanged; terminal failure metadata remains separate. Successful steps copy
+the two backends' most recent final-position force statistics into the candidate
+before atomic batch publication. Stable-ID compaction and matched-time baseline
+reference positions are unchanged.
+
+A non-owning force-backend proxy surrounds each CPU branch only while the
+unchanged Velocity Verlet function runs. It records whether the active real
+backend call is the old-position or new-position force evaluation, without
+duplicating the integrator equations. Terminal records carry typed optional
+branch and phase metadata; candidate preparation, solver-statistic collection,
+post-step scientific validation, history construction, conservation/summary
+evaluation, and commit are labeled only at their actual call sites. Operations
+whose branch or phase cannot be established retain an explicit unspecified
+value rather than inferring context from exception text.
+
+Fault injection is not part of that production proxy contract. The normal
+`nbody_experiments` target compiles without test-hook declarations, state, or
+branches. Only `nbody_experiments_test_hooks` defines the guarded test ABI, and
+only the focused counterfactual engine tests link that variant. The viewer,
+visualization model, and worker tests link the production target, preventing a
+runtime configuration from enabling deterministic test failures.
+
+The asynchronous worker copies solver and Barnes--Hut settings into its
+immutable run descriptor before scheduling. Publications, stale-generation
+gates, cancellation, overlays, and result tables continue to consume that
+descriptor rather than mutable GUI controls. The UI reports backend, solver,
+theta, hard tree limits, and per-branch last-force statistics. It also states
+that Barnes--Hut-versus-direct discrepancy and physical removal response are
+not separable within a single approximate run. This notice is computed from the
+generation-gated immutable run descriptor rather than the bounded warning
+buffer, and therefore survives warning saturation and live control edits while
+remaining suppressible on reset or scenario replacement. CUDA/Barnes--Hut is rejected;
+no CPU or direct-force fallback is present.
 
 ## Data provenance
 

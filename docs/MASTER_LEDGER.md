@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 ## Stage status
 
@@ -29,7 +29,7 @@ Last updated: 2026-10-13
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
-| Barnes--Hut large-N solver roadmap | **STAGE 4A VIEWER INTEGRATION COMMITTED / SOURCE-REVIEWED** | Sequential/OpenMP viewer selection, transactional CPU frame batches, theta/resource diagnostics, and explicit CUDA/Barnes--Hut unavailability; CUDA compilation/runtime and controlled large-N evaluation remain mandatory |
+| Barnes--Hut large-N solver roadmap | **STAGE 4B COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED** | Implementation `2ec090d` adds transactional Sequential/OpenMP paired counterfactual execution, structured failure context, and immutable approximation notices; CUDA execution and controlled large-N evaluation remain mandatory |
 
 ## Decisions and rationale
 
@@ -2159,6 +2159,86 @@ this establishes launch/event-loop behavior, not subjective visual approval.
 The final independent source-level commit gate passed on 2026-10-14. NVIDIA
 CUDA/Barnes--Hut viewer validation remains pending; no GPU result is claimed.
 
+## Barnes--Hut Stage 4B counterfactual integration (committed and independently source-reviewed)
+
+Stage 4B implementation `2ec090d` extends the existing paired experiment
+configuration with an explicit Direct/Barnes--Hut solver choice while retaining
+Direct as the default. Sequential/direct, Sequential/Barnes--Hut,
+OpenMP/direct, and OpenMP/Barnes--Hut are implemented. CUDA/direct is unchanged;
+CUDA/Barnes--Hut counterfactual execution is rejected explicitly with no CPU or
+Direct fallback.
+
+Each approximate run owns separate complete-reference and compact-removed
+Barnes--Hut backends. Both branches use the same immutable theta/resource
+policy, gravitational constant, fixed timestep, Velocity Verlet integrator,
+batch boundaries, and scientific guards, but build trees only from their own
+state. The result records solver/policy plus separate last-success statistics
+for the two branches. Existing value-transactional publication means a failure
+in either branch cannot publish partial states, histories, metrics,
+conservation values, warnings, counters, or branch statistics.
+
+The commit-gate remediation adds bounded typed terminal context: failure kind,
+optional baseline/counterfactual branch, and an execution phase established at
+the actual operation. A non-owning proxy observes the old-position and new-
+position force calls performed by the unchanged Velocity Verlet function;
+candidate preparation, statistics, post-step validation, history, conservation/
+summary, and commit are labeled at their own boundaries. Unknown context stays
+unspecified and original exception messages remain intact.
+
+The final local remediation compile-time isolates deterministic fault
+injection. Production `nbody_experiments` retains the contextual proxy and
+typed natural-failure reporting but compiles without test-hook declarations,
+object fields, checks, implementations, or symbols. The separate
+`nbody_experiments_test_hooks` variant publishes a matching guarded ABI only to
+the focused engine tests. The viewer, visualization model, and worker tests
+link the production variant exclusively; there is no production runtime flag
+that can activate injection.
+
+The worker descriptor captures solver and full Barnes--Hut settings at launch;
+later editor changes cannot retarget or relabel progress/terminal publications.
+The GUI exposes Direct/Barnes--Hut independently from Sequential/OpenMP,
+reports captured theta and hard resource settings, displays per-branch
+statistics, and blocks CUDA/Barnes--Hut. Approximate runs retain a scientific
+warning: measured full-versus-removed separation contains both the physical
+counterfactual response and Barnes--Hut approximation discrepancy, so a matched
+Direct run is required for interpretation. The direct-equivalent workload count
+remains a conservative admission policy, not a Barnes--Hut performance model.
+The visible notice is derived independently from the generation-gated immutable
+run descriptor, so warning-list saturation and later solver/theta edits cannot
+hide or relabel it; reset, stale generations, composition mismatch, and Direct
+runs suppress it.
+
+Focused CPU/OpenMP tests cover unchanged Direct defaults, genuine paired
+Barnes--Hut execution, each retained boundary, separate full/removed body
+statistics, stable-ID exclusion, Direct-reference tolerances, theta sensitivity,
+invalid small systems/nonrepresentable geometry, hard solver limits,
+transactional failure in either branch, immutable worker metadata,
+cancellation, reset/generation behavior, and genuine OpenMP worker execution.
+The remediation additionally executes all four branch/force-phase failure
+combinations after a committed batch under both Sequential and OpenMP, verifies
+complete rollback including prior Barnes--Hut statistics, propagates a natural
+traversal-budget failure through the worker, and tests the production notice
+decision with a saturated issue buffer.
+The bounded eight-step legacy fixture (six-hour steps, Jupiter removed)
+measured maximum final-position differences across both branches of
+`0.351136 m` for theta `0.25` and `52.3632 m` for theta `0.8` against Direct,
+within the declared `10 m` and `1000 m` fixture gates. This is a local bounded
+characterization, not a general accuracy guarantee.
+Canonical Release validation passed CPU `18/18` and OpenMP `22/22` CTests,
+including the focused engine, worker, visualization, Barnes--Hut, catalog, and
+dataset suites. Repository-layout and pinned dependency-cache verification and
+`git diff --check` passed. The canonical OpenMP catalog/Barnes--Hut viewer
+remained running through an eight-second hidden OpenGL smoke window and was
+then stopped intentionally; this establishes process/event-loop health, not
+subjective visual approval. The final focused independent source-level commit
+gate passed on 2026-10-14 and implementation `2ec090d` is committed. No CUDA
+compilation/runtime result or human visual approval is claimed.
+
+No direct-force equation, Velocity Verlet mathematics, CUDA source, JPL data,
+legacy Solar initialization, Stage 1/2 evidence, or frozen Stage 5 artifact is
+changed. CUDA counterfactual Barnes--Hut, controlled large-N evaluation, and
+RTX 4050 validation remain pending.
+
 ## Known limitations
 
 - A sourced common-epoch 60-body JPL initial-condition snapshot now exists,
@@ -2233,3 +2313,5 @@ CUDA/Barnes--Hut viewer validation remains pending; no GPU result is claimed.
   headless selection, failure-phase reporting, and focused CPU/GPU tests.
 - `c9e9500` — independently source-reviewed Stage 4A Sequential/OpenMP
   Barnes--Hut viewer selection, transactional advancement, and lifecycle tests.
+- `2ec090d` — independently source-reviewed Stage 4B Sequential/OpenMP
+  Barnes--Hut paired counterfactual integration, failure attribution, and tests.
