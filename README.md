@@ -78,6 +78,21 @@ Forward application options as a string array, for example:
 .\scripts\run-visualizer.ps1 -Backend OpenMP -ApplicationArguments '--threads','4','--scenario','catalog'
 ```
 
+The viewer defaults to the existing direct-force path. Sequential and OpenMP
+can select the reviewed CPU Barnes--Hut evaluator independently, either from
+the ImGui `Force Solver` section or at launch:
+
+```powershell
+.\scripts\run-visualizer.ps1 -Backend OpenMP -ApplicationArguments '--threads','4','--solver','barnes-hut','--theta','0.25'
+```
+
+Theta edits are drafts until explicitly applied. The panel reports the
+effective backend, solver, theta, tree/traversal/memory bounds, and last
+successful force statistics. CUDA/direct remains available as before;
+CUDA/Barnes--Hut is rejected rather than falling back until NVIDIA validation.
+Stage 4A viewer integration is committed as `c9e9500` and passed independent
+local CPU/OpenMP source-level review; CUDA/Barnes--Hut remains GPU-unverified.
+
 On a machine with a compatible CUDA toolkit and NVIDIA device, run
 `.\scripts\test-local.ps1 -Configuration CUDA` and then
 `.\scripts\run-visualizer.ps1 -Backend CUDA -ApplicationArguments '--device','0'`.
@@ -107,6 +122,10 @@ deterministic seeded `Compute Experiment` remains available with
 Controls:
 
 - The themed ImGui panel separates primary simulation/compute/health controls from collapsible technical details. Numerical health compares live drift against the unchanged `5e-6` energy and `5e-10` angular-momentum bounds.
+- Backend and force solver are independent controls. Direct remains the
+  default; Sequential/Barnes--Hut and OpenMP/Barnes--Hut use the same bounded
+  CPU solver as the headless runner. The accuracy-first `theta=0.25` default is
+  provisional and distribution-dependent, not a universal accuracy promise.
 - Catalog composition checkboxes select gravitational inclusion; per-body and
   body-class visibility controls affect rendering only. Excluded major sources
   or parents produce explicit warnings.
@@ -185,8 +204,9 @@ backend/solver combinations fail explicitly. See
 acceptance semantics, numerical limits, exact Sequential/OpenMP agreement
 tests, transactional CUDA integration design, and exploratory scaling evidence.
 CUDA Barnes--Hut Stage 3B is source-reviewed but remains GPU-unverified and is
-not enabled in the viewer or counterfactual engine. None of these paths alter
-Stage 5.
+not enabled in the viewer or counterfactual engine. The viewer instead uses
+the CPU-reviewed Sequential/OpenMP Barnes--Hut backends; none of these paths
+alter Stage 5.
 
 Run one reproducible benchmark configuration:
 

@@ -207,3 +207,33 @@ These thresholds are deliberately looser than the exact CPU/OpenMP equality obse
 On the Tesla T4, Release CTest passed `2/2`: the foundation test and `nbody_cuda_validation`. The CUDA suite exercised analytic and seeded force comparison, analytic and seeded integration against the CPU reference, repeat execution, energy/angular/linear-momentum/center-of-mass guards, coincident-position rejection, and NaN-input rejection. All predeclared thresholds above remained unchanged.
 
 The CTest executable reports pass/fail rather than individual CPU/CUDA errors, so the retained log establishes that the errors were within tolerance but does not support a bitwise-identity or exact-error claim. In the controlled benchmark, all 154 rows passed; repeat checksums match exactly within each body count. Maximum recorded relative energy drift was `1.1779626463387057e-13`, and maximum relative angular-momentum drift was `3.740862421005083e-15`, below the `5e-6` and `5e-10` benchmark guards.
+
+## Barnes--Hut viewer Stage 4A validation
+
+The visualization-model suite exercises the real controller selection path for
+the four CPU combinations, retains direct as the default, and compares the
+controller with an independently advanced matching headless backend after each
+of seven consecutive steps. Each boundary checks exact state/time/body identity,
+conservation diagnostics, effective configuration, and deterministic tree/force
+statistics under the established CPU contract. It
+also covers invalid/non-finite theta,
+state/time preservation across solver changes, scenario replacement and reset,
+effective statistics, explicit CUDA/Barnes--Hut rejection, and a constructed
+second-force singularity that must pause without publishing partial state.
+
+Existing counterfactual-worker tests remain the concurrency boundary: they
+cover immutable snapshots, scenario replacement during a run, cancellation,
+and non-aliasing of the live controller. The reset test starts a real worker,
+accepts its real generation and progress through the production gate, invokes
+the production reset invalidation helper, verifies every publication-derived
+cache is empty, rejects both saved progress and late terminal completion, and
+admits a fresh post-reset job.
+Stage 4A introduces no additional simulation worker and does not claim
+Barnes--Hut counterfactual execution.
+
+Final local acceptance passed canonical CPU `18/18` and OpenMP `22/22` Release
+CTest runs, focused visualization and worker tests, viewer builds,
+repository/dependency checks, and an independent source-level gate on
+2026-10-14. The prior real OpenGL launch is not a substitute for subjective
+visual inspection. CUDA/Barnes--Hut build and runtime validation remain an
+RTX/NVIDIA gate.

@@ -7,8 +7,8 @@
 - Pair acceleration: `a_i = G * sum(j != i) m_j (r_j-r_i) / |r_j-r_i|^3`.
 - The direct-force implementations and Stage 1 sequential Barnes--Hut solver
   use no gravitational softening; coincident bodies are rejected. Barnes--Hut
-  is opt-in in the headless runner and does not change the viewer workload
-  gates.
+  is opt-in in the headless runner and viewer and does not weaken the viewer
+  workload gates.
 - `G = 6.67430e-11 m^3 kg^-1 s^-2`, the 2022 CODATA recommended value (unchanged numerically from 2018), sourced from [NIST](https://physics.nist.gov/constants).
 
 ## Integrator decision
@@ -226,6 +226,39 @@ fallback; no runtime font download is required.
   when no usable NVIDIA device exists.
 - Colab must validate compilation and correctness against the sequential reference; its performance numbers are reported only for that Colab environment.
 - Final crossover calibration is rerun end-to-end on the RTX 4050. No local CPU/Colab GPU timing mixture is permitted.
+
+## Viewer Barnes--Hut execution model (Stage 4A)
+
+The viewer controller owns one authoritative host `SimulationState` and treats
+execution backend (`Sequential`, `OpenMP`, `CUDA`) and force solver (`Direct`,
+`Barnes--Hut`) as independent configuration dimensions. The supported viewer
+matrix is Sequential/direct, Sequential/Barnes--Hut, OpenMP/direct,
+OpenMP/Barnes--Hut, and CUDA/direct. CUDA/Barnes--Hut fails explicitly pending
+NVIDIA validation; no direct-force or CPU fallback is permitted.
+
+CPU Barnes--Hut calls reuse the reviewed `ForceBackend` implementations and
+the unchanged Velocity Verlet function. A requested frame/manual batch advances
+a private state copy and publishes it only after every step succeeds. A force,
+tree, work-budget, memory-budget, or finite-state failure pauses the controller,
+retains the last committed state/time, and exposes a bounded error string.
+Backend/solver replacement constructs replacement resources before changing
+the effective configuration, so switching never resets time or leaves stale
+accelerations. Reset and scenario replacement retain the selected solver while
+restoring the scenario-defined initial state.
+
+The main viewer loop is synchronous and UI-thread-owned; Stage 4A does not add
+a simulation thread. The separate counterfactual worker continues to own an
+immutable direct-force experiment snapshot and its existing scenario/worker
+generation gates. Viewer backend, solver, and theta edits neither alias nor
+retarget an in-flight experiment. Reset requests cooperative cancellation,
+invalidates the accepted worker generation, and clears publication-derived
+progress, result, warning, frame, and overlay caches before restoring the live
+state; delayed progress or terminal completion therefore cannot republish.
+Counterfactual Barnes--Hut is a later stage.
+
+Stage 4A implementation `c9e9500` passed independent source-level review and
+local CPU/OpenMP validation on 2026-10-14. CUDA/Barnes--Hut viewer execution
+remains disabled and GPU-unverified pending NVIDIA validation.
 
 ## Data provenance
 

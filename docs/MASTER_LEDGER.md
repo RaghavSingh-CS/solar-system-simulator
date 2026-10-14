@@ -29,7 +29,7 @@ Last updated: 2026-10-13
 | Astronomical catalog and 60-body dataset | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Immutable catalog foundation plus a reproducible JPL-sourced 60-body J2000 snapshot, offline deterministic generation, and CUDA-disabled CPU/OpenMP regression validation |
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
-| Barnes--Hut large-N solver roadmap | **STAGE 3B CUDA VERLET SOURCE-REVIEWED / GPU UNVERIFIED** | Source-reviewed Stage 3A force plus source-reviewed transactional two-tree/two-force CUDA Velocity Verlet and explicit headless selection; CUDA compilation/runtime and controlled large-N evaluation remain mandatory |
+| Barnes--Hut large-N solver roadmap | **STAGE 4A VIEWER INTEGRATION COMMITTED / SOURCE-REVIEWED** | Sequential/OpenMP viewer selection, transactional CPU frame batches, theta/resource diagnostics, and explicit CUDA/Barnes--Hut unavailability; CUDA compilation/runtime and controlled large-N evaluation remain mandatory |
 
 ## Decisions and rationale
 
@@ -54,10 +54,11 @@ Last updated: 2026-10-13
 - Stage 6D MPI uses replicated global state, deterministic contiguous force-target partitions, and full acceleration exchange. Hybrid OpenMP is confined to local target work under `MPI_THREAD_FUNNELED`.
 - Stage 6D large-N display support does not change the exact O(N^2) algorithm: continuous viewer computation ends above N=1024, manual direct-force steps end above N=8192, and larger workloads are display-only.
 - Barnes--Hut is the required approximate-force path for large-N work, not an
-  optional enhancement. Stage 1 implements the Sequential reference
-  tree/acceptance semantics and validates it against direct force. Matched
-  OpenMP and CUDA variants plus a separate controlled large-N performance
-  evaluation remain mandatory and unimplemented.
+  optional enhancement. Stages 1 and 2 implement and validate the Sequential
+  and OpenMP variants; Stages 3A/3B implement source-reviewed CUDA force and
+  transactional integration but remain GPU-unverified. Stage 4A connects only
+  the validated CPU variants to the viewer. Controlled large-N performance,
+  CUDA viewer authorization, and RTX validation remain mandatory.
 - CUDA viewer execution reuses the existing `CudaVelocityVerlet` allocation and
   advances one complete fixed-step frame batch per call. Host
   `SimulationState` remains authoritative at completed advancement boundaries;
@@ -2105,6 +2106,59 @@ checks passed. No CUDA translation unit compiled and no GPU test ran or skipped
 on this AMD-only/no-nvcc host. Independent adversarial source review passed;
 Stage 3B remains GPU-unverified.
 
+## Barnes--Hut Stage 4A viewer integration
+
+Implementation `c9e95007f289ab72ab71d1f715a485da42a4a807` on
+`feature/cuda-visualizer` starts from
+`6bbd6e7c83529039b201b8af54f4d70743939e12`. The visualization controller now
+models backend and force solver independently. Direct remains the default;
+Sequential/direct, Sequential/Barnes--Hut, OpenMP/direct, OpenMP/Barnes--Hut,
+and the existing CUDA/direct path are explicit. CUDA/Barnes--Hut is rejected
+with a pending-NVIDIA-validation diagnostic and never falls back.
+
+The viewer links the reviewed CPU Barnes--Hut library and reuses the unchanged
+Velocity Verlet implementation. CPU frame/manual batches advance a value-owned
+candidate and publish only after every requested step succeeds. A failure
+pauses the controller, retains the last committed state/time, and exposes the
+diagnostic. Solver/backend changes construct replacement resources before
+publishing effective configuration and preserve current state, time, pause
+state, body order, timestep, scenario data, conservation tracking, and trails.
+
+The ImGui panel provides Direct/Barnes--Hut selection, an explicitly applied
+theta draft (default/effective `0.25`), effective backend/solver metadata,
+bounded tree/work/memory policy, last-success statistics, and force failure
+text. The existing large-synthetic workload gates remain active in addition to
+the solver's hard resource limits. No graphical crossover, FPS, or interactive
+50K--100K physics claim is made.
+
+The live simulation remains synchronous on the UI thread. The separate
+counterfactual worker and engine remain direct-force-only; immutable snapshots,
+scenario/worker generations, cancellation, and stale-publication suppression
+remain authoritative. Reset now requests cancellation, invalidates the accepted
+job before restoring state, and clears publication-derived progress, results,
+warnings, frame errors, labels, and overlays. Saved progress and delayed
+terminal completion are rejected while a later fresh job remains admissible.
+Solver and theta edits cannot retarget an in-flight experiment.
+CUDA kernels, CUDA Barnes--Hut Stage 3A/3B, direct-force equations, Velocity
+Verlet mathematics, JPL data, legacy Solar initialization, benchmark evidence,
+and frozen Stage 5 artifacts were not modified.
+
+Canonical Release validation on the AMD Windows host passed CPU `18/18` and
+OpenMP `22/22` CTests. Focused controller coverage checks all four CPU solver
+combinations, direct default behavior, exact matching to the corresponding
+headless backend over seven steps, theta rejection/application,
+state/time-preserving switches, scenario/reset preservation, effective
+statistics, explicit CUDA/Barnes--Hut rejection, and rollback after a
+second-force singularity with backend, solver, step, and `new-force` context.
+Worker coverage exercises real scheduled progress, the production invalidation
+helper, late terminal rejection, complete cache clearing, and a fresh accepted
+job. Sequential and two-thread OpenMP Barnes--Hut headless seven-step smokes
+produced byte-identical CSV data rows. A real 1920x1080 catalog/OpenMP/
+Barnes--Hut OpenGL launch remained responsive for the ten-second smoke window;
+this establishes launch/event-loop behavior, not subjective visual approval.
+The final independent source-level commit gate passed on 2026-10-14. NVIDIA
+CUDA/Barnes--Hut viewer validation remains pending; no GPU result is claimed.
+
 ## Known limitations
 
 - A sourced common-epoch 60-body JPL initial-condition snapshot now exists,
@@ -2115,8 +2169,8 @@ Stage 3B remains GPU-unverified.
 - Sequential and OpenMP Barnes--Hut use the same monopoles and target-local
   acceptance, so neither preserves exact pairwise force symmetry. Theta `0.25`
   is provisional and distribution-dependent; Stage 3B has only uncompiled CUDA
-  force/integration source using CPU-built trees, with no viewer path or validated
-  50K--100K interactive force workload.
+  force/integration source using CPU-built trees, with no authorized CUDA viewer
+  path or validated 50K--100K interactive force workload.
 - CUDA physics is T4-validated and the viewer has an opt-in batched CUDA path,
   but viewer CUDA compilation/runtime and a same-machine CPU/OpenMP/CUDA matrix
   remain unverified until an NVIDIA/CUDA host is available. MPI is implemented
@@ -2177,3 +2231,5 @@ Stage 3B remains GPU-unverified.
   source-manifest and Windows checkout line-ending custody.
 - `2cc2cb0` — source-reviewed transactional CUDA Barnes--Hut Velocity Verlet,
   headless selection, failure-phase reporting, and focused CPU/GPU tests.
+- `c9e9500` — independently source-reviewed Stage 4A Sequential/OpenMP
+  Barnes--Hut viewer selection, transactional advancement, and lifecycle tests.

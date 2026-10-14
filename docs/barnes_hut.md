@@ -354,6 +354,38 @@ Stage 3B remains GPU-unverified.
   changing viewer workload gates or promising interactive 50K--100K physics.
 - Evaluate higher multipoles only as a separately justified scientific stage.
 
-The JPL catalog, legacy nine-body initial state, visualization, counterfactual
-engine, direct-force kernels, Velocity Verlet equations, and frozen Stage 5
-research artifacts are outside this implementation and unchanged.
+The JPL catalog, legacy nine-body initial state, counterfactual engine,
+direct-force kernels, Velocity Verlet equations, and frozen Stage 5 research
+artifacts are outside Stages 1--3B and unchanged.
+
+## Stage 4A viewer integration
+
+The optional OpenGL/ImGui viewer now exposes the existing solver as an
+independent selection for Sequential and OpenMP execution. Direct remains the
+default. Barnes--Hut starts from the accuracy-first provisional `theta=0.25`
+configuration and retains the reviewed defaults: leaf capacity 8, depth 64,
+minimum cell `1e-6 m`, one million nodes, one billion traversal work units,
+and 256 MiB of solver working memory. The panel distinguishes draft theta from
+the effective applied value and reports the current backend/solver, resource
+bounds, and most recent successful tree/force statistics.
+
+Viewer integration does not change the tree, opening criterion, force law,
+Velocity Verlet equations, body order, timestep, or scenario state. CPU frame
+batches are value-transactional, so a failed later force evaluation cannot
+publish a partially advanced state. Failure diagnostics retain the original
+message and identify the effective backend, solver, batch step, and reliable
+source-level phase (`old-force`, `position-drift`, `new-force`,
+`velocity-kick`, or commit; CUDA remains one `cuda-batch` phase). Existing
+synthetic workload gates remain
+in force in addition to Barnes--Hut's own hard resource limits; Stage 4A does
+not claim a new graphical crossover or interactive 50K--100K capability.
+
+CUDA/direct is unchanged. Although the source-reviewed Stage 3B headless
+executor exists, CUDA/Barnes--Hut is intentionally unavailable in the viewer
+until compilation and execution on NVIDIA hardware complete. The separate
+counterfactual runner remains direct-force-only in this stage.
+
+Stage 4A implementation `c9e9500` passed independent source-level review and
+canonical local CPU/OpenMP validation on 2026-10-14. This status does not imply
+CUDA compilation, NVIDIA execution, subjective visual approval, or a large-N
+performance result.
