@@ -415,6 +415,88 @@ void test_worker_does_not_mutate_live_controller() {
         "worker experiment mutated the live simulation controller");
 }
 
+void test_live_solver_switch_and_reset_do_not_retarget_worker() {
+    const auto legacy = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    nbody::visualization::SimulationController controller(
+        legacy.initial_state,
+        {legacy.dt_s, 1U, nbody::visualization::BackendKind::sequential, 1, 0});
+
+    auto configuration = worker_configuration(100000.0);
+    configuration.limits.sample_cadence_s = 100000.0;
+    CounterfactualExperimentWorker worker;
+    nbody::visualization::CounterfactualPublicationGate gate(41U);
+    const auto generation = worker.start(
+        worker_snapshot(0.0, 100000.0), configuration,
+        {41U, nbody::visualization::CounterfactualSnapshotSource::current_state});
+    gate.accept_job(generation, 41U);
+    require(worker.wait_for_progress(generation, 1U),
+        "solver-switch fixture did not reach a synchronized worker boundary");
+    const auto before_switch = worker.publication();
+    require(gate.accepts(before_switch) && before_switch.run &&
+        before_switch.run->backend == ExperimentBackend::sequential &&
+        before_switch.run->estimated_direct_force_interactions > 0U,
+        "worker publication omitted its immutable direct-force execution metadata");
+
+    auto application_publication = before_switch;
+    nbody::visualization::CounterfactualPresentationCache presentation;
+    nbody::experiments::CounterfactualExperimentResult cached_result;
+    presentation.generation = generation;
+    presentation.result = &cached_result;
+    presentation.result_rows.push_back({});
+    presentation.warning_groups.push_back({});
+    presentation.error = "cached presentation error";
+    presentation.frame_error = "cached frame error";
+
+    nbody::visualization::invalidate_counterfactual_application_publication(
+        worker, gate, application_publication, presentation);
+    require(worker.cancellation_requested() &&
+            !gate.accepted_worker_generation().has_value() &&
+            !gate.accepts(before_switch) &&
+            application_publication.generation == 0U &&
+            !application_publication.result && presentation.empty(),
+        "application reset lifecycle did not cancel, invalidate, or clear publication caches");
+
+    nbody::BarnesHutConfiguration barnes_hut;
+    barnes_hut.theta = 0.25;
+    controller.select_solver(
+        nbody::visualization::SolverKind::barnes_hut, barnes_hut);
+    controller.reset();
+    require(controller.solver_kind() ==
+                nbody::visualization::SolverKind::barnes_hut &&
+            same_state(controller.state(), legacy.initial_state),
+        "live solver selection/reset did not preserve the scenario initial state");
+
+    worker.request_cancel();
+    worker.wait_until_idle();
+    const auto terminal = worker.publication();
+    require(!gate.accepts(terminal) && terminal.run == before_switch.run &&
+            terminal.run->backend == ExperimentBackend::sequential &&
+            terminal.run->estimated_direct_force_interactions ==
+                before_switch.run->estimated_direct_force_interactions,
+        "late terminal completion passed the reset gate or changed immutable metadata");
+    if (gate.accepts(terminal)) {
+        application_publication = terminal;
+    }
+    require(application_publication.generation == 0U && presentation.empty(),
+        "rejected late terminal completion repopulated application presentation state");
+
+    auto fresh_configuration = worker_configuration(2.0);
+    const auto fresh_generation = worker.start(
+        worker_snapshot(), fresh_configuration,
+        {41U, nbody::visualization::CounterfactualSnapshotSource::current_state});
+    gate.accept_job(fresh_generation, 41U);
+    worker.wait_until_idle();
+    const auto fresh = worker.publication();
+    if (gate.accepts(fresh)) {
+        application_publication = fresh;
+    }
+    require(fresh_generation != generation && gate.accepts(fresh) &&
+            fresh.state == CounterfactualWorkerState::completed && fresh.result &&
+            application_publication.generation == fresh_generation,
+        "fresh post-reset job could not publish through the invalidated gate");
+}
+
 void test_resource_estimate_and_normalized_threshold() {
     auto snapshot = worker_snapshot();
     auto configuration = worker_configuration(10.0);
@@ -767,6 +849,7 @@ int main() {
         test_failure_preserves_committed_result();
         test_scenario_switch_does_not_alias_live_controller();
         test_worker_does_not_mutate_live_controller();
+        test_live_solver_switch_and_reset_do_not_retarget_worker();
         test_resource_estimate_and_normalized_threshold();
         test_shared_render_space_paths();
         test_hidden_reference_origin_and_frame_failures();

@@ -42,10 +42,13 @@ namespace {
 
 using nbody::visualization::BackendKind;
 using nbody::visualization::ScenarioKind;
+using nbody::visualization::SolverKind;
 
 struct Options {
     ScenarioKind scenario{ScenarioKind::solar_system};
     std::string backend{"sequential"};
+    std::string solver{"direct"};
+    double barnes_hut_theta{0.25};
     std::size_t bodies{32};
     std::uint64_t seed{24301};
     int openmp_threads{4};
@@ -58,6 +61,8 @@ void print_usage(const char* program) {
     std::cout << "Usage: " << program << " [options]\n"
               << "  --scenario solar|catalog|synthetic Default: solar\n"
               << "  --backend sequential|openmp|cuda  CUDA is accepted only in CUDA-enabled viewers\n"
+              << "  --solver direct|barnes-hut       Default: direct\n"
+              << "  --theta X                         Barnes-Hut opening angle (0, 2], default 0.25\n"
               << "  --threads N                        OpenMP threads (default 4)\n"
               << "  --device N                         CUDA device index (default 0)\n"
               << "  --bodies N                         Synthetic body count (default 32)\n"
@@ -89,6 +94,10 @@ Options parse_options(int argc, char** argv) {
             }
         } else if (argument == "--backend") {
             options.backend = value;
+        } else if (argument == "--solver") {
+            options.solver = value;
+        } else if (argument == "--theta") {
+            options.barnes_hut_theta = std::stod(value);
         } else if (argument == "--threads") {
             options.openmp_threads = std::stoi(value);
         } else if (argument == "--device") {
@@ -108,6 +117,14 @@ Options parse_options(int argc, char** argv) {
     if (options.backend != "sequential" && options.backend != "openmp" &&
         options.backend != "cuda") {
         throw std::invalid_argument("backend must be sequential, openmp, or cuda");
+    }
+    if (options.solver != "direct" && options.solver != "barnes-hut") {
+        throw std::invalid_argument("solver must be direct or barnes-hut");
+    }
+    if (!(options.barnes_hut_theta > 0.0) ||
+        options.barnes_hut_theta > 2.0 ||
+        !std::isfinite(options.barnes_hut_theta)) {
+        throw std::invalid_argument("Barnes-Hut theta must be finite and in (0, 2]");
     }
     if (options.bodies < 2 || options.openmp_threads <= 0 ||
         options.cuda_device < 0 || options.width <= 0 || options.height <= 0) {
@@ -254,14 +271,8 @@ struct ApplicationModel {
         std::vector<bool> monitored;
         bool show_overlay{true};
         bool show_significant{true};
-        std::string overlay_frame_error;
         std::string error;
-        std::uint64_t presentation_generation{0};
-        const nbody::experiments::CounterfactualExperimentResult*
-            presentation_result{nullptr};
-        std::vector<nbody::visualization::CounterfactualResultRow> result_rows;
-        std::vector<nbody::visualization::CounterfactualWarningGroup> warning_groups;
-        std::string presentation_error;
+        nbody::visualization::CounterfactualPresentationCache presentation;
     };
 
     nbody::visualization::ScenarioDefinition scenario;
@@ -293,6 +304,9 @@ struct ApplicationModel {
     std::uint64_t synthetic_seed{24301};
     int preferred_cuda_device{0};
     bool cuda_device_available{false};
+    double barnes_hut_theta_draft{0.25};
+    std::string solver_error;
+    std::string simulation_error;
     bool show_trails{true};
     bool show_labels{true};
     bool show_reference_orbits{true};
@@ -300,16 +314,28 @@ struct ApplicationModel {
     float sun_motion_amplification{10.0F};
     float panel_width{438.0F};
 
+    static nbody::visualization::ControllerConfig controller_config(
+        const Options& options,
+        const nbody::visualization::ScenarioDefinition& scenario,
+        BackendKind backend) {
+        nbody::BarnesHutConfiguration barnes_hut;
+        barnes_hut.theta = options.barnes_hut_theta;
+        return {
+            scenario.dt_s,
+            scenario.speed_presets[scenario.default_speed_index].steps_per_frame,
+            backend,
+            options.openmp_threads,
+            options.cuda_device,
+            options.solver == "barnes-hut"
+                ? SolverKind::barnes_hut : SolverKind::direct,
+            barnes_hut,
+        };
+    }
+
     ApplicationModel(const Options& options, BackendKind backend)
         : scenario(nbody::visualization::make_visual_scenario(
               options.scenario, options.bodies, options.seed)),
-          controller(
-              scenario.initial_state,
-              {scenario.dt_s,
-               scenario.speed_presets[scenario.default_speed_index].steps_per_frame,
-               backend,
-               options.openmp_threads,
-               options.cuda_device}),
+          controller(scenario.initial_state, controller_config(options, scenario, backend)),
           render_space(
               scenario.initial_state,
               scenario.styles,
@@ -322,6 +348,7 @@ struct ApplicationModel {
           preferred_cuda_device(options.cuda_device),
           cuda_device_available(
               nbody::visualization::SimulationController::cuda_available(options.cuda_device)) {
+        barnes_hut_theta_draft = options.barnes_hut_theta;
         if (const auto earth = nbody::visualization::find_body_index(
                 scenario, scenario.kind == ScenarioKind::astronomical_catalog
                     ? "sol:earth" : "earth")) {
@@ -422,6 +449,7 @@ struct ApplicationModel {
         label_layout.clear();
         live_comparison.reset();
         live_comparison_error.clear();
+        simulation_error.clear();
         view_error.clear();
         focused_body.reset();
         local_origin_body.reset();
@@ -455,17 +483,17 @@ struct ApplicationModel {
             experiment_publication = std::move(next);
         }
         const auto* result = experiment_publication.result.get();
-        if (experiment_ui.presentation_generation ==
+        if (experiment_ui.presentation.generation ==
                 experiment_publication.generation &&
-            experiment_ui.presentation_result == result &&
+            experiment_ui.presentation.result == result &&
             experiment_gate.accepts(experiment_publication)) {
             return;
         }
-        experiment_ui.presentation_generation = experiment_publication.generation;
-        experiment_ui.presentation_result = result;
-        experiment_ui.result_rows.clear();
-        experiment_ui.warning_groups.clear();
-        experiment_ui.presentation_error.clear();
+        experiment_ui.presentation.generation = experiment_publication.generation;
+        experiment_ui.presentation.result = result;
+        experiment_ui.presentation.result_rows.clear();
+        experiment_ui.presentation.warning_groups.clear();
+        experiment_ui.presentation.error.clear();
         if (result == nullptr ||
             !experiment_gate.accepts(experiment_publication)) {
             return;
@@ -479,13 +507,13 @@ struct ApplicationModel {
                     controller.state().bodies[index].name,
                 });
             }
-            experiment_ui.result_rows =
+            experiment_ui.presentation.result_rows =
                 nbody::visualization::build_counterfactual_result_rows(
                     *result, labels);
-            experiment_ui.warning_groups =
+            experiment_ui.presentation.warning_groups =
                 nbody::visualization::group_counterfactual_warnings(*result);
         } catch (const std::exception& error) {
-            experiment_ui.presentation_error = error.what();
+            experiment_ui.presentation.error = error.what();
         }
     }
 
@@ -500,7 +528,14 @@ struct ApplicationModel {
     }
 
     void reset() {
+        nbody::visualization::invalidate_counterfactual_application_publication(
+            experiment_worker,
+            experiment_gate,
+            experiment_publication,
+            experiment_ui.presentation);
+        experiment_ui.error.clear();
         controller.reset();
+        simulation_error.clear();
         if (conservation) {
             conservation->reset(controller.state());
         }
@@ -627,11 +662,15 @@ bool wants_mouse() {
 }
 
 void log_backend(const nbody::visualization::SimulationController& controller) {
-    std::cout << "active_backend=" << controller.backend_name();
+    std::cout << "active_backend=" << controller.backend_name()
+              << " active_solver=" << controller.solver_name();
     if (controller.backend_kind() == BackendKind::openmp) {
         std::cout << " threads=" << controller.openmp_threads();
     } else if (controller.backend_kind() == BackendKind::cuda) {
         std::cout << " device=" << controller.cuda_device();
+    }
+    if (controller.solver_kind() == SolverKind::barnes_hut) {
+        std::cout << " theta=" << controller.barnes_hut_configuration().theta;
     }
     std::cout << '\n';
 }
@@ -687,6 +726,9 @@ void key_callback(GLFWwindow* window, int key, int, int action, int) {
             input->camera->dolly(-1.0F);
         }
     } catch (const std::exception& error) {
+        if (input != nullptr && input->application != nullptr) {
+            input->application->solver_error = error.what();
+        }
         std::cerr << "input error: " << error.what() << '\n';
     }
 }
@@ -885,7 +927,7 @@ bool publication_matches_scenario(const ApplicationModel& app) {
 void append_counterfactual_trails(
     ApplicationModel& app,
     std::vector<nbody::visualization::RenderTrail>& output) {
-    app.experiment_ui.overlay_frame_error.clear();
+    app.experiment_ui.presentation.frame_error.clear();
     if (!app.experiment_ui.show_overlay || !app.experiment_publication.result ||
         !publication_matches_scenario(app)) {
         return;
@@ -916,7 +958,8 @@ void append_counterfactual_trails(
         nbody::visualization::build_counterfactual_render_paths(
             app.experiment_publication, app.render_space, displayed,
             common_origin, 12U);
-    app.experiment_ui.overlay_frame_error = reconstructed.frame_unavailable_reason;
+    app.experiment_ui.presentation.frame_error =
+        reconstructed.frame_unavailable_reason;
     for (const auto& path : reconstructed.paths) {
         const auto index = nbody::visualization::find_body_index(
             app.scenario, path.stable_id);
@@ -1431,25 +1474,42 @@ UiActions draw_control_panel(
 
     section_heading("Compute Backend");
     if (ImGui::RadioButton("Sequential", app.controller.backend_kind() == BackendKind::sequential)) {
-        app.controller.select_backend(BackendKind::sequential);
-        app.live_comparison.reset();
-        app.apply_workload_safety();
+        try {
+            app.controller.select_backend(BackendKind::sequential);
+            app.solver_error.clear();
+            app.live_comparison.reset();
+            app.apply_workload_safety();
+        } catch (const std::exception& error) {
+            app.solver_error = error.what();
+        }
     }
     help_for_last_item(nbody::visualization::HelpTopic::sequential_backend);
     const bool openmp_available = nbody::visualization::SimulationController::openmp_available();
     ImGui::BeginDisabled(!openmp_available);
     if (ImGui::RadioButton("OpenMP", app.controller.backend_kind() == BackendKind::openmp)) {
-        app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
-        app.live_comparison.reset();
-        app.apply_workload_safety();
+        try {
+            app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+            app.solver_error.clear();
+            app.live_comparison.reset();
+            app.apply_workload_safety();
+        } catch (const std::exception& error) {
+            app.solver_error = error.what();
+        }
     }
     help_for_last_item(nbody::visualization::HelpTopic::openmp_backend);
     ImGui::EndDisabled();
-    ImGui::BeginDisabled(!app.cuda_device_available);
+    const bool cuda_barnes_hut_blocked =
+        app.controller.solver_kind() == SolverKind::barnes_hut;
+    ImGui::BeginDisabled(!app.cuda_device_available || cuda_barnes_hut_blocked);
     if (ImGui::RadioButton("CUDA", app.controller.backend_kind() == BackendKind::cuda)) {
-        app.controller.select_backend(BackendKind::cuda, 1, app.preferred_cuda_device);
-        app.live_comparison.reset();
-        app.apply_workload_safety();
+        try {
+            app.controller.select_backend(BackendKind::cuda, 1, app.preferred_cuda_device);
+            app.solver_error.clear();
+            app.live_comparison.reset();
+            app.apply_workload_safety();
+        } catch (const std::exception& error) {
+            app.solver_error = error.what();
+        }
     }
     help_for_last_item(nbody::visualization::HelpTopic::cuda_backend);
     ImGui::EndDisabled();
@@ -1458,6 +1518,8 @@ UiActions draw_control_panel(
             nbody::visualization::SimulationController::cuda_compiled()
                 ? "CUDA device unavailable"
                 : "CUDA support not compiled");
+    } else if (cuda_barnes_hut_blocked) {
+        ImGui::TextDisabled("CUDA Barnes-Hut viewer execution is pending NVIDIA validation");
     }
     if (app.controller.backend_kind() == BackendKind::openmp ||
         app.scenario.kind == ScenarioKind::synthetic) {
@@ -1469,18 +1531,132 @@ UiActions draw_control_panel(
                 "OpenMP threads", &preferred_openmp_threads, 1, maximum_threads,
                 "%d threads")) {
             if (app.controller.backend_kind() == BackendKind::openmp) {
-                app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
-                app.apply_workload_safety();
+                try {
+                    app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+                    app.solver_error.clear();
+                    app.apply_workload_safety();
+                } catch (const std::exception& error) {
+                    app.solver_error = error.what();
+                }
             }
             app.live_comparison.reset();
             app.live_comparison_error.clear();
         }
         help_for_last_item(nbody::visualization::HelpTopic::openmp_threads);
     }
+
+    section_heading("Force Solver");
+    if (ImGui::RadioButton(
+            "Direct O(N^2)", app.controller.solver_kind() == SolverKind::direct)) {
+        try {
+            app.controller.select_solver(
+                SolverKind::direct, app.controller.barnes_hut_configuration());
+            app.solver_error.clear();
+            app.live_comparison.reset();
+            app.live_comparison_error.clear();
+            app.apply_workload_safety();
+        } catch (const std::exception& error) {
+            app.solver_error = error.what();
+        }
+    }
+    ImGui::BeginDisabled(app.controller.backend_kind() == BackendKind::cuda);
+    if (ImGui::RadioButton(
+            "Barnes-Hut", app.controller.solver_kind() == SolverKind::barnes_hut)) {
+        try {
+            auto configuration = app.controller.barnes_hut_configuration();
+            configuration.theta = app.barnes_hut_theta_draft;
+            app.controller.select_solver(SolverKind::barnes_hut, configuration);
+            app.solver_error.clear();
+            app.live_comparison.reset();
+            app.live_comparison_error.clear();
+            app.apply_workload_safety();
+        } catch (const std::exception& error) {
+            app.solver_error = error.what();
+        }
+    }
+    ImGui::EndDisabled();
+    if (app.controller.backend_kind() == BackendKind::cuda) {
+        ImGui::TextDisabled(
+            "Barnes-Hut is unavailable with CUDA in the viewer until RTX validation completes.");
+    }
+
+    ImGui::TextUnformatted("Barnes-Hut opening angle theta");
+    ImGui::SetNextItemWidth(-1.0F);
+    ImGui::InputDouble(
+        "##BarnesHutTheta", &app.barnes_hut_theta_draft, 0.01, 0.05, "%.4f");
+    const bool valid_theta = std::isfinite(app.barnes_hut_theta_draft) &&
+        app.barnes_hut_theta_draft > 0.0 && app.barnes_hut_theta_draft <= 2.0;
+    const bool theta_changed = valid_theta &&
+        app.barnes_hut_theta_draft !=
+            app.controller.barnes_hut_configuration().theta;
+    ImGui::BeginDisabled(
+        app.controller.solver_kind() != SolverKind::barnes_hut || !theta_changed);
+    if (ImGui::Button("Apply theta")) {
+        try {
+            auto configuration = app.controller.barnes_hut_configuration();
+            configuration.theta = app.barnes_hut_theta_draft;
+            app.controller.select_solver(SolverKind::barnes_hut, configuration);
+            app.solver_error.clear();
+            app.live_comparison.reset();
+            app.live_comparison_error.clear();
+        } catch (const std::exception& error) {
+            app.solver_error = error.what();
+        }
+    }
+    ImGui::EndDisabled();
+    if (!valid_theta) {
+        ImGui::TextColored(
+            ImVec4(0.96F, 0.48F, 0.38F, 1.0F),
+            "Theta must be finite and in (0, 2]. The effective solver is unchanged.");
+    }
+    if (begin_property_table("effective_solver")) {
+        property_row("Effective execution",
+            std::string(app.controller.backend_name()) + " / " +
+                app.controller.solver_name());
+        property_row("Effective theta",
+            app.controller.solver_kind() == SolverKind::barnes_hut
+                ? nbody::visualization::format_measurement(
+                    app.controller.barnes_hut_configuration().theta, "", 4)
+                : "Not used by direct force");
+        if (app.controller.solver_kind() == SolverKind::barnes_hut) {
+            const auto& limits = app.controller.barnes_hut_configuration();
+            property_row("Tree bounds",
+                std::to_string(limits.maximum_nodes) + " nodes; " +
+                    std::to_string(limits.maximum_traversal_work) + " work units");
+            property_row("Memory bound",
+                std::to_string(limits.memory_budget_bytes / (1024U * 1024U)) + " MiB");
+        }
+        ImGui::EndTable();
+    }
+    if (const auto statistics = app.controller.barnes_hut_statistics()) {
+        ImGui::TextDisabled(
+            "Last force: %zu nodes, %zu visited, %zu bytes, %.3f ms tree + %.3f ms force",
+            statistics->node_count,
+            statistics->visited_nodes,
+            statistics->working_memory_bytes,
+            statistics->tree_build_seconds * 1000.0,
+            statistics->force_evaluation_seconds * 1000.0);
+    }
+    if (!app.solver_error.empty()) {
+        ImGui::TextColored(
+            ImVec4(0.96F, 0.48F, 0.38F, 1.0F), "%s", app.solver_error.c_str());
+    }
+    if (!app.simulation_error.empty() || !app.controller.last_error().empty()) {
+        const std::string& error = app.simulation_error.empty()
+            ? app.controller.last_error() : app.simulation_error;
+        ImGui::TextColored(
+            ImVec4(0.96F, 0.38F, 0.32F, 1.0F), "Simulation paused: %s", error.c_str());
+    }
     if (app.astronomical()) {
-        ImGui::TextWrapped(
-            "This astronomical scenario uses direct O(N^2) Velocity Verlet. Backend speedup is not "
-            "research evidence at this small body count.");
+        if (app.controller.solver_kind() == SolverKind::direct) {
+            ImGui::TextWrapped(
+                "This astronomical scenario uses direct O(N^2) Velocity Verlet. Backend speedup is not "
+                "research evidence at this small body count.");
+        } else {
+            ImGui::TextWrapped(
+                "Barnes-Hut uses the same Velocity Verlet timestep and Newtonian force law with a "
+                "monopole approximation. Theta 0.25 is provisional and distribution-dependent.");
+        }
     } else {
         const std::string current_count = std::to_string(app.synthetic_body_count);
         ImGui::SetNextItemWidth(-1.0F);
@@ -1497,7 +1673,9 @@ UiActions draw_control_panel(
         if (workload_policy.warning_required) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96F, 0.72F, 0.32F, 1.0F));
             ImGui::TextWrapped(
-                "Direct O(N^2) workload: continuous advancement is paused to keep the viewer responsive.");
+                app.controller.solver_kind() == SolverKind::direct
+                    ? "Direct O(N^2) workload: continuous advancement is paused to keep the viewer responsive."
+                    : "Bounded Barnes-Hut workload: continuous advancement is paused to keep the viewer responsive; tree, traversal, and memory limits still apply.");
             if (!workload_policy.manual_single_step) {
                 ImGui::TextWrapped(
                     "This size is rendering/inspection only here; use the bounded pilot runner for computation.");
@@ -1988,10 +2166,10 @@ UiActions draw_control_panel(
                 failure.message_text().data(),
                 failure.message_truncated ? " [message truncated]" : "");
         }
-        if (!experiment.presentation_error.empty()) {
+        if (!experiment.presentation.error.empty()) {
             ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
                 "Result presentation error: %s",
-                experiment.presentation_error.c_str());
+                experiment.presentation.error.c_str());
         }
 
         ImGui::SeparatorText("Results");
@@ -2087,7 +2265,8 @@ UiActions draw_control_panel(
                     "Per-body comparison", ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::TextDisabled(
                     "N/A means the committed result does not define that metric. Click a column heading to sort.");
-                draw_counterfactual_result_table(experiment.result_rows);
+                draw_counterfactual_result_table(
+                    experiment.presentation.result_rows);
             }
             if (ImGui::CollapsingHeader("Detailed diagnostics")) {
                 ImGui::TextWrapped(
@@ -2101,7 +2280,7 @@ UiActions draw_control_panel(
                     ImGui::TextDisabled("No retained scientific warnings.");
                 } else {
                     draw_counterfactual_warning_groups(
-                        result, experiment.warning_groups);
+                        result, experiment.presentation.warning_groups);
                 }
             }
         }
@@ -2391,6 +2570,11 @@ int main(int argc, char** argv) {
         if (options.backend == "openmp") {
             backend = BackendKind::openmp;
         } else if (options.backend == "cuda") {
+            if (options.solver == "barnes-hut") {
+                throw std::runtime_error(
+                    "CUDA Barnes-Hut viewer execution is unavailable pending NVIDIA validation; "
+                    "choose --solver direct or a CPU backend.");
+            }
             if (!nbody::visualization::SimulationController::cuda_compiled()) {
                 throw std::runtime_error(
                     "CUDA visualization is unavailable in this build; configure with "
@@ -2462,7 +2646,15 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            app.controller.advance_frame();
+            try {
+                app.controller.advance_frame();
+                app.simulation_error.clear();
+            } catch (const std::exception& error) {
+                app.simulation_error = app.controller.last_error().empty()
+                    ? error.what() : app.controller.last_error();
+                std::cerr << "simulation advancement failed; state was preserved and paused: "
+                          << app.simulation_error << '\n';
+            }
             if (app.trails) {
                 app.trails->sample(app.controller.state());
             }
@@ -2495,14 +2687,22 @@ int main(int argc, char** argv) {
                 state_replaced = true;
             }
             if (actions.advance_one_step) {
-                app.controller.advance_steps(1);
-                if (app.trails) {
-                    app.trails->sample(app.controller.state());
+                try {
+                    app.controller.advance_steps(1);
+                    app.simulation_error.clear();
+                    if (app.trails) {
+                        app.trails->sample(app.controller.state());
+                    }
+                    if (app.conservation) {
+                        app.conservation->update(app.controller.state());
+                    }
+                    state_replaced = true;
+                } catch (const std::exception& error) {
+                    app.simulation_error = app.controller.last_error().empty()
+                        ? error.what() : app.controller.last_error();
+                    std::cerr << "manual advancement failed; state was preserved and paused: "
+                              << app.simulation_error << '\n';
                 }
-                if (app.conservation) {
-                    app.conservation->update(app.controller.state());
-                }
-                state_replaced = true;
             }
             if (actions.synthetic_body_count) {
                 app.switch_scenario(

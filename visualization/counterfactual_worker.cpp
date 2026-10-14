@@ -696,6 +696,10 @@ void CounterfactualExperimentWorker::request_cancel() noexcept {
     cancellation_requested_.store(true, std::memory_order_release);
 }
 
+bool CounterfactualExperimentWorker::cancellation_requested() const noexcept {
+    return cancellation_requested_.load(std::memory_order_acquire);
+}
+
 CounterfactualWorkerPublication CounterfactualExperimentWorker::publication() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return publication_;
@@ -704,6 +708,31 @@ CounterfactualWorkerPublication CounterfactualExperimentWorker::publication() co
 bool CounterfactualExperimentWorker::busy() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return active_;
+}
+
+void CounterfactualPresentationCache::clear() noexcept {
+    generation = 0U;
+    result = nullptr;
+    result_rows.clear();
+    warning_groups.clear();
+    error.clear();
+    frame_error.clear();
+}
+
+bool CounterfactualPresentationCache::empty() const noexcept {
+    return generation == 0U && result == nullptr && result_rows.empty() &&
+        warning_groups.empty() && error.empty() && frame_error.empty();
+}
+
+void invalidate_counterfactual_application_publication(
+    CounterfactualExperimentWorker& worker,
+    CounterfactualPublicationGate& gate,
+    CounterfactualWorkerPublication& publication,
+    CounterfactualPresentationCache& presentation) noexcept {
+    worker.request_cancel();
+    gate.invalidate_job();
+    publication = {};
+    presentation.clear();
 }
 
 void CounterfactualExperimentWorker::wait_until_idle() {

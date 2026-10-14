@@ -1,4 +1,5 @@
 #include "nbody/astronomy/solar_system_60.hpp"
+#include "nbody/diagnostics.hpp"
 #include "nbody/scenarios.hpp"
 #include "nbody/solar_system.hpp"
 #include "nbody/visualization/camera.hpp"
@@ -49,6 +50,71 @@ bool same_state(const nbody::SimulationState& left, const nbody::SimulationState
         }
     }
     return true;
+}
+
+bool same_diagnostics(
+    const nbody::Diagnostics& left,
+    const nbody::Diagnostics& right) {
+    return left.kinetic_energy_j == right.kinetic_energy_j &&
+        left.potential_energy_j == right.potential_energy_j &&
+        left.linear_momentum_kg_m_s.x == right.linear_momentum_kg_m_s.x &&
+        left.linear_momentum_kg_m_s.y == right.linear_momentum_kg_m_s.y &&
+        left.linear_momentum_kg_m_s.z == right.linear_momentum_kg_m_s.z &&
+        left.angular_momentum_kg_m2_s.x == right.angular_momentum_kg_m2_s.x &&
+        left.angular_momentum_kg_m2_s.y == right.angular_momentum_kg_m2_s.y &&
+        left.angular_momentum_kg_m2_s.z == right.angular_momentum_kg_m2_s.z &&
+        left.center_of_mass_m.x == right.center_of_mass_m.x &&
+        left.center_of_mass_m.y == right.center_of_mass_m.y &&
+        left.center_of_mass_m.z == right.center_of_mass_m.z;
+}
+
+bool same_barnes_hut_work_statistics(
+    const nbody::BarnesHutStatistics& left,
+    const nbody::BarnesHutStatistics& right) {
+    return left.body_count == right.body_count &&
+        left.node_count == right.node_count &&
+        left.leaf_count == right.leaf_count &&
+        left.maximum_depth_reached == right.maximum_depth_reached &&
+        left.visited_nodes == right.visited_nodes &&
+        left.approximated_nodes == right.approximated_nodes &&
+        left.direct_body_interactions == right.direct_body_interactions &&
+        left.working_memory_bytes == right.working_memory_bytes;
+}
+
+void require_barnes_hut_boundary(
+    const nbody::SimulationState& reference,
+    const nbody::BarnesHutStatistics& reference_statistics,
+    const nbody::visualization::SimulationController& controller,
+    nbody::visualization::BackendKind expected_backend,
+    int expected_threads,
+    double expected_theta,
+    std::size_t step,
+    double dt_s,
+    const std::string& backend_label) {
+    const std::string context = backend_label +
+        " Barnes-Hut boundary step " + std::to_string(step);
+    require(controller.state().time_s == static_cast<double>(step) * dt_s,
+        context + " has the wrong timestamp");
+    require(controller.state().bodies.size() == reference.bodies.size(),
+        context + " has the wrong body count");
+    require(same_state(reference, controller.state()),
+        context + " differs in timestamp, body ordering/name, mass, position, or velocity");
+    require(same_diagnostics(
+                nbody::compute_diagnostics(reference),
+                nbody::compute_diagnostics(controller.state())),
+        context + " differs in conservation diagnostics");
+    require(controller.backend_kind() == expected_backend &&
+                controller.solver_kind() ==
+                    nbody::visualization::SolverKind::barnes_hut &&
+                controller.barnes_hut_configuration().theta == expected_theta &&
+                (expected_backend != nbody::visualization::BackendKind::openmp ||
+                 controller.openmp_threads() == expected_threads),
+        context + " reports the wrong effective backend, solver, theta, or thread count");
+    const auto statistics = controller.barnes_hut_statistics();
+    require(statistics.has_value(), context + " did not publish Barnes-Hut statistics");
+    require(statistics->worker_threads == expected_threads &&
+                same_barnes_hut_work_statistics(reference_statistics, *statistics),
+        context + " differs in deterministic force/tree statistics");
 }
 
 std::size_t required_index(
@@ -145,6 +211,263 @@ void test_controller() {
                     same_state(controller.state(), state_before_selection),
                 "failed CUDA selection changed the active backend or state");
     }
+}
+
+void test_controller_solver_selection_and_transactionality() {
+    using nbody::visualization::BackendKind;
+    using nbody::visualization::ControllerConfig;
+    using nbody::visualization::SimulationController;
+    using nbody::visualization::SolverKind;
+
+    const auto initial = nbody::make_seeded_synthetic_system(12, 77123);
+    ControllerConfig direct_config{10.0, 2, BackendKind::sequential, 1};
+    SimulationController direct(initial, direct_config);
+    require(direct.solver_kind() == SolverKind::direct &&
+                std::string(direct.solver_name()) == "direct",
+            "controller default did not preserve direct-force behavior");
+
+    auto direct_reference = initial;
+    nbody::velocity_verlet_step(
+        direct_reference, direct_config.dt_s, nbody::sequential_force_backend());
+    direct.advance_steps(1);
+    require(same_state(direct_reference, direct.state()),
+            "Sequential/direct controller differs from the headless reference step");
+
+    nbody::BarnesHutConfiguration barnes_hut;
+    barnes_hut.theta = 0.25;
+    SimulationController sequential_barnes_hut(
+        initial,
+        {10.0, 2, BackendKind::sequential, 1, 0, SolverKind::barnes_hut, barnes_hut});
+    auto sequential_barnes_hut_reference = initial;
+    nbody::SequentialBarnesHutForceBackend sequential_reference_backend(barnes_hut);
+    nbody::velocity_verlet_step(
+        sequential_barnes_hut_reference, 10.0, sequential_reference_backend);
+    sequential_barnes_hut.advance_steps(1);
+    require(same_state(sequential_barnes_hut_reference, sequential_barnes_hut.state()),
+            "Sequential/Barnes-Hut controller differs from its headless reference step");
+    require(sequential_barnes_hut.barnes_hut_statistics().has_value() &&
+                sequential_barnes_hut.barnes_hut_statistics()->body_count ==
+                    initial.bodies.size(),
+            "Barnes-Hut effective diagnostics were not published");
+
+    constexpr std::size_t correspondence_steps = 7U;
+    constexpr double correspondence_dt_s = 10.0;
+    auto multistep_reference = initial;
+    nbody::SequentialBarnesHutForceBackend multistep_reference_backend(barnes_hut);
+    SimulationController multistep_sequential(
+        initial,
+        {correspondence_dt_s, 1, BackendKind::sequential, 1, 0,
+         SolverKind::barnes_hut, barnes_hut});
+    for (std::size_t step = 1; step <= correspondence_steps; ++step) {
+        nbody::velocity_verlet_step(
+            multistep_reference, correspondence_dt_s, multistep_reference_backend);
+        multistep_sequential.advance_frame();
+        require_barnes_hut_boundary(
+            multistep_reference,
+            multistep_reference_backend.last_statistics(),
+            multistep_sequential,
+            BackendKind::sequential,
+            1,
+            barnes_hut.theta,
+            step,
+            correspondence_dt_s,
+            "Sequential");
+
+        if (step == 1U) {
+            auto perturbed_boundary = multistep_reference;
+            perturbed_boundary.bodies.front().position_m.x = std::nextafter(
+                perturbed_boundary.bodies.front().position_m.x,
+                std::numeric_limits<double>::infinity());
+            require(!same_state(multistep_reference, perturbed_boundary),
+                "per-step correspondence negative control did not detect an isolated "
+                "intermediate position perturbation");
+        }
+    }
+    require(same_state(multistep_reference, multistep_sequential.state()) &&
+                multistep_sequential.state().time_s == 70.0 &&
+                same_diagnostics(
+                    nbody::compute_diagnostics(multistep_reference),
+                    nbody::compute_diagnostics(multistep_sequential.state())) &&
+                multistep_sequential.barnes_hut_statistics().has_value() &&
+                multistep_sequential.barnes_hut_statistics()->body_count ==
+                    initial.bodies.size(),
+            "multi-step Sequential/Barnes-Hut viewer advancement differs from headless execution");
+
+    const auto state_before_switch = sequential_barnes_hut.state();
+    sequential_barnes_hut.select_solver(SolverKind::direct, barnes_hut);
+    require(sequential_barnes_hut.solver_kind() == SolverKind::direct &&
+                same_state(state_before_switch, sequential_barnes_hut.state()),
+            "solver switching reset or advanced the authoritative state");
+    sequential_barnes_hut.select_solver(SolverKind::barnes_hut, barnes_hut);
+    require(sequential_barnes_hut.solver_kind() == SolverKind::barnes_hut &&
+                same_state(state_before_switch, sequential_barnes_hut.state()),
+            "switching back to Barnes-Hut changed the authoritative state");
+    auto applied_configuration = barnes_hut;
+    applied_configuration.theta = 0.5;
+    sequential_barnes_hut.select_solver(
+        SolverKind::barnes_hut, applied_configuration);
+    require(sequential_barnes_hut.barnes_hut_configuration().theta == 0.5 &&
+                same_state(state_before_switch, sequential_barnes_hut.state()),
+            "successful theta application did not update only the effective solver configuration");
+    sequential_barnes_hut.select_solver(SolverKind::barnes_hut, barnes_hut);
+    sequential_barnes_hut.advance_steps(1);
+    require(sequential_barnes_hut.state().time_s == state_before_switch.time_s + 10.0,
+            "Barnes-Hut did not continue from the solver-switch boundary");
+
+    if (SimulationController::openmp_available()) {
+        SimulationController openmp_direct(
+            initial, {10.0, 1, BackendKind::openmp, 2, 0, SolverKind::direct, barnes_hut});
+        openmp_direct.advance_steps(1);
+        require(same_state(direct_reference, openmp_direct.state()),
+                "OpenMP/direct controller differs from the Sequential reference");
+
+        SimulationController openmp_barnes_hut(
+            initial,
+            {10.0, 1, BackendKind::openmp, 2, 0, SolverKind::barnes_hut, barnes_hut});
+        openmp_barnes_hut.advance_steps(1);
+        require(same_state(
+                    sequential_barnes_hut_reference, openmp_barnes_hut.state()),
+                "OpenMP/Barnes-Hut controller differs from the Sequential Barnes-Hut reference");
+        require(openmp_barnes_hut.barnes_hut_statistics().has_value() &&
+                    openmp_barnes_hut.barnes_hut_statistics()->worker_threads == 2,
+                "OpenMP/Barnes-Hut effective diagnostics omit the requested thread count");
+
+        SimulationController multistep_openmp(
+            initial,
+            {correspondence_dt_s, 1, BackendKind::openmp, 2, 0,
+             SolverKind::barnes_hut, barnes_hut});
+        auto multistep_openmp_reference = initial;
+#ifdef _OPENMP
+        nbody::OpenMpBarnesHutForceBackend multistep_openmp_reference_backend(
+            2, barnes_hut);
+#else
+        nbody::SequentialBarnesHutForceBackend multistep_openmp_reference_backend(
+            barnes_hut);
+#endif
+        for (std::size_t step = 1; step <= correspondence_steps; ++step) {
+            nbody::velocity_verlet_step(
+                multistep_openmp_reference,
+                correspondence_dt_s,
+                multistep_openmp_reference_backend);
+            multistep_openmp.advance_frame();
+            require_barnes_hut_boundary(
+                multistep_openmp_reference,
+                multistep_openmp_reference_backend.last_statistics(),
+                multistep_openmp,
+                BackendKind::openmp,
+                2,
+                barnes_hut.theta,
+                step,
+                correspondence_dt_s,
+                "OpenMP");
+        }
+        require(same_state(multistep_openmp_reference, multistep_openmp.state()) &&
+                    multistep_openmp.state().time_s == 70.0 &&
+                    same_diagnostics(
+                        nbody::compute_diagnostics(multistep_openmp_reference),
+                        nbody::compute_diagnostics(multistep_openmp.state())) &&
+                    multistep_openmp.barnes_hut_statistics().has_value() &&
+                    multistep_openmp.barnes_hut_statistics()->worker_threads == 2,
+                "multi-step OpenMP/Barnes-Hut viewer advancement differs from headless execution");
+    } else {
+        bool rejected = false;
+        try {
+            SimulationController unavailable(
+                initial,
+                {10.0, 1, BackendKind::openmp, 2, 0, SolverKind::barnes_hut, barnes_hut});
+        } catch (const std::runtime_error&) {
+            rejected = true;
+        }
+        require(rejected,
+                "OpenMP/Barnes-Hut was not rejected in the CPU-only build");
+    }
+
+    for (const double invalid_theta : {
+             0.0, -0.25, 2.0001, std::numeric_limits<double>::quiet_NaN()}) {
+        auto invalid = barnes_hut;
+        invalid.theta = invalid_theta;
+        const auto state_before_rejection = sequential_barnes_hut.state();
+        const auto solver_before_rejection = sequential_barnes_hut.solver_kind();
+        bool rejected = false;
+        try {
+            sequential_barnes_hut.select_solver(SolverKind::barnes_hut, invalid);
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        require(rejected &&
+                    sequential_barnes_hut.solver_kind() == solver_before_rejection &&
+                    same_state(state_before_rejection, sequential_barnes_hut.state()) &&
+                    sequential_barnes_hut.barnes_hut_configuration().theta == barnes_hut.theta,
+                "invalid theta changed effective solver configuration or state");
+    }
+
+    const auto state_before_cuda_rejection = sequential_barnes_hut.state();
+    bool cuda_barnes_hut_rejected = false;
+    try {
+        sequential_barnes_hut.select_backend(BackendKind::cuda, 1, 0);
+    } catch (const std::runtime_error& error) {
+        cuda_barnes_hut_rejected =
+            std::string(error.what()).find("pending NVIDIA validation") != std::string::npos;
+    }
+    require(cuda_barnes_hut_rejected &&
+                sequential_barnes_hut.backend_kind() == BackendKind::sequential &&
+                sequential_barnes_hut.solver_kind() == SolverKind::barnes_hut &&
+                same_state(state_before_cuda_rejection, sequential_barnes_hut.state()),
+            "unsupported CUDA/Barnes-Hut selection fell back or changed state");
+
+    nbody::SimulationState collision;
+    const double collision_mass = 4.0 / nbody::gravitational_constant;
+    collision.bodies = {
+        {"left", collision_mass, {-1.0, 0.0, 0.0}, {0.5, 0.0, 0.0}},
+        {"right", collision_mass, {1.0, 0.0, 0.0}, {-0.5, 0.0, 0.0}},
+    };
+    auto collision_config = barnes_hut;
+    collision_config.leaf_capacity = 1;
+    SimulationController failing(
+        collision,
+        {1.0, 1, BackendKind::sequential, 1, 0,
+         SolverKind::barnes_hut, collision_config});
+    bool advancement_failed = false;
+    try {
+        failing.advance_steps(1);
+    } catch (const std::exception&) {
+        advancement_failed = true;
+    }
+    require(advancement_failed && failing.paused() &&
+                same_state(collision, failing.state()) && !failing.last_error().empty() &&
+                !failing.barnes_hut_statistics().has_value() &&
+                failing.last_error().find("backend=sequential") != std::string::npos &&
+                failing.last_error().find("solver=barnes-hut") != std::string::npos &&
+                failing.last_error().find("step=1/1") != std::string::npos &&
+                failing.last_error().find("phase=new-force") != std::string::npos,
+            "failed Barnes-Hut batch published partial state/statistics or omitted its diagnostic");
+    failing.reset();
+    require(same_state(collision, failing.state()) && failing.last_error().empty(),
+            "reset did not restore the initial state and clear the failure diagnostic");
+
+    const auto legacy = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    const auto catalog = nbody::visualization::make_astronomical_catalog_scenario();
+    SimulationController scenario_controller(
+        legacy.initial_state,
+        {legacy.dt_s, 1, BackendKind::sequential, 1, 0,
+         SolverKind::barnes_hut, barnes_hut});
+    scenario_controller.set_paused(true);
+    scenario_controller.replace_scenario(catalog.initial_state, catalog.dt_s, 1);
+    require(scenario_controller.paused() &&
+                scenario_controller.solver_kind() == SolverKind::barnes_hut &&
+                same_state(catalog.initial_state, scenario_controller.state()) &&
+                scenario_controller.state().bodies.size() == 60U,
+            "catalog scenario replacement changed solver, pause state, or initial data");
+    scenario_controller.reset();
+    require(same_state(catalog.initial_state, scenario_controller.state()),
+            "Barnes-Hut reset did not preserve the 60-body catalog initial state");
+    scenario_controller.replace_scenario(legacy.initial_state, legacy.dt_s, 1);
+    require(same_state(legacy.initial_state, scenario_controller.state()) &&
+                same_state(
+                    legacy.initial_state,
+                    nbody::make_approximate_solar_system().initial_state),
+            "legacy Solar scenario changed during Barnes-Hut scenario switching");
 }
 
 void test_render_space_is_read_only() {
@@ -1079,6 +1402,7 @@ void test_compute_experiment_scaling_and_comparison() {
 int main() {
     try {
         test_controller();
+        test_controller_solver_selection_and_transactionality();
         test_render_space_is_read_only();
         test_solar_screen_space_sizing();
         test_scenario_switch_and_diagnostics();

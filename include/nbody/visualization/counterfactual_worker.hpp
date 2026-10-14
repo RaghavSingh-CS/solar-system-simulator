@@ -151,6 +151,18 @@ struct CounterfactualWarningGroup {
     std::vector<std::size_t> retained_issue_indices;
 };
 
+struct CounterfactualPresentationCache {
+    std::uint64_t generation{0};
+    const experiments::CounterfactualExperimentResult* result{nullptr};
+    std::vector<CounterfactualResultRow> result_rows;
+    std::vector<CounterfactualWarningGroup> warning_groups;
+    std::string error;
+    std::string frame_error;
+
+    void clear() noexcept;
+    bool empty() const noexcept;
+};
+
 struct CounterfactualFrameStatus {
     bool available{false};
     std::string coordinate_frame_label;
@@ -245,6 +257,7 @@ public:
         CounterfactualJobContext context = {1U,
             CounterfactualSnapshotSource::current_state});
     void request_cancel() noexcept;
+    bool cancellation_requested() const noexcept;
     CounterfactualWorkerPublication publication() const;
     bool busy() const;
 
@@ -280,6 +293,15 @@ private:
     bool active_{false};
     std::uint64_t next_generation_{1};
 };
+
+// UI-thread lifecycle boundary used by application reset. Cancellation is
+// cooperative, so gate invalidation and publication/cache clearing make late
+// progress or terminal completion unpublishable even before the worker stops.
+void invalidate_counterfactual_application_publication(
+    CounterfactualExperimentWorker& worker,
+    CounterfactualPublicationGate& gate,
+    CounterfactualWorkerPublication& publication,
+    CounterfactualPresentationCache& presentation) noexcept;
 
 const char* counterfactual_worker_state_name(CounterfactualWorkerState state) noexcept;
 const char* counterfactual_snapshot_source_name(

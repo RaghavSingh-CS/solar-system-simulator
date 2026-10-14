@@ -314,6 +314,7 @@ if(NBODY_BUILD_VISUALIZATION)
     target_link_libraries(nbody_visualization_model PUBLIC
         nbody_core
         nbody_astronomy
+        nbody_barnes_hut
         nbody_experiments
         glm::glm
         Threads::Threads

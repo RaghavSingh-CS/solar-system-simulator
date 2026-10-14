@@ -1,9 +1,12 @@
 #pragma once
 
+#include "nbody/barnes_hut.hpp"
 #include "nbody/simulation.hpp"
 
 #include <cstddef>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace nbody {
 namespace visualization {
@@ -14,12 +17,19 @@ enum class BackendKind {
     cuda,
 };
 
+enum class SolverKind {
+    direct,
+    barnes_hut,
+};
+
 struct ControllerConfig {
     double dt_s{10.0};
     std::size_t steps_per_frame{256};
     BackendKind backend{BackendKind::sequential};
     int openmp_threads{1};
     int cuda_device{0};
+    SolverKind solver{SolverKind::direct};
+    BarnesHutConfiguration barnes_hut{};
 };
 
 class SimulationController {
@@ -38,8 +48,13 @@ public:
     bool paused() const noexcept;
     BackendKind backend_kind() const noexcept;
     const char* backend_name() const noexcept;
+    SolverKind solver_kind() const noexcept;
+    const char* solver_name() const noexcept;
     int openmp_threads() const noexcept;
     int cuda_device() const noexcept;
+    const BarnesHutConfiguration& barnes_hut_configuration() const noexcept;
+    std::optional<BarnesHutStatistics> barnes_hut_statistics() const noexcept;
+    const std::string& last_error() const noexcept;
 
     void set_paused(bool paused) noexcept;
     void toggle_paused() noexcept;
@@ -48,6 +63,9 @@ public:
         BackendKind backend,
         int openmp_threads = 1,
         int cuda_device = 0);
+    void select_solver(
+        SolverKind solver,
+        std::optional<BarnesHutConfiguration> barnes_hut = std::nullopt);
     void replace_scenario(
         SimulationState initial_state,
         double dt_s,
@@ -67,7 +85,12 @@ private:
     class CudaExecutor;
 
     void validate_config() const;
-    void configure_backend(BackendKind backend, int openmp_threads, int cuda_device);
+    void configure_execution(
+        BackendKind backend,
+        SolverKind solver,
+        int openmp_threads,
+        int cuda_device,
+        const BarnesHutConfiguration& barnes_hut);
 
     SimulationState initial_state_;
     SimulationState state_;
@@ -76,6 +99,8 @@ private:
     const ForceBackend* backend_{nullptr};
     std::unique_ptr<ForceBackend> owned_backend_;
     std::unique_ptr<CudaExecutor> cuda_integrator_;
+    std::optional<BarnesHutStatistics> last_barnes_hut_statistics_;
+    std::string last_error_;
 };
 
 }  // namespace visualization

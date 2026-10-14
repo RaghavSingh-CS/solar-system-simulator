@@ -25,6 +25,65 @@ public:
 
 namespace {
 
+enum class AdvancementPhase {
+    candidate_copy,
+    validation,
+    old_force,
+    position_drift,
+    new_force,
+    velocity_kick,
+    cuda_batch,
+    commit,
+};
+
+const char* advancement_phase_name(AdvancementPhase phase) noexcept {
+    switch (phase) {
+    case AdvancementPhase::candidate_copy: return "candidate-copy";
+    case AdvancementPhase::validation: return "validation";
+    case AdvancementPhase::old_force: return "old-force";
+    case AdvancementPhase::position_drift: return "position-drift";
+    case AdvancementPhase::new_force: return "new-force";
+    case AdvancementPhase::velocity_kick: return "velocity-kick";
+    case AdvancementPhase::cuda_batch: return "cuda-batch";
+    case AdvancementPhase::commit: return "commit";
+    }
+    return "unknown";
+}
+
+class PhaseTrackingForceBackend final : public ForceBackend {
+public:
+    PhaseTrackingForceBackend(
+        const ForceBackend& delegate,
+        AdvancementPhase& phase) noexcept
+        : delegate_(delegate), phase_(phase) {}
+
+    const char* name() const noexcept override { return delegate_.name(); }
+
+    std::vector<Vec3> compute_accelerations(
+        const SimulationState& state,
+        double gravitational_constant_value) const override {
+        if (force_calls_ == 0U) {
+            phase_ = AdvancementPhase::old_force;
+        } else if (force_calls_ == 1U) {
+            phase_ = AdvancementPhase::new_force;
+        } else {
+            phase_ = AdvancementPhase::validation;
+        }
+        auto accelerations = delegate_.compute_accelerations(
+            state, gravitational_constant_value);
+        ++force_calls_;
+        phase_ = force_calls_ == 1U
+            ? AdvancementPhase::position_drift
+            : AdvancementPhase::velocity_kick;
+        return accelerations;
+    }
+
+private:
+    const ForceBackend& delegate_;
+    AdvancementPhase& phase_;
+    mutable std::size_t force_calls_{0};
+};
+
 void validate_state(const SimulationState& state) {
     if (state.bodies.size() < 2) {
         throw std::invalid_argument("visualization scenario requires at least two bodies");
@@ -48,7 +107,12 @@ SimulationController::SimulationController(
     : initial_state_(std::move(initial_state)), state_(initial_state_), config_(config) {
     validate_state(initial_state_);
     validate_config();
-    configure_backend(config_.backend, config_.openmp_threads, config_.cuda_device);
+    configure_execution(
+        config_.backend,
+        config_.solver,
+        config_.openmp_threads,
+        config_.cuda_device,
+        config_.barnes_hut);
 }
 
 SimulationController::~SimulationController() = default;
@@ -74,8 +138,29 @@ const char* SimulationController::backend_name() const noexcept {
     }
     return "unknown";
 }
+SolverKind SimulationController::solver_kind() const noexcept { return config_.solver; }
+const char* SimulationController::solver_name() const noexcept {
+    switch (config_.solver) {
+    case SolverKind::direct:
+        return "direct";
+    case SolverKind::barnes_hut:
+        return "barnes-hut";
+    }
+    return "unknown";
+}
 int SimulationController::openmp_threads() const noexcept { return config_.openmp_threads; }
 int SimulationController::cuda_device() const noexcept { return config_.cuda_device; }
+const BarnesHutConfiguration&
+SimulationController::barnes_hut_configuration() const noexcept {
+    return config_.barnes_hut;
+}
+std::optional<BarnesHutStatistics>
+SimulationController::barnes_hut_statistics() const noexcept {
+    return last_barnes_hut_statistics_;
+}
+const std::string& SimulationController::last_error() const noexcept {
+    return last_error_;
+}
 
 void SimulationController::set_paused(bool paused_value) noexcept { paused_ = paused_value; }
 void SimulationController::toggle_paused() noexcept { paused_ = !paused_; }
@@ -91,7 +176,23 @@ void SimulationController::select_backend(
     BackendKind backend,
     int openmp_threads,
     int cuda_device) {
-    configure_backend(backend, openmp_threads, cuda_device);
+    configure_execution(
+        backend,
+        config_.solver,
+        openmp_threads,
+        cuda_device,
+        config_.barnes_hut);
+}
+
+void SimulationController::select_solver(
+    SolverKind solver,
+    std::optional<BarnesHutConfiguration> barnes_hut) {
+    configure_execution(
+        config_.backend,
+        solver,
+        config_.openmp_threads,
+        config_.cuda_device,
+        barnes_hut.value_or(config_.barnes_hut));
 }
 
 void SimulationController::replace_scenario(
@@ -116,6 +217,8 @@ void SimulationController::replace_scenario(
     state_ = initial_state_;
     config_.dt_s = dt_s;
     config_.steps_per_frame = steps_per_frame;
+    last_barnes_hut_statistics_.reset();
+    last_error_.clear();
 #ifdef NBODY_VIS_HAS_CUDA
     if (replacement_cuda) {
         cuda_integrator_ = std::move(replacement_cuda);
@@ -134,24 +237,70 @@ void SimulationController::advance_steps(std::size_t steps) {
     if (steps == 0) {
         throw std::invalid_argument("manual advancement requires at least one step");
     }
-    if (config_.backend == BackendKind::cuda) {
+    AdvancementPhase phase = AdvancementPhase::validation;
+    std::size_t active_step = 0U;
+    try {
+        if (config_.backend == BackendKind::cuda) {
 #ifdef NBODY_VIS_HAS_CUDA
-        if (!cuda_integrator_) {
-            throw std::logic_error("CUDA backend is active without an integration executor");
-        }
-        auto result = cuda_integrator_->integrator.run(state_, steps, config_.dt_s);
-        state_ = std::move(result.final_state);
-        return;
+            phase = AdvancementPhase::cuda_batch;
+            if (!cuda_integrator_) {
+                throw std::logic_error("CUDA backend is active without an integration executor");
+            }
+            auto result = cuda_integrator_->integrator.run(state_, steps, config_.dt_s);
+            state_ = std::move(result.final_state);
+            last_error_.clear();
+            return;
 #else
-        throw std::logic_error("CUDA backend is active in a non-CUDA visualization build");
+            throw std::logic_error("CUDA backend is active in a non-CUDA visualization build");
 #endif
-    }
-    for (std::size_t step = 0; step < steps; ++step) {
-        velocity_verlet_step(state_, config_.dt_s, *backend_);
+        }
+        phase = AdvancementPhase::candidate_copy;
+        SimulationState candidate = state_;
+        for (std::size_t step = 0; step < steps; ++step) {
+            active_step = step + 1U;
+            phase = AdvancementPhase::validation;
+            PhaseTrackingForceBackend tracked_backend(*backend_, phase);
+            velocity_verlet_step(candidate, config_.dt_s, tracked_backend);
+        }
+        phase = AdvancementPhase::commit;
+        state_ = std::move(candidate);
+        if (config_.solver == SolverKind::barnes_hut) {
+            if (const auto* sequential =
+                    dynamic_cast<const SequentialBarnesHutForceBackend*>(backend_)) {
+                last_barnes_hut_statistics_ = sequential->last_statistics();
+            } else if (const auto* openmp =
+                           dynamic_cast<const OpenMpBarnesHutForceBackend*>(backend_)) {
+                last_barnes_hut_statistics_ = openmp->last_statistics();
+            }
+        } else {
+            last_barnes_hut_statistics_.reset();
+        }
+        last_error_.clear();
+    } catch (const std::exception& error) {
+        paused_ = true;
+        last_error_ = "backend=" + std::string(backend_name()) +
+            " solver=" + solver_name() +
+            " step=" + std::to_string(active_step) + "/" +
+            std::to_string(steps) +
+            " phase=" + advancement_phase_name(phase) + ": " + error.what();
+        throw;
+    } catch (...) {
+        paused_ = true;
+        last_error_ = "backend=" + std::string(backend_name()) +
+            " solver=" + solver_name() +
+            " step=" + std::to_string(active_step) + "/" +
+            std::to_string(steps) +
+            " phase=" + advancement_phase_name(phase) +
+            ": non-standard simulation advancement failure";
+        throw;
     }
 }
 
-void SimulationController::reset() { state_ = initial_state_; }
+void SimulationController::reset() {
+    state_ = initial_state_;
+    last_barnes_hut_statistics_.reset();
+    last_error_.clear();
+}
 
 bool SimulationController::openmp_available() noexcept {
 #ifdef NBODY_VIS_HAS_OPENMP
@@ -198,19 +347,49 @@ void SimulationController::validate_config() const {
     if (config_.cuda_device < 0) {
         throw std::invalid_argument("CUDA device index must be non-negative");
     }
+    if (!(config_.barnes_hut.theta > 0.0) ||
+        config_.barnes_hut.theta > 2.0 ||
+        !std::isfinite(config_.barnes_hut.theta)) {
+        throw std::invalid_argument(
+            "Barnes-Hut theta must be finite and in (0, 2]");
+    }
 }
 
-void SimulationController::configure_backend(
+void SimulationController::configure_execution(
     BackendKind backend,
+    SolverKind solver,
     int openmp_threads,
-    int cuda_device) {
+    int cuda_device,
+    const BarnesHutConfiguration& barnes_hut) {
+    if (solver == SolverKind::barnes_hut &&
+        (!(barnes_hut.theta > 0.0) || barnes_hut.theta > 2.0 ||
+         !std::isfinite(barnes_hut.theta))) {
+        throw std::invalid_argument(
+            "Barnes-Hut theta must be finite and in (0, 2]");
+    }
+    if (backend == BackendKind::cuda && solver == SolverKind::barnes_hut) {
+        throw std::runtime_error(
+            "CUDA Barnes-Hut is unavailable in the viewer pending NVIDIA validation");
+    }
+
     if (backend == BackendKind::sequential) {
-        owned_backend_.reset();
+        std::unique_ptr<ForceBackend> replacement;
+        const ForceBackend* replacement_backend = &sequential_force_backend();
+        if (solver == SolverKind::barnes_hut) {
+            replacement =
+                std::make_unique<SequentialBarnesHutForceBackend>(barnes_hut);
+            replacement_backend = replacement.get();
+        }
+        owned_backend_ = std::move(replacement);
         cuda_integrator_.reset();
-        backend_ = &sequential_force_backend();
+        backend_ = replacement_backend;
         config_.backend = backend;
+        config_.solver = solver;
+        config_.barnes_hut = barnes_hut;
         config_.openmp_threads = 1;
         config_.cuda_device = 0;
+        last_barnes_hut_statistics_.reset();
+        last_error_.clear();
         return;
     }
     if (backend == BackendKind::openmp) {
@@ -218,13 +397,23 @@ void SimulationController::configure_backend(
             throw std::invalid_argument("OpenMP thread count must be positive");
         }
 #ifdef NBODY_VIS_HAS_OPENMP
-        auto replacement = std::make_unique<OpenMpForceBackend>(openmp_threads);
+        std::unique_ptr<ForceBackend> replacement;
+        if (solver == SolverKind::direct) {
+            replacement = std::make_unique<OpenMpForceBackend>(openmp_threads);
+        } else {
+            replacement = std::make_unique<OpenMpBarnesHutForceBackend>(
+                openmp_threads, barnes_hut);
+        }
         owned_backend_ = std::move(replacement);
         cuda_integrator_.reset();
         backend_ = owned_backend_.get();
         config_.backend = backend;
+        config_.solver = solver;
+        config_.barnes_hut = barnes_hut;
         config_.openmp_threads = openmp_threads;
         config_.cuda_device = 0;
+        last_barnes_hut_statistics_.reset();
+        last_error_.clear();
         return;
 #else
         throw std::runtime_error(
@@ -242,8 +431,12 @@ void SimulationController::configure_backend(
     owned_backend_.reset();
     backend_ = nullptr;
     config_.backend = backend;
+    config_.solver = SolverKind::direct;
+    config_.barnes_hut = barnes_hut;
     config_.openmp_threads = 1;
     config_.cuda_device = cuda_device;
+    last_barnes_hut_statistics_.reset();
+    last_error_.clear();
 #else
     (void)cuda_device;
     throw std::runtime_error(
