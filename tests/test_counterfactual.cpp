@@ -14,6 +14,10 @@
 #include <type_traits>
 #include <vector>
 
+#ifndef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+#error "Counterfactual adversarial tests require the test-hook experiment ABI"
+#endif
+
 namespace {
 
 using nbody::Body;
@@ -23,7 +27,9 @@ using nbody::experiments::CounterfactualExperimentRunner;
 using nbody::experiments::ExperimentBackend;
 using nbody::experiments::ExperimentBranch;
 using nbody::experiments::ExperimentBodyIdentity;
+using nbody::experiments::ExperimentFailurePhase;
 using nbody::experiments::ExperimentIssueKind;
+using nbody::experiments::ExperimentSolver;
 using nbody::experiments::ExperimentSnapshot;
 using nbody::experiments::ExperimentSnapshotDefinition;
 using nbody::experiments::ExperimentStatus;
@@ -71,6 +77,20 @@ bool same_vector(const nbody::Vec3& left, const nbody::Vec3& right) {
     return left.x == right.x && left.y == right.y && left.z == right.z;
 }
 
+double maximum_position_difference(
+    const SimulationState& left,
+    const SimulationState& right) {
+    require(left.bodies.size() == right.bodies.size(),
+        "position comparison body counts differ");
+    double maximum = 0.0;
+    for (std::size_t index = 0; index < left.bodies.size(); ++index) {
+        maximum = std::max(maximum,
+            nbody::norm(left.bodies[index].position_m -
+                right.bodies[index].position_m));
+    }
+    return maximum;
+}
+
 bool same_diagnostics(
     const nbody::experiments::BranchConservationDiagnostics& left,
     const nbody::experiments::BranchConservationDiagnostics& right) {
@@ -95,6 +115,28 @@ bool same_diagnostics(
             right.angular_momentum_drift_kg_m2_s;
 }
 
+bool same_barnes_hut_statistics(
+    const std::optional<nbody::BarnesHutStatistics>& left,
+    const std::optional<nbody::BarnesHutStatistics>& right) {
+    if (left.has_value() != right.has_value()) {
+        return false;
+    }
+    if (!left) {
+        return true;
+    }
+    return left->body_count == right->body_count &&
+        left->node_count == right->node_count &&
+        left->leaf_count == right->leaf_count &&
+        left->maximum_depth_reached == right->maximum_depth_reached &&
+        left->visited_nodes == right->visited_nodes &&
+        left->approximated_nodes == right->approximated_nodes &&
+        left->direct_body_interactions == right->direct_body_interactions &&
+        left->working_memory_bytes == right->working_memory_bytes &&
+        left->worker_threads == right->worker_threads &&
+        left->tree_build_seconds == right->tree_build_seconds &&
+        left->force_evaluation_seconds == right->force_evaluation_seconds;
+}
+
 bool same_issue(
     const nbody::experiments::ExperimentIssue& left,
     const nbody::experiments::ExperimentIssue& right) {
@@ -114,7 +156,9 @@ bool same_samples(
     }
     for (std::size_t sample = 0; sample < left.size(); ++sample) {
         if (left[sample].elapsed_time_s != right[sample].elapsed_time_s ||
-            left[sample].bodies.size() != right[sample].bodies.size()) {
+            left[sample].bodies.size() != right[sample].bodies.size() ||
+            left[sample].baseline_reference_positions_m.size() !=
+                right[sample].baseline_reference_positions_m.size()) {
             return false;
         }
         for (std::size_t body = 0; body < left[sample].bodies.size(); ++body) {
@@ -128,6 +172,15 @@ bool same_samples(
                 a.parent_relative_separation_m != b.parent_relative_separation_m ||
                 a.normalized_deviation != b.normalized_deviation ||
                 a.velocity_difference_m_s != b.velocity_difference_m_s) {
+                return false;
+            }
+        }
+        for (std::size_t reference = 0;
+             reference < left[sample].baseline_reference_positions_m.size();
+             ++reference) {
+            if (!same_vector(
+                    left[sample].baseline_reference_positions_m[reference],
+                    right[sample].baseline_reference_positions_m[reference])) {
                 return false;
             }
         }
@@ -1149,6 +1202,397 @@ void test_sequential_repeatability() {
     }
 }
 
+void test_direct_default_and_sequential_barnes_hut() {
+    auto implicit_direct_configuration = controlled_configuration();
+    auto explicit_direct_configuration = controlled_configuration();
+    explicit_direct_configuration.solver = ExperimentSolver::direct;
+    CounterfactualExperimentRunner implicit_direct(
+        controlled_snapshot(), implicit_direct_configuration);
+    CounterfactualExperimentRunner explicit_direct(
+        controlled_snapshot(), explicit_direct_configuration);
+    implicit_direct.run_to_completion();
+    explicit_direct.run_to_completion();
+    require(same_state(implicit_direct.result().baseline_state,
+                explicit_direct.result().baseline_state) &&
+            same_state(implicit_direct.result().counterfactual_state,
+                explicit_direct.result().counterfactual_state) &&
+            same_samples(implicit_direct.result().samples,
+                explicit_direct.result().samples) &&
+            implicit_direct.result().solver == ExperimentSolver::direct &&
+            !implicit_direct.result().barnes_hut_configuration &&
+            !implicit_direct.result().baseline_barnes_hut_statistics &&
+            !implicit_direct.result().counterfactual_barnes_hut_statistics,
+        "explicit solver support changed the default direct-force experiment");
+
+    auto barnes_hut_configuration = controlled_configuration();
+    barnes_hut_configuration.solver = ExperimentSolver::barnes_hut;
+    barnes_hut_configuration.barnes_hut.theta = 0.25;
+    barnes_hut_configuration.barnes_hut.leaf_capacity = 1U;
+    barnes_hut_configuration.limits.integration_steps_per_batch = 1U;
+    CounterfactualExperimentRunner barnes_hut(
+        controlled_snapshot(), barnes_hut_configuration);
+    for (std::size_t boundary = 1U; boundary <= 4U; ++boundary) {
+        require(barnes_hut.advance_batch(),
+            "Sequential Barnes-Hut failed before a retained boundary");
+        const auto& result = barnes_hut.result();
+        require(result.completed_steps == boundary &&
+                result.baseline_state.time_s == 125.0 + static_cast<double>(boundary) &&
+                result.counterfactual_state.time_s == result.baseline_state.time_s &&
+                result.samples.size() == boundary + 1U,
+            "Sequential Barnes-Hut did not publish a matched retained boundary");
+        require(result.samples.back().elapsed_time_s ==
+                    static_cast<double>(boundary),
+            "Sequential Barnes-Hut retained an unmatched sample timestamp");
+        const auto& sample = result.samples.back();
+        for (std::size_t monitored = 0;
+             monitored < result.monitored_body_stable_ids.size(); ++monitored) {
+            const auto mapping = std::find_if(
+                result.survivor_mapping.begin(), result.survivor_mapping.end(),
+                [&](const auto& value) {
+                    return value.stable_id ==
+                        result.monitored_body_stable_ids[monitored];
+                });
+            require(mapping != result.survivor_mapping.end() &&
+                    same_vector(sample.bodies[monitored].baseline_position_m,
+                        result.baseline_state.bodies[
+                            mapping->baseline_index].position_m) &&
+                    same_vector(sample.bodies[monitored].counterfactual_position_m,
+                        result.counterfactual_state.bodies[
+                            mapping->counterfactual_index].position_m),
+                "retained Barnes-Hut sample did not match its committed boundary state");
+        }
+        require(std::isfinite(result.baseline_conservation.relative_energy_drift) &&
+                std::isfinite(
+                    result.counterfactual_conservation.relative_energy_drift) &&
+                std::all_of(result.summaries.begin(), result.summaries.end(),
+                    [](const auto& summary) {
+                        return std::isfinite(summary.final_absolute_separation_m) &&
+                            std::isfinite(summary.final_normalized_deviation);
+                    }),
+            "Barnes-Hut boundary diagnostics are non-finite");
+        require(result.baseline_barnes_hut_statistics &&
+                result.counterfactual_barnes_hut_statistics &&
+                result.baseline_barnes_hut_statistics->body_count == 4U &&
+                result.counterfactual_barnes_hut_statistics->body_count == 3U &&
+                result.baseline_barnes_hut_statistics->worker_threads == 1 &&
+                result.counterfactual_barnes_hut_statistics->worker_threads == 1,
+            "paired Barnes-Hut branches did not publish independent state-specific statistics");
+    }
+    require(barnes_hut.result().status == ExperimentStatus::completed &&
+            barnes_hut.result().solver == ExperimentSolver::barnes_hut &&
+            barnes_hut.result().barnes_hut_configuration &&
+            barnes_hut.result().barnes_hut_configuration->theta == 0.25 &&
+            has_issue(barnes_hut.result(),
+                ExperimentIssueKind::approximate_force_solver),
+        "Sequential Barnes-Hut result lost its immutable solver policy or warning");
+    require(barnes_hut.result().survivor_mapping.size() == 3U &&
+            std::none_of(barnes_hut.result().survivor_mapping.begin(),
+                barnes_hut.result().survivor_mapping.end(), [](const auto& mapping) {
+                    return mapping.stable_id == "removed";
+                }),
+        "Barnes-Hut experiment changed stable-ID removal semantics");
+
+    for (std::size_t index = 0;
+         index < explicit_direct.result().baseline_state.bodies.size(); ++index) {
+        require(nbody::norm(
+                explicit_direct.result().baseline_state.bodies[index].position_m -
+                barnes_hut.result().baseline_state.bodies[index].position_m) <= 1.0e-6,
+            "accuracy-first Barnes-Hut baseline exceeded the declared fixture tolerance");
+    }
+}
+
+void test_barnes_hut_failures_are_transactional() {
+    const auto verify_force_failure_matrix = [](ExperimentBackend backend) {
+        for (const auto branch : {ExperimentBranch::baseline,
+                 ExperimentBranch::counterfactual}) {
+            for (const auto phase : {ExperimentFailurePhase::old_position_force,
+                     ExperimentFailurePhase::new_position_force}) {
+                auto configuration = controlled_configuration();
+                configuration.backend = backend;
+                configuration.openmp_threads = 2;
+                configuration.solver = ExperimentSolver::barnes_hut;
+                configuration.barnes_hut.leaf_capacity = 1U;
+                configuration.limits.integration_steps_per_batch = 1U;
+                CounterfactualExperimentRunner runner(
+                    controlled_snapshot(), configuration);
+                require(runner.advance_batch() &&
+                        runner.result().completed_steps == 1U &&
+                        runner.result().baseline_barnes_hut_statistics &&
+                        runner.result().counterfactual_barnes_hut_statistics,
+                    "force-phase rollback fixture did not commit its first paired batch");
+                const auto committed = runner.result();
+
+                runner.inject_cpu_force_failure_after_evaluation_for_testing(
+                    branch, phase);
+                require(!runner.advance_batch(),
+                    "injected force-evaluation failure did not terminate its batch");
+                const auto& failed = runner.result();
+                const std::string original_message = std::string("injected CPU test failure after real ") +
+                    (branch == ExperimentBranch::baseline
+                        ? "baseline" : "counterfactual") + " " +
+                    nbody::experiments::experiment_failure_phase_name(phase) +
+                    " evaluation";
+                require(failed.status == ExperimentStatus::failed &&
+                        failed.terminal_failure &&
+                        failed.terminal_failure->kind ==
+                            ExperimentIssueKind::integration_failure &&
+                        failed.terminal_failure->branch == branch &&
+                        failed.terminal_failure->phase == phase &&
+                        failed.terminal_failure->message_text().find(original_message) !=
+                            std::string_view::npos &&
+                        failed.completed_steps == committed.completed_steps &&
+                        same_state(failed.baseline_state, committed.baseline_state) &&
+                        same_state(failed.counterfactual_state,
+                            committed.counterfactual_state) &&
+                        same_samples(failed.samples, committed.samples) &&
+                        same_summaries(failed.summaries, committed.summaries) &&
+                        same_diagnostics(failed.baseline_conservation,
+                            committed.baseline_conservation) &&
+                        same_diagnostics(failed.counterfactual_conservation,
+                            committed.counterfactual_conservation) &&
+                        failed.dropped_issue_count ==
+                            committed.dropped_issue_count &&
+                        failed.issues.size() == committed.issues.size() &&
+                        std::equal(failed.issues.begin(), failed.issues.end(),
+                            committed.issues.begin(), [](const auto& left,
+                                                         const auto& right) {
+                                return same_issue(left, right);
+                            }) &&
+                        same_barnes_hut_statistics(
+                            failed.baseline_barnes_hut_statistics,
+                            committed.baseline_barnes_hut_statistics) &&
+                        same_barnes_hut_statistics(
+                            failed.counterfactual_barnes_hut_statistics,
+                            committed.counterfactual_barnes_hut_statistics),
+                    "force-evaluation failure changed a committed paired result or lost context");
+
+                const auto terminal = *failed.terminal_failure;
+                require(!runner.advance_batch() &&
+                        runner.result().terminal_failure->branch == terminal.branch &&
+                        runner.result().terminal_failure->phase == terminal.phase &&
+                        runner.result().terminal_failure->message_text() ==
+                            terminal.message_text(),
+                    "terminal force failure mutated during repeated result access");
+            }
+        }
+    };
+
+    verify_force_failure_matrix(ExperimentBackend::sequential);
+#ifdef NBODY_TEST_HAS_OPENMP
+    verify_force_failure_matrix(ExperimentBackend::openmp);
+#endif
+
+    for (const auto branch : {ExperimentBranch::baseline,
+             ExperimentBranch::counterfactual}) {
+        auto configuration = controlled_configuration();
+        configuration.solver = ExperimentSolver::barnes_hut;
+        configuration.barnes_hut.leaf_capacity = 1U;
+        configuration.limits.integration_steps_per_batch = 2U;
+        CounterfactualExperimentRunner runner(controlled_snapshot(), configuration);
+        const auto before = runner.result();
+        runner.inject_cpu_host_failure_before_advance_for_testing(branch);
+        require(!runner.advance_batch() &&
+                runner.result().status == ExperimentStatus::failed &&
+                runner.result().terminal_failure &&
+                runner.result().completed_steps == before.completed_steps &&
+                same_state(runner.result().baseline_state, before.baseline_state) &&
+                same_state(runner.result().counterfactual_state,
+                    before.counterfactual_state) &&
+                same_samples(runner.result().samples, before.samples) &&
+                same_summaries(runner.result().summaries, before.summaries) &&
+                same_diagnostics(runner.result().baseline_conservation,
+                    before.baseline_conservation) &&
+                same_diagnostics(runner.result().counterfactual_conservation,
+                    before.counterfactual_conservation) &&
+                runner.result().dropped_issue_count == before.dropped_issue_count &&
+                runner.result().issues.size() == before.issues.size() &&
+                std::equal(runner.result().issues.begin(),
+                    runner.result().issues.end(), before.issues.begin(),
+                    [](const auto& left, const auto& right) {
+                        return same_issue(left, right);
+                    }) &&
+                !runner.result().baseline_barnes_hut_statistics &&
+                !runner.result().counterfactual_barnes_hut_statistics,
+            "a CPU branch failure published a partial Barnes-Hut pair");
+    }
+
+    auto traversal = controlled_configuration();
+    traversal.solver = ExperimentSolver::barnes_hut;
+    traversal.barnes_hut.leaf_capacity = 1U;
+    traversal.barnes_hut.maximum_traversal_work = 1U;
+    CounterfactualExperimentRunner traversal_runner(controlled_snapshot(), traversal);
+    require(!traversal_runner.advance_batch() &&
+            traversal_runner.result().status == ExperimentStatus::failed &&
+            traversal_runner.result().completed_steps == 0U &&
+            traversal_runner.result().terminal_failure &&
+            traversal_runner.result().terminal_failure->branch ==
+                ExperimentBranch::baseline &&
+            traversal_runner.result().terminal_failure->phase ==
+                ExperimentFailurePhase::old_position_force,
+        "Barnes-Hut traversal-work failure did not roll back transactionally");
+
+    auto node_budget = controlled_configuration();
+    node_budget.solver = ExperimentSolver::barnes_hut;
+    node_budget.barnes_hut.leaf_capacity = 1U;
+    node_budget.barnes_hut.maximum_nodes = 1U;
+    CounterfactualExperimentRunner node_budget_runner(
+        controlled_snapshot(), node_budget);
+    require(!node_budget_runner.advance_batch() &&
+            node_budget_runner.result().status == ExperimentStatus::failed &&
+            node_budget_runner.result().completed_steps == 0U &&
+            node_budget_runner.result().terminal_failure,
+        "Barnes-Hut node-budget failure did not roll back transactionally");
+
+    auto memory_budget = controlled_configuration();
+    memory_budget.solver = ExperimentSolver::barnes_hut;
+    memory_budget.barnes_hut.leaf_capacity = 1U;
+    memory_budget.barnes_hut.memory_budget_bytes = 1U;
+    CounterfactualExperimentRunner memory_budget_runner(
+        controlled_snapshot(), memory_budget);
+    require(!memory_budget_runner.advance_batch() &&
+            memory_budget_runner.result().status == ExperimentStatus::failed &&
+            memory_budget_runner.result().completed_steps == 0U &&
+            memory_budget_runner.result().terminal_failure,
+        "Barnes-Hut memory-budget failure did not roll back transactionally");
+
+    auto invalid_nodes = controlled_configuration();
+    invalid_nodes.solver = ExperimentSolver::barnes_hut;
+    invalid_nodes.barnes_hut.maximum_nodes = 0U;
+    require_throws([&] {
+        CounterfactualExperimentRunner runner(controlled_snapshot(), invalid_nodes);
+    }, "zero Barnes-Hut node budget was admitted");
+    auto invalid_memory = controlled_configuration();
+    invalid_memory.solver = ExperimentSolver::barnes_hut;
+    invalid_memory.barnes_hut.memory_budget_bytes = 0U;
+    require_throws([&] {
+        CounterfactualExperimentRunner runner(controlled_snapshot(), invalid_memory);
+    }, "zero Barnes-Hut memory budget was admitted");
+
+    auto success_configuration = controlled_configuration();
+    success_configuration.solver = ExperimentSolver::barnes_hut;
+    success_configuration.barnes_hut.leaf_capacity = 1U;
+    CounterfactualExperimentRunner later_success(
+        controlled_snapshot(), success_configuration);
+    later_success.run_to_completion();
+    require(later_success.result().status == ExperimentStatus::completed &&
+            !later_success.result().terminal_failure,
+        "a fresh successful runner inherited stale terminal failure metadata");
+}
+
+void test_barnes_hut_invalid_system_gating() {
+    require_throws([] {
+        ExperimentSnapshot empty({
+            "empty", "test fixture", "inertial", "central", {}, {}, 1.0,
+            nbody::experiments::ExperimentIntegrator::velocity_verlet, true,
+            10.0,
+        });
+    }, "empty counterfactual source system was admitted");
+
+    auto singular_configuration = motion_configuration();
+    singular_configuration.solver = ExperimentSolver::barnes_hut;
+    singular_configuration.barnes_hut.leaf_capacity = 1U;
+    require_throws([&] {
+        CounterfactualExperimentRunner singular(
+            motion_snapshot({0.0, 0.0, 0.0}, {0.0, 0.0, 0.0},
+                {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}),
+            singular_configuration);
+    }, "singular Barnes-Hut force configuration was admitted");
+
+    SimulationState two_body_state;
+    two_body_state.bodies = {
+        {"Central", 1.0e20, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}},
+        {"Removed", 1.0e10, {1.0e6, 0.0, 0.0}, {0.0, 1.0, 0.0}},
+    };
+    ExperimentSnapshot one_remaining({
+        "one-remaining", "test fixture", "inertial", "central",
+        std::move(two_body_state),
+        {{"central", std::nullopt, 1.0, false},
+         {"removed", std::nullopt, 1.0, true}},
+        1.0, nbody::experiments::ExperimentIntegrator::velocity_verlet, true, 10.0,
+    });
+    auto configuration = controlled_configuration();
+    configuration.solver = ExperimentSolver::barnes_hut;
+    configuration.limits.observation_horizon_s = 1.0;
+    configuration.monitored_body_stable_ids = {"central"};
+    require_throws([&] {
+        CounterfactualExperimentRunner runner(one_remaining, configuration);
+    }, "Barnes-Hut removal admitted a one-body remaining system");
+
+    auto nonrepresentable = controlled_snapshot();
+    auto state = nonrepresentable.source_state();
+    state.bodies[0].position_m.x = -1.0e308;
+    state.bodies[1].position_m.x = 1.0e308;
+    auto extreme_configuration = controlled_configuration();
+    extreme_configuration.solver = ExperimentSolver::barnes_hut;
+    extreme_configuration.limits.observation_horizon_s = 1.0;
+    require_throws([&] {
+        ExperimentSnapshot extreme({
+            "nonrepresentable-tree", "test fixture", "inertial", "central",
+            std::move(state), nonrepresentable.identities(), 1.0,
+            nbody::experiments::ExperimentIntegrator::velocity_verlet, true, 10.0,
+        });
+        CounterfactualExperimentRunner extreme_runner(
+            std::move(extreme), extreme_configuration);
+    }, "nonrepresentable Barnes-Hut geometry did not fail explicitly");
+}
+
+void test_barnes_hut_theta_sensitivity_against_direct() {
+    const auto legacy_state = nbody::make_approximate_solar_system().initial_state;
+    auto snapshot = nbody::experiments::capture_legacy_solar_system_snapshot(
+        legacy_state);
+    CounterfactualExperimentConfiguration direct_configuration;
+    direct_configuration.removed_body_stable_id = "jupiter";
+    direct_configuration.limits.observation_horizon_s = 8.0 * 21600.0;
+    direct_configuration.limits.sample_cadence_s = 21600.0;
+    direct_configuration.limits.integration_steps_per_batch = 1U;
+    direct_configuration.limits.maximum_monitored_bodies = 8U;
+    direct_configuration.limits.maximum_stored_samples = 16U;
+    direct_configuration.limits.memory_budget_bytes = 8U * 1024U * 1024U;
+    direct_configuration.limits.workload_budget_interactions = 1000000U;
+    direct_configuration.significance.absolute_separation_threshold_m = 1.0;
+    direct_configuration.significance.normalization_denominator_floor_m = 1.0;
+    direct_configuration.guards.maximum_relative_energy_drift = 1.0;
+    direct_configuration.monitored_body_stable_ids = {"earth", "mars"};
+    CounterfactualExperimentRunner direct(snapshot, direct_configuration);
+    direct.run_to_completion();
+
+    auto accuracy_first_configuration = direct_configuration;
+    accuracy_first_configuration.solver = ExperimentSolver::barnes_hut;
+    accuracy_first_configuration.barnes_hut.theta = 0.25;
+    accuracy_first_configuration.barnes_hut.leaf_capacity = 1U;
+    CounterfactualExperimentRunner accuracy_first(
+        snapshot, accuracy_first_configuration);
+    accuracy_first.run_to_completion();
+
+    auto looser_configuration = accuracy_first_configuration;
+    looser_configuration.barnes_hut.theta = 0.8;
+    CounterfactualExperimentRunner looser(snapshot, looser_configuration);
+    looser.run_to_completion();
+
+    require(direct.result().status == ExperimentStatus::completed &&
+            accuracy_first.result().status == ExperimentStatus::completed &&
+            looser.result().status == ExperimentStatus::completed,
+        "direct/Barnes-Hut theta comparison did not complete");
+    const double accuracy_first_error = std::max(
+        maximum_position_difference(direct.result().baseline_state,
+            accuracy_first.result().baseline_state),
+        maximum_position_difference(direct.result().counterfactual_state,
+            accuracy_first.result().counterfactual_state));
+    const double looser_error = std::max(
+        maximum_position_difference(direct.result().baseline_state,
+            looser.result().baseline_state),
+        maximum_position_difference(direct.result().counterfactual_state,
+            looser.result().counterfactual_state));
+    std::cout << "Stage 4B bounded legacy fixture: theta025_max_position_error_m="
+              << accuracy_first_error << " theta08_max_position_error_m="
+              << looser_error << '\n';
+    require(std::isfinite(accuracy_first_error) && std::isfinite(looser_error) &&
+            accuracy_first_error <= 10.0 && looser_error <= 1000.0,
+        "Barnes-Hut/direct discrepancy exceeded the declared bounded fixture tolerances");
+    require(looser_error > accuracy_first_error,
+        "theta sensitivity fixture did not distinguish the looser approximation");
+}
+
 #ifdef NBODY_TEST_HAS_OPENMP
 void test_openmp_agreement() {
     auto sequential_configuration = controlled_configuration();
@@ -1183,6 +1627,35 @@ void test_openmp_agreement() {
             "OpenMP counterfactual position disagrees with Sequential");
     }
 }
+
+
+void test_openmp_barnes_hut_agreement() {
+    auto sequential_configuration = controlled_configuration();
+    sequential_configuration.solver = ExperimentSolver::barnes_hut;
+    sequential_configuration.barnes_hut.theta = 0.25;
+    sequential_configuration.barnes_hut.leaf_capacity = 1U;
+    CounterfactualExperimentRunner sequential(
+        controlled_snapshot(), sequential_configuration);
+    sequential.run_to_completion();
+
+    auto openmp_configuration = sequential_configuration;
+    openmp_configuration.backend = ExperimentBackend::openmp;
+    openmp_configuration.openmp_threads = 2;
+    CounterfactualExperimentRunner openmp(
+        controlled_snapshot(), openmp_configuration);
+    openmp.run_to_completion();
+    require(openmp.result().status == ExperimentStatus::completed &&
+            same_state(sequential.result().baseline_state,
+                openmp.result().baseline_state) &&
+            same_state(sequential.result().counterfactual_state,
+                openmp.result().counterfactual_state) &&
+            same_samples(sequential.result().samples, openmp.result().samples) &&
+            openmp.result().baseline_barnes_hut_statistics &&
+            openmp.result().counterfactual_barnes_hut_statistics &&
+            openmp.result().baseline_barnes_hut_statistics->worker_threads == 2 &&
+            openmp.result().counterfactual_barnes_hut_statistics->worker_threads == 2,
+        "OpenMP Barnes-Hut paired execution disagrees with Sequential Barnes-Hut");
+}
 #else
 void test_openmp_gating() {
     require(!CounterfactualExperimentRunner::openmp_supported(),
@@ -1196,6 +1669,13 @@ void test_openmp_gating() {
 #endif
 
 void test_cuda_gating() {
+    auto barnes_hut_configuration = controlled_configuration();
+    barnes_hut_configuration.backend = ExperimentBackend::cuda;
+    barnes_hut_configuration.solver = ExperimentSolver::barnes_hut;
+    require_throws([&] {
+        CounterfactualExperimentRunner runner(
+            controlled_snapshot(), barnes_hut_configuration);
+    }, "CUDA Barnes-Hut counterfactual selection was not rejected explicitly");
 #ifdef NBODY_TEST_HAS_CUDA
     require(CounterfactualExperimentRunner::cuda_compiled(),
         "CUDA build did not advertise compiled experiment support");
@@ -1252,8 +1732,13 @@ int main() {
         test_bounded_issues_and_ownership_contract();
         test_legacy_and_catalog_compatibility();
         test_sequential_repeatability();
+        test_direct_default_and_sequential_barnes_hut();
+        test_barnes_hut_failures_are_transactional();
+        test_barnes_hut_invalid_system_gating();
+        test_barnes_hut_theta_sensitivity_against_direct();
 #ifdef NBODY_TEST_HAS_OPENMP
         test_openmp_agreement();
+        test_openmp_barnes_hut_agreement();
 #else
         test_openmp_gating();
 #endif

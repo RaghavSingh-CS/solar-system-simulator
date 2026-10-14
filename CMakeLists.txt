@@ -196,25 +196,36 @@ if(NBODY_ENABLE_OPENMP)
     endif()
 endif()
 
+function(nbody_configure_experiments_library target)
+    target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_features(${target} PUBLIC cxx_std_17)
+    target_link_libraries(${target} PUBLIC
+        nbody_core
+        nbody_astronomy
+        nbody_barnes_hut
+    )
+    if(NBODY_ENABLE_OPENMP)
+        target_compile_definitions(${target} PRIVATE NBODY_EXPERIMENT_HAS_OPENMP=1)
+        target_link_libraries(${target} PRIVATE nbody_openmp)
+    endif()
+    if(NBODY_ENABLE_CUDA)
+        target_compile_definitions(${target} PRIVATE NBODY_EXPERIMENT_HAS_CUDA=1)
+        target_link_libraries(${target} PRIVATE nbody_cuda)
+    endif()
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+endfunction()
+
 add_library(nbody_experiments
     src/experiments/counterfactual.cpp
 )
-target_include_directories(nbody_experiments PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_compile_features(nbody_experiments PUBLIC cxx_std_17)
-target_link_libraries(nbody_experiments PUBLIC nbody_core nbody_astronomy)
-if(NBODY_ENABLE_OPENMP)
-    target_compile_definitions(nbody_experiments PRIVATE NBODY_EXPERIMENT_HAS_OPENMP=1)
-    target_link_libraries(nbody_experiments PRIVATE nbody_openmp)
-endif()
-if(NBODY_ENABLE_CUDA)
-    target_compile_definitions(nbody_experiments PRIVATE NBODY_EXPERIMENT_HAS_CUDA=1)
-    target_link_libraries(nbody_experiments PRIVATE nbody_cuda)
-endif()
-if(MSVC)
-    target_compile_options(nbody_experiments PRIVATE /W4 /permissive-)
-else()
-    target_compile_options(nbody_experiments PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+nbody_configure_experiments_library(nbody_experiments)
+target_compile_definitions(nbody_experiments PRIVATE
+    NBODY_EXPERIMENT_EXPECT_TEST_HOOKS=0
+)
 
 if(NBODY_ENABLE_MPI)
     find_package(MPI REQUIRED COMPONENTS CXX)
@@ -394,8 +405,23 @@ if(BUILD_TESTING)
     target_link_libraries(nbody_astronomical_dataset_tests PRIVATE nbody_astronomy)
     add_test(NAME nbody_astronomical_dataset COMMAND nbody_astronomical_dataset_tests)
 
+    # Fault injection is compiled into a dedicated library variant so neither
+    # the production experiment ABI nor the viewer contains test-only state or
+    # branches. The PUBLIC definition keeps the test executable's view of the
+    # runner class layout identical to this variant.
+    add_library(nbody_experiments_test_hooks STATIC
+        src/experiments/counterfactual.cpp
+    )
+    nbody_configure_experiments_library(nbody_experiments_test_hooks)
+    target_compile_definitions(nbody_experiments_test_hooks
+        PUBLIC NBODY_EXPERIMENT_ENABLE_TEST_HOOKS=1
+        PRIVATE NBODY_EXPERIMENT_EXPECT_TEST_HOOKS=1
+    )
+
     add_executable(nbody_counterfactual_tests tests/test_counterfactual.cpp)
-    target_link_libraries(nbody_counterfactual_tests PRIVATE nbody_experiments)
+    target_link_libraries(
+        nbody_counterfactual_tests PRIVATE nbody_experiments_test_hooks
+    )
     if(NBODY_ENABLE_OPENMP)
         target_compile_definitions(nbody_counterfactual_tests PRIVATE NBODY_TEST_HAS_OPENMP=1)
     endif()
@@ -642,7 +668,7 @@ if(BUILD_TESTING)
         )
         target_link_libraries(
             nbody_counterfactual_cuda_tests
-            PRIVATE nbody_experiments
+            PRIVATE nbody_experiments_test_hooks
         )
         add_test(
             NAME nbody_counterfactual_cuda

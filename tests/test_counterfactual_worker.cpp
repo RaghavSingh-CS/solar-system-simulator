@@ -11,18 +11,58 @@
 #include <type_traits>
 #include <utility>
 
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+#error "Production-linked worker tests must not expose experiment test hooks"
+#endif
+
 namespace {
 
 using nbody::experiments::CounterfactualExperimentConfiguration;
 using nbody::experiments::ExperimentBackend;
 using nbody::experiments::ExperimentBodyIdentity;
+using nbody::experiments::ExperimentFailurePhase;
 using nbody::experiments::ExperimentIntegrator;
+using nbody::experiments::ExperimentSolver;
 using nbody::experiments::ExperimentSnapshot;
 using nbody::experiments::ExperimentStatus;
 using nbody::visualization::CounterfactualExperimentWorker;
 using nbody::visualization::CounterfactualPathBranch;
 using nbody::visualization::CounterfactualWorkerPublication;
 using nbody::visualization::CounterfactualWorkerState;
+
+template <typename Runner, typename = void>
+struct exposes_cpu_host_failure_hook : std::false_type {};
+
+template <typename Runner>
+struct exposes_cpu_host_failure_hook<Runner, std::void_t<decltype(
+    &Runner::inject_cpu_host_failure_before_advance_for_testing)>>
+    : std::true_type {};
+
+template <typename Runner, typename = void>
+struct exposes_cpu_force_failure_hook : std::false_type {};
+
+template <typename Runner>
+struct exposes_cpu_force_failure_hook<Runner, std::void_t<decltype(
+    &Runner::inject_cpu_force_failure_after_evaluation_for_testing)>>
+    : std::true_type {};
+
+template <typename Runner, typename = void>
+struct exposes_cuda_host_failure_hook : std::false_type {};
+
+template <typename Runner>
+struct exposes_cuda_host_failure_hook<Runner, std::void_t<decltype(
+    &Runner::inject_cuda_host_failure_after_enqueue_for_testing)>>
+    : std::true_type {};
+
+static_assert(!exposes_cpu_host_failure_hook<
+        nbody::experiments::CounterfactualExperimentRunner>::value,
+    "production counterfactual API exposes the host-failure test hook");
+static_assert(!exposes_cpu_force_failure_hook<
+        nbody::experiments::CounterfactualExperimentRunner>::value,
+    "production counterfactual API exposes the force-failure test hook");
+static_assert(!exposes_cuda_host_failure_hook<
+        nbody::experiments::CounterfactualExperimentRunner>::value,
+    "production counterfactual API exposes the CUDA host-failure test hook");
 
 void require(bool condition, const char* message) {
     if (!condition) {
@@ -58,7 +98,8 @@ bool same_render_position(const glm::vec3& left, const glm::vec3& right) {
 
 ExperimentSnapshot worker_snapshot(
     double time_s = 0.0,
-    double maximum_horizon_s = 100000.0) {
+    double maximum_horizon_s = 100000.0,
+    bool convergence_established = true) {
     nbody::SimulationState state;
     state.time_s = time_s;
     state.bodies = {
@@ -74,7 +115,8 @@ ExperimentSnapshot worker_snapshot(
             {"removed", std::nullopt, 1.0, true},
             {"tracer", std::optional<std::string>{"central"}, 1.0, false},
         },
-        1.0, ExperimentIntegrator::velocity_verlet, true, maximum_horizon_s,
+        1.0, ExperimentIntegrator::velocity_verlet,
+        convergence_established, maximum_horizon_s,
     });
 }
 
@@ -151,6 +193,119 @@ void test_worker_completion_progress_and_restart() {
         second.state == CounterfactualWorkerState::completed &&
         second.result && second.result->completed_steps == 2U,
         "repeated worker start reused stale results");
+}
+
+void test_barnes_hut_worker_metadata_is_immutable() {
+    CounterfactualExperimentWorker worker;
+    auto configuration = worker_configuration(4.0);
+    configuration.solver = ExperimentSolver::barnes_hut;
+    configuration.barnes_hut.theta = 0.25;
+    configuration.barnes_hut.leaf_capacity = 1U;
+    const auto generation = worker.start(worker_snapshot(), configuration);
+
+    // These are next-run edits to the caller's copy. The accepted job and its
+    // immutable descriptor must continue with the captured Barnes--Hut policy.
+    configuration.solver = ExperimentSolver::direct;
+    configuration.barnes_hut.theta = 0.8;
+    worker.wait_until_idle();
+    const auto publication = worker.publication();
+    require(publication.generation == generation && publication.run &&
+            publication.result &&
+            publication.state == CounterfactualWorkerState::completed &&
+            publication.run->solver == ExperimentSolver::barnes_hut &&
+            publication.run->barnes_hut.theta == 0.25 &&
+            publication.run->barnes_hut.leaf_capacity == 1U &&
+            publication.result->solver == ExperimentSolver::barnes_hut &&
+            publication.result->barnes_hut_configuration &&
+            publication.result->barnes_hut_configuration->theta == 0.25 &&
+            publication.result->baseline_barnes_hut_statistics &&
+            publication.result->counterfactual_barnes_hut_statistics &&
+            publication.result->baseline_barnes_hut_statistics->body_count == 3U &&
+            publication.result->counterfactual_barnes_hut_statistics->body_count == 2U,
+        "worker publication was relabeled by post-launch solver/theta edits");
+}
+
+void test_barnes_hut_failure_context_and_persistent_notice() {
+    auto failing_configuration = worker_configuration(2.0);
+    failing_configuration.solver = ExperimentSolver::barnes_hut;
+    failing_configuration.barnes_hut.leaf_capacity = 1U;
+    failing_configuration.barnes_hut.maximum_traversal_work = 1U;
+    CounterfactualExperimentWorker failing_worker;
+    const auto failing_generation = failing_worker.start(
+        worker_snapshot(), failing_configuration,
+        {17U, nbody::visualization::CounterfactualSnapshotSource::current_state});
+    failing_worker.wait_until_idle();
+    const auto failed = failing_worker.publication();
+    require(failed.generation == failing_generation && failed.result &&
+            failed.state == CounterfactualWorkerState::failed &&
+            failed.result->terminal_failure &&
+            failed.result->terminal_failure->branch ==
+                nbody::experiments::ExperimentBranch::baseline &&
+            failed.result->terminal_failure->phase ==
+                ExperimentFailurePhase::old_position_force &&
+            failed.result->terminal_failure->message_text().find(
+                "traversal work budget exceeded") != std::string_view::npos,
+        "worker publication lost structured Barnes-Hut failure context");
+
+    auto saturated_configuration = worker_configuration(2.0);
+    saturated_configuration.solver = ExperimentSolver::barnes_hut;
+    saturated_configuration.barnes_hut.theta = 0.25;
+    saturated_configuration.barnes_hut.leaf_capacity = 1U;
+    saturated_configuration.limits.maximum_issue_records = 1U;
+    CounterfactualExperimentWorker worker;
+    nbody::visualization::CounterfactualPublicationGate gate(31U);
+    const auto generation = worker.start(
+        worker_snapshot(0.0, 100000.0, false), saturated_configuration,
+        {31U, nbody::visualization::CounterfactualSnapshotSource::current_state});
+    gate.accept_job(generation, 31U);
+    saturated_configuration.solver = ExperimentSolver::direct;
+    saturated_configuration.barnes_hut.theta = 0.8;
+    worker.wait_until_idle();
+    const auto saturated = worker.publication();
+    const bool retained_approximation_issue = saturated.result &&
+        std::any_of(saturated.result->issues.begin(), saturated.result->issues.end(),
+            [](const auto& issue) {
+                return issue.kind == nbody::experiments::ExperimentIssueKind::
+                    approximate_force_solver;
+            });
+    const auto notice =
+        nbody::visualization::counterfactual_barnes_hut_approximation_notice(
+            saturated, gate, true);
+    require(saturated.state == CounterfactualWorkerState::completed &&
+            saturated.result && saturated.run &&
+            saturated.result->dropped_issue_count == 1U &&
+            !retained_approximation_issue && !notice.empty() &&
+            notice.find("matched Direct") != std::string_view::npos &&
+            saturated.run->solver == ExperimentSolver::barnes_hut &&
+            saturated.run->barnes_hut.theta == 0.25,
+        "executed Barnes-Hut notice depended on bounded warnings or live controls");
+    require(nbody::visualization::counterfactual_barnes_hut_approximation_notice(
+                saturated, gate, false).empty(),
+        "composition mismatch did not suppress the executed-solver notice");
+
+    gate.replace_scenario();
+    require(nbody::visualization::counterfactual_barnes_hut_approximation_notice(
+                saturated, gate, true).empty(),
+        "scenario replacement did not invalidate the prior Barnes-Hut notice");
+
+    auto direct_configuration = worker_configuration(1.0);
+    const auto direct_generation = worker.start(
+        worker_snapshot(), direct_configuration,
+        {gate.scenario_generation(),
+         nbody::visualization::CounterfactualSnapshotSource::initial_state});
+    gate.accept_job(direct_generation, gate.scenario_generation());
+    worker.wait_until_idle();
+    const auto direct = worker.publication();
+    require(direct.state == CounterfactualWorkerState::completed &&
+            direct.run && direct.run->solver == ExperimentSolver::direct &&
+            nbody::visualization::counterfactual_barnes_hut_approximation_notice(
+                direct, gate, true).empty(),
+        "Direct execution incorrectly displayed a Barnes-Hut approximation notice");
+
+    gate.invalidate_job();
+    require(nbody::visualization::counterfactual_barnes_hut_approximation_notice(
+                direct, gate, true).empty(),
+        "reset-style job invalidation left an executed-solver notice visible");
 }
 
 std::shared_ptr<const nbody::visualization::CounterfactualRunDescriptor>
@@ -320,6 +475,9 @@ void test_cuda_worker_metadata_and_rejection() {
 void test_cancellation_and_active_destruction() {
     CounterfactualExperimentWorker worker;
     auto long_configuration = worker_configuration(100000.0);
+    long_configuration.solver = ExperimentSolver::barnes_hut;
+    long_configuration.barnes_hut.theta = 0.25;
+    long_configuration.barnes_hut.leaf_capacity = 1U;
     long_configuration.limits.sample_cadence_s = 100000.0;
     const auto generation = worker.start(
         worker_snapshot(0.0, 100000.0), long_configuration);
@@ -811,6 +969,9 @@ void test_warning_grouping_and_control_layout() {
 void test_openmp_worker() {
     auto configuration = worker_configuration(2.0);
     configuration.backend = ExperimentBackend::openmp;
+    configuration.solver = ExperimentSolver::barnes_hut;
+    configuration.barnes_hut.theta = 0.25;
+    configuration.barnes_hut.leaf_capacity = 1U;
     configuration.openmp_threads = 2;
     if (!nbody::experiments::CounterfactualExperimentRunner::openmp_supported()) {
         bool rejected = false;
@@ -828,7 +989,16 @@ void test_openmp_worker() {
     CounterfactualExperimentWorker worker;
     (void)worker.start(worker_snapshot(), configuration);
     worker.wait_until_idle();
-    require(worker.publication().state == CounterfactualWorkerState::completed,
+    const auto publication = worker.publication();
+    require(publication.state == CounterfactualWorkerState::completed &&
+            publication.run && publication.result &&
+            publication.run->backend == ExperimentBackend::openmp &&
+            publication.run->solver == ExperimentSolver::barnes_hut &&
+            publication.run->barnes_hut.theta == 0.25 &&
+            publication.result->baseline_barnes_hut_statistics &&
+            publication.result->counterfactual_barnes_hut_statistics &&
+            publication.result->baseline_barnes_hut_statistics->worker_threads == 2 &&
+            publication.result->counterfactual_barnes_hut_statistics->worker_threads == 2,
         "OpenMP worker experiment did not complete");
 }
 
@@ -842,6 +1012,8 @@ int main() {
             decltype(*std::declval<CounterfactualWorkerPublication>().result)>>);
         test_snapshot_handoff_and_eligibility();
         test_worker_completion_progress_and_restart();
+        test_barnes_hut_worker_metadata_is_immutable();
+        test_barnes_hut_failure_context_and_persistent_notice();
         test_application_publication_generation_gate();
         test_immutable_executed_run_descriptor();
         test_cuda_worker_metadata_and_rejection();

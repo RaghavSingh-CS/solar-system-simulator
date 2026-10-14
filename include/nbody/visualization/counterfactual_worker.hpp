@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -59,6 +60,9 @@ struct CounterfactualRunDescriptor {
     std::string removed_body_stable_id;
     experiments::ExperimentBackend backend{
         experiments::ExperimentBackend::sequential};
+    experiments::ExperimentSolver solver{
+        experiments::ExperimentSolver::direct};
+    BarnesHutConfiguration barnes_hut;
     int openmp_threads{1};
     int cuda_device{0};
     double physical_timestep_s{0.0};
@@ -215,6 +219,14 @@ private:
     std::uint64_t scenario_generation_{1U};
     std::optional<std::uint64_t> accepted_worker_generation_;
 };
+
+// Returns the persistent scientific notice for an eligible Barnes--Hut job.
+// Eligibility must include the real generation gate and current stable-ID
+// composition; bounded diagnostic storage is intentionally irrelevant.
+std::string_view counterfactual_barnes_hut_approximation_notice(
+    const CounterfactualWorkerPublication& publication,
+    const CounterfactualPublicationGate& gate,
+    bool scenario_composition_matches) noexcept;
 
 experiments::ExperimentSnapshot capture_counterfactual_snapshot(
     const ScenarioDefinition& scenario,

@@ -1,6 +1,7 @@
 #include "nbody/experiments/counterfactual.hpp"
 
 #include "nbody/astronomy/solar_system_60.hpp"
+#include "nbody/barnes_hut.hpp"
 #include "nbody/solar_system.hpp"
 #ifdef NBODY_EXPERIMENT_HAS_CUDA
 #include "nbody/cuda_backend.hpp"
@@ -20,6 +21,18 @@
 
 namespace nbody::experiments {
 namespace {
+
+#ifndef NBODY_EXPERIMENT_EXPECT_TEST_HOOKS
+#error "Experiment target must declare whether test hooks are expected"
+#elif NBODY_EXPERIMENT_EXPECT_TEST_HOOKS
+#ifndef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+#error "Test experiment target must enable the test-hook ABI"
+#endif
+#else
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+#error "Production experiment target must not enable the test-hook ABI"
+#endif
+#endif
 
 static_assert(std::is_nothrow_move_assignable_v<CounterfactualExperimentResult>,
     "transactional result publication must not throw");
@@ -46,6 +59,73 @@ private:
     ExperimentIssueKind issue_kind_;
 };
 
+class ContextualForceBackend final : public ForceBackend {
+public:
+    ContextualForceBackend(
+        const ForceBackend& delegate,
+        ExperimentBranch branch,
+        std::optional<ExperimentBranch>& active_branch,
+        ExperimentFailurePhase& active_phase
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+        ,
+        std::optional<ExperimentBranch>& injected_branch,
+        ExperimentFailurePhase& injected_phase
+#endif
+        )
+        : delegate_(delegate),
+          branch_(branch),
+          active_branch_(active_branch),
+          active_phase_(active_phase)
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+          ,
+          injected_branch_(injected_branch),
+          injected_phase_(injected_phase)
+#endif
+          {}
+
+    const char* name() const noexcept override { return delegate_.name(); }
+
+    std::vector<Vec3> compute_accelerations(
+        const SimulationState& state,
+        double gravitational_constant_value) const override {
+        const ExperimentFailurePhase phase = evaluation_count_ == 0U
+            ? ExperimentFailurePhase::old_position_force
+            : evaluation_count_ == 1U
+                ? ExperimentFailurePhase::new_position_force
+                : ExperimentFailurePhase::unspecified;
+        active_branch_ = branch_;
+        active_phase_ = phase;
+        ++evaluation_count_;
+        auto accelerations = delegate_.compute_accelerations(
+            state, gravitational_constant_value);
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+        if (injected_branch_ == branch_ && injected_phase_ == phase) {
+            injected_branch_.reset();
+            injected_phase_ = ExperimentFailurePhase::unspecified;
+            const std::string message = std::string(
+                "injected CPU test failure after real ") +
+                (branch_ == ExperimentBranch::baseline ? "baseline" : "counterfactual") +
+                " " + experiment_failure_phase_name(phase) + " evaluation";
+            throw std::runtime_error(message);
+        }
+#endif
+        return accelerations;
+    }
+
+    std::size_t evaluation_count() const noexcept { return evaluation_count_; }
+
+private:
+    const ForceBackend& delegate_;
+    ExperimentBranch branch_;
+    std::optional<ExperimentBranch>& active_branch_;
+    ExperimentFailurePhase& active_phase_;
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+    std::optional<ExperimentBranch>& injected_branch_;
+    ExperimentFailurePhase& injected_phase_;
+#endif
+    mutable std::size_t evaluation_count_{0U};
+};
+
 bool finite_vector(const Vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
@@ -57,6 +137,19 @@ bool same_body(const Body& left, const Body& right) {
         left.velocity_m_s.x == right.velocity_m_s.x &&
         left.velocity_m_s.y == right.velocity_m_s.y &&
         left.velocity_m_s.z == right.velocity_m_s.z;
+}
+
+BarnesHutStatistics barnes_hut_statistics(const ForceBackend& backend) {
+    if (const auto* sequential =
+            dynamic_cast<const SequentialBarnesHutForceBackend*>(&backend)) {
+        return sequential->last_statistics();
+    }
+    if (const auto* openmp =
+            dynamic_cast<const OpenMpBarnesHutForceBackend*>(&backend)) {
+        return openmp->last_statistics();
+    }
+    throw std::logic_error(
+        "Barnes-Hut experiment backend does not expose Barnes-Hut statistics");
 }
 
 bool checked_subtract(double minuend, double subtrahend, double& result) noexcept {
@@ -340,10 +433,14 @@ void add_issue_once(
 ExperimentTerminalFailure make_terminal_failure(
     ExperimentIssueKind kind,
     double time_s,
-    const char* detail) noexcept {
+    const char* detail,
+    const std::optional<ExperimentBranch>& branch,
+    ExperimentFailurePhase phase) noexcept {
     ExperimentTerminalFailure failure;
     failure.kind = kind;
     failure.time_s = time_s;
+    failure.branch = branch;
+    failure.phase = phase;
     constexpr std::string_view prefix = "Paired batch was rolled back: ";
     auto append = [&](std::string_view text) {
         const std::size_t remaining = maximum_terminal_failure_message_bytes -
@@ -703,6 +800,7 @@ public:
             throw std::logic_error("CUDA paired executor is invalidated");
         }
         try {
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
             const auto baseline_injection =
                 failure_injection_ == ExperimentBranch::baseline
                 ? CudaHostFailureInjection::after_enqueue_before_synchronize
@@ -712,6 +810,10 @@ public:
                 ? CudaHostFailureInjection::after_enqueue_before_synchronize
                 : CudaHostFailureInjection::none;
             failure_injection_.reset();
+#else
+            constexpr auto baseline_injection = CudaHostFailureInjection::none;
+            constexpr auto counterfactual_injection = CudaHostFailureInjection::none;
+#endif
             auto baseline_result = baseline_->run(
                 baseline, 1U, timestep_s, nbody::gravitational_constant,
                 baseline_injection);
@@ -738,24 +840,30 @@ public:
         return baseline_ != nullptr && counterfactual_ != nullptr;
     }
 
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
     void inject_host_failure_after_enqueue(ExperimentBranch branch) {
         if (!valid()) {
             throw std::logic_error("cannot inject failure into an invalid CUDA executor");
         }
         failure_injection_ = branch;
     }
+#endif
 
 private:
     // Separate objects own separate streams, pinned host staging, and persistent
     // allocations sized to the full and compacted branches respectively.
     std::unique_ptr<CudaVelocityVerlet> baseline_;
     std::unique_ptr<CudaVelocityVerlet> counterfactual_;
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
     std::optional<ExperimentBranch> failure_injection_;
+#endif
 #else
     CudaPairExecutor(std::size_t, std::size_t, int) = delete;
     void invalidate() noexcept {}
     bool valid() const noexcept { return false; }
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
     void inject_host_failure_after_enqueue(ExperimentBranch) = delete;
+#endif
 #endif
 };
 
@@ -953,6 +1061,18 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
             throw std::invalid_argument("OpenMP experiment thread count must be positive");
         }
     }
+    switch (configuration_.solver) {
+        case ExperimentSolver::direct:
+            break;
+        case ExperimentSolver::barnes_hut:
+            if (configuration_.backend == ExperimentBackend::cuda) {
+                throw std::runtime_error(
+                    "CUDA Barnes-Hut counterfactual execution is not implemented");
+            }
+            break;
+        default:
+            throw std::invalid_argument("unknown counterfactual force solver");
+    }
     if (configuration_.backend == ExperimentBackend::cuda) {
         if (configuration_.cuda_device < 0) {
             throw std::invalid_argument("CUDA experiment device index must be non-negative");
@@ -1028,6 +1148,11 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
     }
 
     result_.removed_body_stable_id = configuration_.removed_body_stable_id;
+    result_.backend = configuration_.backend;
+    result_.solver = configuration_.solver;
+    if (configuration_.solver == ExperimentSolver::barnes_hut) {
+        result_.barnes_hut_configuration = configuration_.barnes_hut;
+    }
     result_.baseline_state = snapshot_.source_state();
     result_.counterfactual_state.time_s = snapshot_.source_state().time_s;
     result_.counterfactual_state.bodies.reserve(snapshot_.source_state().bodies.size() - 1U);
@@ -1245,6 +1370,17 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
             std::nullopt,
         });
     }
+    if (configuration_.solver == ExperimentSolver::barnes_hut) {
+        add_issue_once(result_, configuration_.limits, {
+            ExperimentIssueKind::approximate_force_solver,
+            false,
+            "Barnes-Hut is an approximate force solver; reported counterfactual separation includes both removal response and solver approximation error, so direct-force comparison is required for interpretation",
+            snapshot_.source_state().time_s,
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+        });
+    }
 
     result_.summaries.reserve(monitored_mapping_indices_.size());
     for (const std::size_t mapping_index : monitored_mapping_indices_) {
@@ -1268,6 +1404,48 @@ CounterfactualExperimentRunner::CounterfactualExperimentRunner(
     consecutive_threshold_samples_.assign(monitored_mapping_indices_.size(), 0U);
     append_sample(result_, snapshot_, configuration_, monitored_mapping_indices_,
         reference_mapping_indices_, consecutive_threshold_samples_);
+
+    if (configuration_.backend != ExperimentBackend::cuda) {
+        if (configuration_.solver == ExperimentSolver::direct) {
+            if (configuration_.backend == ExperimentBackend::sequential) {
+                baseline_force_backend_ = &sequential_force_backend();
+                counterfactual_force_backend_ = &sequential_force_backend();
+            } else {
+#ifdef NBODY_EXPERIMENT_HAS_OPENMP
+                baseline_cpu_backend_ = std::make_unique<OpenMpForceBackend>(
+                    configuration_.openmp_threads);
+                counterfactual_cpu_backend_ = std::make_unique<OpenMpForceBackend>(
+                    configuration_.openmp_threads);
+                baseline_force_backend_ = baseline_cpu_backend_.get();
+                counterfactual_force_backend_ = counterfactual_cpu_backend_.get();
+#else
+                throw std::logic_error(
+                    "OpenMP direct experiment backend is unavailable");
+#endif
+            }
+        } else if (configuration_.backend == ExperimentBackend::sequential) {
+            baseline_cpu_backend_ =
+                std::make_unique<SequentialBarnesHutForceBackend>(
+                    configuration_.barnes_hut);
+            counterfactual_cpu_backend_ =
+                std::make_unique<SequentialBarnesHutForceBackend>(
+                    configuration_.barnes_hut);
+            baseline_force_backend_ = baseline_cpu_backend_.get();
+            counterfactual_force_backend_ = counterfactual_cpu_backend_.get();
+        } else {
+#ifdef NBODY_EXPERIMENT_HAS_OPENMP
+            baseline_cpu_backend_ = std::make_unique<OpenMpBarnesHutForceBackend>(
+                configuration_.openmp_threads, configuration_.barnes_hut);
+            counterfactual_cpu_backend_ = std::make_unique<OpenMpBarnesHutForceBackend>(
+                configuration_.openmp_threads, configuration_.barnes_hut);
+            baseline_force_backend_ = baseline_cpu_backend_.get();
+            counterfactual_force_backend_ = counterfactual_cpu_backend_.get();
+#else
+            throw std::logic_error(
+                "OpenMP Barnes-Hut experiment backend is unavailable");
+#endif
+        }
+    }
 #ifdef NBODY_EXPERIMENT_HAS_CUDA
     if (configuration_.backend == ExperimentBackend::cuda) {
         cuda_executor_ = std::make_unique<CudaPairExecutor>(
@@ -1356,29 +1534,29 @@ bool CounterfactualExperimentRunner::advance_batch() {
         configuration_.limits.integration_steps_per_batch,
         remaining_steps);
 
+    std::optional<ExperimentBranch> failure_branch;
+    ExperimentFailurePhase failure_phase = ExperimentFailurePhase::unspecified;
     try {
+        failure_phase = ExperimentFailurePhase::candidate_preparation;
         auto next = result_;
         auto next_threshold_counts = consecutive_threshold_samples_;
         const auto compact = compact_identities(
             snapshot_.identities(),
             identity_index(snapshot_.identities()).at(
                 configuration_.removed_body_stable_id));
-        std::unique_ptr<ForceBackend> owned_backend;
-        const ForceBackend* backend = &sequential_force_backend();
-#ifdef NBODY_EXPERIMENT_HAS_OPENMP
-        if (configuration_.backend == ExperimentBackend::openmp) {
-            owned_backend = std::make_unique<OpenMpForceBackend>(configuration_.openmp_threads);
-            backend = owned_backend.get();
-        }
-#endif
         for (std::size_t step = 0; step < steps; ++step) {
+            failure_branch = ExperimentBranch::baseline;
+            failure_phase = ExperimentFailurePhase::candidate_preparation;
             const auto baseline_positions_before = body_positions(next.baseline_state);
+            failure_branch = ExperimentBranch::counterfactual;
             const auto counterfactual_positions_before = body_positions(
                 next.counterfactual_state);
             const double baseline_time_before = next.baseline_state.time_s;
             const double counterfactual_time_before = next.counterfactual_state.time_s;
             if (configuration_.backend == ExperimentBackend::cuda) {
 #ifdef NBODY_EXPERIMENT_HAS_CUDA
+                failure_branch.reset();
+                failure_phase = ExperimentFailurePhase::unspecified;
                 if (!cuda_executor_ || !cuda_executor_->valid()) {
                     throw std::logic_error(
                         "CUDA experiment backend has no valid paired executor");
@@ -1393,9 +1571,37 @@ bool CounterfactualExperimentRunner::advance_batch() {
                     "CUDA experiment backend is active in a non-CUDA build");
 #endif
             } else {
+                if (baseline_force_backend_ == nullptr ||
+                    counterfactual_force_backend_ == nullptr) {
+                    failure_branch.reset();
+                    failure_phase = ExperimentFailurePhase::candidate_preparation;
+                    throw std::logic_error(
+                        "CPU experiment backend resources are unavailable");
+                }
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+                if (injected_cpu_failure_branch_ == ExperimentBranch::baseline) {
+                    injected_cpu_failure_branch_.reset();
+                    failure_branch = ExperimentBranch::baseline;
+                    failure_phase = ExperimentFailurePhase::unspecified;
+                    throw std::runtime_error(
+                        "injected host failure before baseline CPU advancement");
+                }
+#endif
+                ContextualForceBackend baseline_backend(
+                    *baseline_force_backend_, ExperimentBranch::baseline,
+                    failure_branch, failure_phase
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+                    ,
+                    injected_cpu_force_failure_branch_,
+                    injected_cpu_force_failure_phase_
+#endif
+                    );
                 velocity_verlet_step(
-                    next.baseline_state, snapshot_.fixed_timestep_s(), *backend);
+                    next.baseline_state, snapshot_.fixed_timestep_s(),
+                    baseline_backend);
             }
+            failure_branch = ExperimentBranch::baseline;
+            failure_phase = ExperimentFailurePhase::post_step_scientific_validation;
             if (!std::isfinite(next.baseline_state.time_s) ||
                 !(next.baseline_state.time_s > baseline_time_before)) {
                 throw ScientificFailure(
@@ -1403,15 +1609,48 @@ bool CounterfactualExperimentRunner::advance_batch() {
                     "baseline branch simulated time failed to advance");
             }
             if (configuration_.backend != ExperimentBackend::cuda) {
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+                if (injected_cpu_failure_branch_ ==
+                        ExperimentBranch::counterfactual) {
+                    injected_cpu_failure_branch_.reset();
+                    failure_branch = ExperimentBranch::counterfactual;
+                    failure_phase = ExperimentFailurePhase::unspecified;
+                    throw std::runtime_error(
+                        "injected host failure before counterfactual CPU advancement");
+                }
+#endif
+                ContextualForceBackend counterfactual_backend(
+                    *counterfactual_force_backend_,
+                    ExperimentBranch::counterfactual,
+                    failure_branch, failure_phase
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+                    ,
+                    injected_cpu_force_failure_branch_,
+                    injected_cpu_force_failure_phase_
+#endif
+                    );
                 velocity_verlet_step(
-                    next.counterfactual_state, snapshot_.fixed_timestep_s(), *backend);
+                    next.counterfactual_state, snapshot_.fixed_timestep_s(),
+                    counterfactual_backend);
+                if (configuration_.solver == ExperimentSolver::barnes_hut) {
+                    failure_branch = ExperimentBranch::baseline;
+                    failure_phase = ExperimentFailurePhase::solver_statistics;
+                    next.baseline_barnes_hut_statistics =
+                        barnes_hut_statistics(*baseline_force_backend_);
+                    failure_branch = ExperimentBranch::counterfactual;
+                    next.counterfactual_barnes_hut_statistics =
+                        barnes_hut_statistics(*counterfactual_force_backend_);
+                }
             }
+            failure_branch = ExperimentBranch::counterfactual;
+            failure_phase = ExperimentFailurePhase::post_step_scientific_validation;
             if (!std::isfinite(next.counterfactual_state.time_s) ||
                 !(next.counterfactual_state.time_s > counterfactual_time_before)) {
                 throw ScientificFailure(
                     ExperimentIssueKind::invalid_simulated_time,
                     "counterfactual branch simulated time failed to advance");
             }
+            failure_branch.reset();
             if (next.baseline_state.time_s != next.counterfactual_state.time_s) {
                 throw ScientificFailure(
                     ExperimentIssueKind::invalid_simulated_time,
@@ -1421,32 +1660,45 @@ bool CounterfactualExperimentRunner::advance_batch() {
                 next.completed_steps, 1U, "completed experiment step count");
             (void)checked_elapsed_time(
                 next.completed_steps, snapshot_.fixed_timestep_s());
+            failure_branch = ExperimentBranch::baseline;
             inspect_branch_endpoint(next.baseline_state, snapshot_.identities(),
                 configuration_.guards, ExperimentBranch::baseline, next,
                 configuration_.limits);
+            failure_branch = ExperimentBranch::counterfactual;
             inspect_branch_endpoint(next.counterfactual_state, compact,
                 configuration_.guards, ExperimentBranch::counterfactual, next,
                 configuration_.limits);
+            failure_branch = ExperimentBranch::baseline;
             inspect_swept_branch(baseline_positions_before, next.baseline_state,
                 snapshot_.identities(), configuration_.guards,
                 ExperimentBranch::baseline, next, configuration_.limits);
+            failure_branch = ExperimentBranch::counterfactual;
             inspect_swept_branch(counterfactual_positions_before,
                 next.counterfactual_state, compact, configuration_.guards,
                 ExperimentBranch::counterfactual, next, configuration_.limits);
             if (next.completed_steps % sample_steps == 0U ||
                 next.completed_steps == total_steps) {
+                failure_branch.reset();
+                failure_phase = ExperimentFailurePhase::history_sample_construction;
                 append_sample(next, snapshot_, configuration_, monitored_mapping_indices_,
                     reference_mapping_indices_, next_threshold_counts);
             }
         }
+        failure_branch = ExperimentBranch::baseline;
+        failure_phase = ExperimentFailurePhase::summary_conservation_evaluation;
         next.baseline_conservation = conservation(
             next.baseline_state, result_.baseline_conservation.initial);
+        failure_branch = ExperimentBranch::counterfactual;
         next.counterfactual_conservation = conservation(
             next.counterfactual_state, result_.counterfactual_conservation.initial);
         if (next.baseline_conservation.relative_energy_drift >
                 configuration_.guards.maximum_relative_energy_drift ||
             next.counterfactual_conservation.relative_energy_drift >
                 configuration_.guards.maximum_relative_energy_drift) {
+            failure_branch = next.baseline_conservation.relative_energy_drift >
+                    configuration_.guards.maximum_relative_energy_drift
+                ? std::optional<ExperimentBranch>{ExperimentBranch::baseline}
+                : std::optional<ExperimentBranch>{ExperimentBranch::counterfactual};
             add_issue_once(next, configuration_.limits, {
                 ExperimentIssueKind::excessive_conservation_drift,
                 true,
@@ -1462,6 +1714,8 @@ bool CounterfactualExperimentRunner::advance_batch() {
         }
         next.status = next.completed_steps == total_steps ?
             ExperimentStatus::completed : ExperimentStatus::running;
+        failure_branch.reset();
+        failure_phase = ExperimentFailurePhase::publication_commit;
         result_ = std::move(next);
         consecutive_threshold_samples_ = std::move(next_threshold_counts);
         if (cancellation_requested_ && result_.status != ExperimentStatus::completed) {
@@ -1476,7 +1730,8 @@ bool CounterfactualExperimentRunner::advance_batch() {
             cuda_executor_->invalidate();
         }
         const auto terminal = make_terminal_failure(
-            error.issue_kind(), result_.baseline_state.time_s, error.what());
+            error.issue_kind(), result_.baseline_state.time_s, error.what(),
+            failure_branch, failure_phase);
         result_.terminal_failure = terminal;
         result_.status = ExperimentStatus::failed;
         return false;
@@ -1486,7 +1741,8 @@ bool CounterfactualExperimentRunner::advance_batch() {
         }
         const auto terminal = make_terminal_failure(
             ExperimentIssueKind::integration_failure,
-            result_.baseline_state.time_s, error.what());
+            result_.baseline_state.time_s, error.what(),
+            failure_branch, failure_phase);
         result_.terminal_failure = terminal;
         result_.status = ExperimentStatus::failed;
         return false;
@@ -1514,6 +1770,49 @@ void CounterfactualExperimentRunner::request_cancel() noexcept {
     cancellation_requested_ = true;
 }
 
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+void CounterfactualExperimentRunner::inject_cpu_host_failure_before_advance_for_testing(
+    ExperimentBranch branch) {
+    if (configuration_.backend == ExperimentBackend::cuda) {
+        throw std::logic_error(
+            "CPU host-failure injection is unavailable for CUDA experiments");
+    }
+    if (result_.status == ExperimentStatus::completed ||
+        result_.status == ExperimentStatus::cancelled ||
+        result_.status == ExperimentStatus::failed) {
+        throw std::logic_error(
+            "CPU host-failure injection requires an advanceable experiment");
+    }
+    injected_cpu_failure_branch_ = branch;
+}
+
+void CounterfactualExperimentRunner::
+inject_cpu_force_failure_after_evaluation_for_testing(
+    ExperimentBranch branch,
+    ExperimentFailurePhase phase) {
+    if (configuration_.backend == ExperimentBackend::cuda) {
+        throw std::logic_error(
+            "CPU force-failure injection is unavailable for CUDA experiments");
+    }
+    if (configuration_.solver != ExperimentSolver::barnes_hut) {
+        throw std::logic_error(
+            "CPU force-failure injection requires Barnes-Hut execution");
+    }
+    if (phase != ExperimentFailurePhase::old_position_force &&
+        phase != ExperimentFailurePhase::new_position_force) {
+        throw std::invalid_argument(
+            "CPU force-failure injection requires an old- or new-position force phase");
+    }
+    if (result_.status == ExperimentStatus::completed ||
+        result_.status == ExperimentStatus::cancelled ||
+        result_.status == ExperimentStatus::failed) {
+        throw std::logic_error(
+            "CPU force-failure injection requires an advanceable experiment");
+    }
+    injected_cpu_force_failure_branch_ = branch;
+    injected_cpu_force_failure_phase_ = phase;
+}
+
 void CounterfactualExperimentRunner::inject_cuda_host_failure_after_enqueue_for_testing(
     ExperimentBranch branch) {
     if (configuration_.backend != ExperimentBackend::cuda) {
@@ -1532,6 +1831,7 @@ void CounterfactualExperimentRunner::inject_cuda_host_failure_after_enqueue_for_
         "CUDA host-failure injection is unavailable in a non-CUDA build");
 #endif
 }
+#endif
 
 bool CounterfactualExperimentRunner::cuda_resources_valid() const noexcept {
     return cuda_executor_ && cuda_executor_->valid();
@@ -1542,6 +1842,37 @@ const char* experiment_backend_name(ExperimentBackend backend) noexcept {
         case ExperimentBackend::sequential: return "Sequential";
         case ExperimentBackend::openmp: return "OpenMP";
         case ExperimentBackend::cuda: return "CUDA";
+    }
+    return "Unknown";
+}
+
+const char* experiment_solver_name(ExperimentSolver solver) noexcept {
+    switch (solver) {
+        case ExperimentSolver::direct: return "Direct force";
+        case ExperimentSolver::barnes_hut: return "Barnes-Hut";
+    }
+    return "Unknown";
+}
+
+const char* experiment_failure_phase_name(ExperimentFailurePhase phase) noexcept {
+    switch (phase) {
+        case ExperimentFailurePhase::unspecified: return "Unspecified";
+        case ExperimentFailurePhase::candidate_preparation:
+            return "Candidate preparation";
+        case ExperimentFailurePhase::old_position_force:
+            return "Old-position force";
+        case ExperimentFailurePhase::new_position_force:
+            return "New-position force";
+        case ExperimentFailurePhase::solver_statistics:
+            return "Solver statistics";
+        case ExperimentFailurePhase::post_step_scientific_validation:
+            return "Post-step scientific validation";
+        case ExperimentFailurePhase::history_sample_construction:
+            return "History/sample construction";
+        case ExperimentFailurePhase::summary_conservation_evaluation:
+            return "Summary/conservation evaluation";
+        case ExperimentFailurePhase::publication_commit:
+            return "Publication/commit";
     }
     return "Unknown";
 }

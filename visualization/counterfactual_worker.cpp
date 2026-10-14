@@ -104,6 +104,8 @@ struct CounterfactualExperimentWorker::Job {
         value.scenario_id = snapshot.scenario_id();
         value.removed_body_stable_id = configuration.removed_body_stable_id;
         value.backend = configuration.backend;
+        value.solver = configuration.solver;
+        value.barnes_hut = configuration.barnes_hut;
         value.openmp_threads = configuration.openmp_threads;
         value.cuda_device = configuration.cuda_device;
         value.physical_timestep_s = snapshot.fixed_timestep_s();
@@ -190,6 +192,20 @@ bool CounterfactualPublicationGate::accepts(
         publication.generation == *accepted_worker_generation_ &&
         publication.run->worker_generation == publication.generation &&
         publication.run->scenario_generation == scenario_generation_;
+}
+
+std::string_view counterfactual_barnes_hut_approximation_notice(
+    const CounterfactualWorkerPublication& publication,
+    const CounterfactualPublicationGate& gate,
+    bool scenario_composition_matches) noexcept {
+    if (!scenario_composition_matches || !gate.accepts(publication) ||
+        !publication.run ||
+        publication.run->solver != experiments::ExperimentSolver::barnes_hut) {
+        return {};
+    }
+    return "Barnes-Hut is approximate. One approximate full-versus-removed run "
+           "cannot isolate physical removal response from numerical approximation "
+           "error; run a matched Direct experiment to characterize the discrepancy.";
 }
 
 bool CounterfactualWorkerPublication::terminal() const noexcept {
@@ -491,6 +507,8 @@ const char* counterfactual_issue_kind_name(
     switch (kind) {
         case experiments::ExperimentIssueKind::insufficient_timestep_convergence:
             return "Timestep convergence not established";
+        case experiments::ExperimentIssueKind::approximate_force_solver:
+            return "Approximate force solver";
         case experiments::ExperimentIssueKind::dangerous_close_approach:
             return "Dangerous close approach";
         case experiments::ExperimentIssueKind::physical_radius_overlap:

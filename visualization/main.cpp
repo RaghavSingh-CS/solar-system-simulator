@@ -262,6 +262,8 @@ struct ApplicationModel {
     struct ExperimentUiState {
         bool capture_current_state{true};
         int backend_index{0};
+        int solver_index{0};
+        double barnes_hut_theta{0.25};
         double observation_horizon_s{86400.0};
         double sample_cadence_s{3600.0};
         double absolute_threshold_m{1000.0};
@@ -1043,6 +1045,19 @@ make_experiment_configuration(
     }
     configuration.openmp_threads = preferred_openmp_threads;
     configuration.cuda_device = app.preferred_cuda_device;
+    switch (app.experiment_ui.solver_index) {
+        case 0:
+            configuration.solver = nbody::experiments::ExperimentSolver::direct;
+            break;
+        case 1:
+            configuration.solver =
+                nbody::experiments::ExperimentSolver::barnes_hut;
+            configuration.barnes_hut.theta =
+                app.experiment_ui.barnes_hut_theta;
+            break;
+        default:
+            throw std::invalid_argument("unknown counterfactual experiment solver");
+    }
     configuration.limits.observation_horizon_s =
         app.experiment_ui.observation_horizon_s;
     configuration.limits.sample_cadence_s = app.experiment_ui.sample_cadence_s;
@@ -1955,6 +1970,18 @@ UiActions draw_control_panel(
             }
         }
 
+        ImGui::TextUnformatted("Experiment force solver");
+        ImGui::RadioButton("Direct O(N^2)", &experiment.solver_index, 0);
+        if (!control_layout.stacked) {
+            ImGui::SameLine();
+        }
+        ImGui::RadioButton("Barnes-Hut (approximate)",
+            &experiment.solver_index, 1);
+        if (experiment.solver_index == 1) {
+            ImGui::TextWrapped(
+                "Barnes-Hut approximates distant groups. Measured separation can contain both the removal response and solver approximation error; compare against Direct before scientific interpretation.");
+        }
+
         const bool control_table = !control_layout.stacked && ImGui::BeginTable(
             "counterfactual_inputs", 2,
             ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings);
@@ -1998,6 +2025,13 @@ UiActions draw_control_panel(
         ImGui::InputInt("##counterfactual_persistence", &experiment.persistence_samples);
         tooltip_for_last_item(
             "Both thresholds must remain satisfied for this many consecutive retained samples.");
+        if (experiment.solver_index == 1) {
+            begin_input("Barnes-Hut opening angle theta");
+            ImGui::InputDouble("##counterfactual_barnes_hut_theta",
+                &experiment.barnes_hut_theta, 0.0, 0.0, "%.6g");
+            tooltip_for_last_item(
+                "Accuracy/performance policy captured immutably for both paired branches. Smaller theta generally evaluates more of the tree.");
+        }
         if (control_table) {
             ImGui::EndTable();
         }
@@ -2038,6 +2072,19 @@ UiActions draw_control_panel(
             } else if (configuration.significance.normalized_deviation_threshold < 0.0 ||
                 !std::isfinite(configuration.significance.normalized_deviation_threshold)) {
                 estimate_error = "Normalized threshold must be finite and non-negative.";
+            } else if (configuration.solver ==
+                    nbody::experiments::ExperimentSolver::barnes_hut &&
+                (!(configuration.barnes_hut.theta > 0.0) ||
+                    configuration.barnes_hut.theta > 2.0 ||
+                    !std::isfinite(configuration.barnes_hut.theta))) {
+                estimate_error =
+                    "Barnes-Hut theta must be finite and in (0, 2].";
+            } else if (configuration.backend ==
+                    nbody::experiments::ExperimentBackend::cuda &&
+                configuration.solver ==
+                    nbody::experiments::ExperimentSolver::barnes_hut) {
+                estimate_error =
+                    "CUDA Barnes-Hut counterfactual execution is not implemented; choose Direct or a CPU backend.";
             } else if (configuration.backend ==
                     nbody::experiments::ExperimentBackend::cuda &&
                 !app.cuda_device_available) {
@@ -2055,7 +2102,7 @@ UiActions draw_control_panel(
                 estimate_error = "Sampling request exceeds the 4096-sample history limit.";
             } else if (estimate && estimate->direct_force_interactions >
                 configuration.limits.workload_budget_interactions) {
-                estimate_error = "Direct-force estimate exceeds the worker workload budget.";
+                estimate_error = "Direct-equivalent admission estimate exceeds the worker workload budget.";
             } else if (estimate && estimate->conservative_retained_bytes >
                 configuration.limits.memory_budget_bytes) {
                 estimate_error = "Conservative retained-history estimate exceeds 64 MiB.";
@@ -2067,7 +2114,7 @@ UiActions draw_control_panel(
             ImGui::TextWrapped(
                 "Estimate: %zu steps, %zu retained samples, %zu monitored bodies, "
                 "%zu hidden frame references, "
-                "%llu direct interactions, %s conservative retained storage.",
+                "%llu direct-equivalent admission interactions, %s conservative retained storage.",
                 estimate->integration_steps, estimate->retained_samples,
                 estimate->monitored_bodies,
                 estimate->retained_reference_bodies,
@@ -2135,6 +2182,9 @@ UiActions draw_control_panel(
         const bool publication_is_current = publication_matches_scenario(app);
         const bool presentation_eligible = !stale_worker_publication &&
             (!publication.result || publication_is_current);
+        const auto barnes_hut_notice =
+            nbody::visualization::counterfactual_barnes_hut_approximation_notice(
+                publication, app.experiment_gate, publication_is_current);
         if (stale_worker_publication) {
             ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
                 "Status: Stale result suppressed");
@@ -2152,6 +2202,12 @@ UiActions draw_control_panel(
             ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
                 "Worker failure: %s", publication.worker_error.c_str());
         }
+        if (!barnes_hut_notice.empty()) {
+            ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
+                "Executed-solver notice: %.*s",
+                static_cast<int>(barnes_hut_notice.size()),
+                barnes_hut_notice.data());
+        }
         if (publication.result && !publication_is_current) {
             ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F),
                 "Completed result belongs to a different physical composition; all result presentation is suppressed.");
@@ -2160,7 +2216,13 @@ UiActions draw_control_panel(
             publication.result->terminal_failure) {
             const auto& failure = *publication.result->terminal_failure;
             ImGui::TextColored(ImVec4(1.0F, 0.32F, 0.28F, 1.0F),
-                "Terminal failure at t=%.6e s: %.*s%s",
+                "Terminal failure [%s; %s; %s] at t=%.6e s: %.*s%s",
+                nbody::visualization::counterfactual_issue_kind_name(
+                    failure.kind),
+                nbody::visualization::counterfactual_issue_branch_name(
+                    failure.branch),
+                nbody::experiments::experiment_failure_phase_name(
+                    failure.phase),
                 failure.time_s,
                 static_cast<int>(failure.message_text().size()),
                 failure.message_text().data(),
@@ -2209,6 +2271,15 @@ UiActions draw_control_panel(
                         backend += " (device " + std::to_string(run.cuda_device) + ")";
                     }
                     property_row("Executed backend", backend);
+                    std::string solver =
+                        nbody::experiments::experiment_solver_name(run.solver);
+                    if (run.solver ==
+                        nbody::experiments::ExperimentSolver::barnes_hut) {
+                        solver += " (theta=" +
+                            nbody::visualization::format_measurement(
+                                run.barnes_hut.theta, "", 6) + ")";
+                    }
+                    property_row("Executed solver", solver);
                     property_row("Observation horizon",
                         human_time(run.observation_horizon_s));
                     property_row("Completed paired steps",
@@ -2275,6 +2346,27 @@ UiActions draw_control_panel(
                     "Baseline branch", result.baseline_conservation);
                 draw_counterfactual_conservation(
                     "Counterfactual branch", result.counterfactual_conservation);
+                if (result.solver ==
+                        nbody::experiments::ExperimentSolver::barnes_hut &&
+                    result.baseline_barnes_hut_statistics &&
+                    result.counterfactual_barnes_hut_statistics) {
+                    const auto& baseline =
+                        *result.baseline_barnes_hut_statistics;
+                    const auto& counterfactual =
+                        *result.counterfactual_barnes_hut_statistics;
+                    ImGui::SeparatorText("Last committed Barnes-Hut force evaluations");
+                    ImGui::TextWrapped(
+                        "Baseline: %zu bodies, %zu nodes, %zu visited nodes, %zu approximations, %zu direct interactions.",
+                        baseline.body_count, baseline.node_count,
+                        baseline.visited_nodes, baseline.approximated_nodes,
+                        baseline.direct_body_interactions);
+                    ImGui::TextWrapped(
+                        "Counterfactual: %zu bodies, %zu nodes, %zu visited nodes, %zu approximations, %zu direct interactions.",
+                        counterfactual.body_count, counterfactual.node_count,
+                        counterfactual.visited_nodes,
+                        counterfactual.approximated_nodes,
+                        counterfactual.direct_body_interactions);
+                }
                 ImGui::SeparatorText("Scientific warnings");
                 if (result.issues.empty() && result.dropped_issue_count == 0U) {
                     ImGui::TextDisabled("No retained scientific warnings.");
@@ -2313,6 +2405,20 @@ UiActions draw_control_panel(
                         std::to_string(run.cuda_device) + ")";
                 }
                 property_row("Executed backend", executed_backend);
+                property_row("Executed solver",
+                    nbody::experiments::experiment_solver_name(run.solver));
+                if (run.solver ==
+                    nbody::experiments::ExperimentSolver::barnes_hut) {
+                    property_row("Barnes-Hut theta",
+                        nbody::visualization::format_measurement(
+                            run.barnes_hut.theta, "dimensionless", 8));
+                    property_row("Barnes-Hut limits",
+                        "nodes " + std::to_string(run.barnes_hut.maximum_nodes) +
+                        ", traversal work " +
+                        std::to_string(run.barnes_hut.maximum_traversal_work) +
+                        ", working memory " +
+                        human_bytes(run.barnes_hut.memory_budget_bytes));
+                }
                 property_row("Physical timestep",
                     nbody::visualization::format_measurement(
                         run.physical_timestep_s, "s", 10));
@@ -2340,7 +2446,7 @@ UiActions draw_control_panel(
                     join_stable_ids(run.monitored_body_stable_ids));
                 property_row("Retained frame-reference IDs",
                     join_stable_ids(run.retained_reference_body_stable_ids));
-                property_row("Estimated direct interactions",
+                property_row("Direct-equivalent admission interactions",
                     std::to_string(run.estimated_direct_force_interactions));
                 property_row("Estimated retained storage",
                     human_bytes(run.estimated_retained_bytes));

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "nbody/barnes_hut.hpp"
 #include "nbody/diagnostics.hpp"
 
 #include <array>
@@ -23,6 +24,11 @@ enum class ExperimentIntegrator {
     velocity_verlet,
 };
 
+enum class ExperimentSolver {
+    direct,
+    barnes_hut,
+};
+
 enum class ExperimentStatus {
     ready,
     running,
@@ -34,6 +40,7 @@ enum class ExperimentStatus {
 
 enum class ExperimentIssueKind {
     insufficient_timestep_convergence,
+    approximate_force_solver,
     dangerous_close_approach,
     physical_radius_overlap,
     excessive_conservation_drift,
@@ -46,6 +53,21 @@ enum class ExperimentIssueKind {
 enum class ExperimentBranch {
     baseline,
     counterfactual,
+};
+
+// Bounded execution context for terminal failures. A phase is reported only
+// while the runner can establish it without parsing an exception message or
+// duplicating the reviewed integrator.
+enum class ExperimentFailurePhase {
+    unspecified,
+    candidate_preparation,
+    old_position_force,
+    new_position_force,
+    solver_statistics,
+    post_step_scientific_validation,
+    history_sample_construction,
+    summary_conservation_evaluation,
+    publication_commit,
 };
 
 struct ExperimentBodyIdentity {
@@ -165,6 +187,8 @@ struct ScientificGuardPolicy {
 struct CounterfactualExperimentConfiguration {
     std::string removed_body_stable_id;
     ExperimentBackend backend{ExperimentBackend::sequential};
+    ExperimentSolver solver{ExperimentSolver::direct};
+    BarnesHutConfiguration barnes_hut;
     int openmp_threads{1};
     int cuda_device{0};
     ExperimentLimits limits;
@@ -191,6 +215,8 @@ inline constexpr std::size_t maximum_terminal_failure_message_bytes = 512U;
 struct ExperimentTerminalFailure {
     ExperimentIssueKind kind{ExperimentIssueKind::integration_failure};
     double time_s{0.0};
+    std::optional<ExperimentBranch> branch;
+    ExperimentFailurePhase phase{ExperimentFailurePhase::unspecified};
     std::array<char, maximum_terminal_failure_message_bytes + 1U> message{};
     std::size_t message_length{0U};
     bool message_truncated{false};
@@ -248,6 +274,9 @@ struct BodyDeviationSummary {
 struct CounterfactualExperimentResult {
     ExperimentStatus status{ExperimentStatus::ready};
     std::string removed_body_stable_id;
+    ExperimentBackend backend{ExperimentBackend::sequential};
+    ExperimentSolver solver{ExperimentSolver::direct};
+    std::optional<BarnesHutConfiguration> barnes_hut_configuration;
     SimulationState baseline_state;
     SimulationState counterfactual_state;
     std::vector<SurvivorMapping> survivor_mapping;
@@ -257,6 +286,11 @@ struct CounterfactualExperimentResult {
     std::vector<BodyDeviationSummary> summaries;
     BranchConservationDiagnostics baseline_conservation;
     BranchConservationDiagnostics counterfactual_conservation;
+    // For Barnes--Hut these describe the final force evaluation of the most
+    // recently committed paired step. Each branch owns and builds its own
+    // state-specific tree; direct-force results leave both values empty.
+    std::optional<BarnesHutStatistics> baseline_barnes_hut_statistics;
+    std::optional<BarnesHutStatistics> counterfactual_barnes_hut_statistics;
     std::vector<ExperimentIssue> issues;
     std::size_t dropped_issue_count{0};
     // Failure metadata is not part of the committed warning/history buffer.
@@ -298,11 +332,24 @@ public:
     void set_paused(bool paused) noexcept;
     bool paused() const noexcept;
     void request_cancel() noexcept;
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+    // One-shot deterministic host-side test seam. It fails before the selected
+    // CPU branch is advanced so paired transactional rollback can be verified
+    // independently for either branch. It is unavailable for CUDA runners.
+    void inject_cpu_host_failure_before_advance_for_testing(
+        ExperimentBranch branch);
+    // One-shot deterministic seam that throws only after the selected branch
+    // has completed the selected real CPU force evaluation. This leaves the
+    // reviewed Velocity Verlet implementation and force law unchanged.
+    void inject_cpu_force_failure_after_evaluation_for_testing(
+        ExperimentBranch branch,
+        ExperimentFailurePhase phase);
     // One-shot test seam. It throws after the selected CUDA branch has queued
     // genuine GPU work and readback, before normal synchronization. This is a
     // recoverable host-side injection, not a simulated CUDA/device failure.
     void inject_cuda_host_failure_after_enqueue_for_testing(
         ExperimentBranch branch);
+#endif
     // False after a CUDA or scientific batch failure invalidates speculative
     // device state. Non-CUDA runners do not own CUDA resources.
     bool cuda_resources_valid() const noexcept;
@@ -316,12 +363,24 @@ private:
     std::vector<std::size_t> monitored_mapping_indices_;
     std::vector<std::size_t> reference_mapping_indices_;
     std::vector<std::size_t> consecutive_threshold_samples_;
+    std::unique_ptr<ForceBackend> baseline_cpu_backend_;
+    std::unique_ptr<ForceBackend> counterfactual_cpu_backend_;
+    const ForceBackend* baseline_force_backend_{nullptr};
+    const ForceBackend* counterfactual_force_backend_{nullptr};
     std::unique_ptr<CudaPairExecutor> cuda_executor_;
+#ifdef NBODY_EXPERIMENT_ENABLE_TEST_HOOKS
+    std::optional<ExperimentBranch> injected_cpu_failure_branch_;
+    std::optional<ExperimentBranch> injected_cpu_force_failure_branch_;
+    ExperimentFailurePhase injected_cpu_force_failure_phase_{
+        ExperimentFailurePhase::unspecified};
+#endif
     bool cancellation_requested_{false};
     bool pause_requested_{false};
 };
 
 const char* experiment_backend_name(ExperimentBackend backend) noexcept;
+const char* experiment_solver_name(ExperimentSolver solver) noexcept;
+const char* experiment_failure_phase_name(ExperimentFailurePhase phase) noexcept;
 const char* experiment_status_name(ExperimentStatus status) noexcept;
 
 }  // namespace nbody::experiments
