@@ -234,6 +234,29 @@ Run one reproducible benchmark configuration:
 
 The benchmark writes one CSV header and row to standard output. Ad hoc output is disposable; only controlled datasets with protocol and environment provenance belong under `data/benchmarks/`.
 
+### Large-N Laboratory L1
+
+Phase L1 is committed and independently source-reviewed for the bounded CPU
+laboratory and retained exploratory pilot described below.
+
+`nbody_large_n_lab` is a separate resource-bounded headless workflow for
+uniform, clustered, and approximately planar synthetic workloads. It supports
+Sequential/OpenMP as the backend dimension and Direct/Barnes--Hut as the solver
+dimension, requires an explicit seed, applies phase-specific memory admission
+and finite-result publication gates, records generation/initial-Direct-force/
+Direct-trajectory/diagnostic/tree/traversal/complete-step timings separately,
+and fails rather than falling back. Each completed evidence set is installed
+under an immutable run ID; an interprocess-locked, atomically replaced root
+pointer selects the authoritative run while retaining prior runs as history.
+CUDA is metadata-only in L1 and is not reported as executed.
+
+The initial Ryzen 7 5700U pilot stopped at 4096 bodies: 144 exploratory rows
+cover `N=256,1024,4096`, three distributions, theta `0.25/0.5/0.8`, and two
+retained repetitions. It is neither frozen Stage 5 evidence nor a claim about
+50K/100K, graphical FPS, or RTX 4050 performance. See
+[the Large-N Laboratory methodology](docs/large_n_laboratory.md) and the
+[custodied publication pointer](data/benchmarks/large_n_l1_pilot/publication.json).
+
 Run the controlled Stage 3 CPU matrix after configuring the OpenMP Release build:
 
 ```powershell

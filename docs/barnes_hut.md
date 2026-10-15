@@ -444,3 +444,34 @@ accuracy/performance choices rather than universal optima. Matched timestamps,
 stable-ID survivor mapping, common inertial coordinates, parent-relative
 metrics, point-mass limitations, and the provisional catalog timestep retain
 their prior meanings.
+
+## Large-N Laboratory Phase L1
+
+Phase L1 adds no solver implementation. It invokes the reviewed Sequential and
+OpenMP Barnes--Hut backends through a separate headless laboratory and retains
+Direct as the bounded numerical reference. Uniform, clustered, and
+approximately planar fixtures have stable identities, explicit seeds, and
+checked finite state. Theta `0.25`, `0.5`, and `0.8` remain approximation/
+performance observations rather than universal error guarantees.
+
+The corrected exact-source 144-row Ryzen 7 5700U pilot stopped at 4096 bodies.
+At that size, timed-region-observed OpenMP-4 Barnes--Hut speedup over Sequential
+was `2.94x`--`3.74x`. Theta `0.25`
+remained slower than Direct for all three distributions; theta `0.5` crossed
+Direct only for clustered and planar inputs; theta `0.8` was faster for all
+three but produced the largest measured approximation errors. Tree construction
+was `0.08%`--`3.31%` of complete Barnes--Hut force wall time, so traversal
+dominated these fixtures.
+
+The 4096-body p95 relative acceleration-error ranges were `2.28e-4`--`2.82e-3`
+at theta `0.25`, `5.83e-3`--`1.79e-2` at theta `0.5`, and
+`2.77e-2`--`6.73e-2` at theta `0.8`. Absolute/RMS errors, denominator floors,
+trajectory separation, and separate energy/angular-momentum drift are retained
+alongside them. Maximum retained force range/median was `34.7%`. OpenMP Direct
+is four-thread configured/runtime-probed, not observed inside its protected
+timed force region. Two repetitions and uncontrolled host conditions do not support
+a stable production crossover or extrapolation beyond 4096 bodies.
+
+See [large_n_laboratory.md](large_n_laboratory.md) for admission, timing,
+accuracy, and custody definitions. CUDA, 50K/100K execution, renderer
+performance, and RTX 4050 validation remain future controlled gates.

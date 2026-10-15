@@ -150,6 +150,58 @@ unavailable.
 
 `make_seeded_synthetic_system` uses `std::mt19937_64` raw output with an explicit 53-bit integer-to-double mapping, avoiding implementation-defined standard-library distributions. It generates generic SI-valued bodies, then removes center-of-mass position and velocity. It is a repeatable scaling/validation input, not a physical Solar System model.
 
+## Large-N Laboratory L1
+
+The separate `nbody_large_n` library owns deterministic laboratory generation,
+checked preflight, measurement records, numerical comparison, and canonical CSV
+serialization. `nbody_large_n_lab` is a headless single-configuration frontend;
+the Python pilot orchestrator composes a bounded matrix and enforces a hard
+per-process timeout. Neither target is linked into the viewer or frozen Stage 5
+benchmark.
+
+The generator uses a fixed SplitMix64 stream, explicit seed, stable ordered
+body names, distribution-specific geometry, duplicate-position detection, and
+finite center-of-mass recentering. Backend and solver remain orthogonal. The
+laboratory constructs only existing Direct or Barnes--Hut backends and calls the
+unchanged `velocity_verlet_step`; CUDA is represented only as a rejected L1
+configuration.
+
+Admission computes checked phase-specific high-water values for generation,
+Direct reference, warm-up, retained repetitions, final characterization, and
+serialization, including simultaneous states/arrays/containers and the full
+overlapping Barnes--Hut memory budget. This is conservative policy accounting,
+not an allocator-exact RSS bound. Direct/reference force calls and pairwise
+diagnostic work are separately bounded with checked integer arithmetic. The
+C++ boundary timer stops further batches after a budget violation, including a
+final post-characterization gate, while the orchestrator supplies the hard
+timeout for a force call that cannot be interrupted safely. Every published
+scientific/timing value must be finite; failed runs clear measurements instead
+of publishing partial rows.
+
+The Python runner constructs and verifies a complete immutable run in a unique
+scratch directory. An OS-backed interprocess lock serializes migration and
+publication. The runner installs the run under `runs/<run-id>/`, then atomically
+replaces a small root pointer whose current/history descriptors bind the run
+manifests and every artifact hash. It never swaps or deletes the authoritative
+evidence directory. A post-install/pre-pointer crash is a detectable orphan,
+not partial authority, and requires explicit recovery. The read-only verifier
+enforces the exact matrix, nonnegative scientific/resource semantics, immutable
+history descriptors, and exact summary reconstruction. Evidence custody is
+independent of Stage 1/2 and Stage 5. Timed-region worker counts are available
+for Barnes--Hut; protected OpenMP Direct is labeled configured/runtime-probed
+rather than independently observed in-region.
+
+Legacy directory-swap recovery is a separate administrative operation, never a
+measurement side effect. It verifies exactly one backup, copies it into a
+content-addressed immutable run, and atomically appends that descriptor to
+history without changing an existing current descriptor. The original backup
+remains independently recoverable. These guarantees cover cooperating-process
+serialization, process termination, and atomic visibility of a successful
+Windows pointer replacement. They do not certify persistence across sudden
+power loss: flushing the temporary pointer does not provide a portable Python
+guarantee that the containing directory entry or storage-device cache reached
+durable media.
+
 ## Visualization architecture and dependencies
 
 `NBODY_BUILD_VISUALIZATION=OFF` remains the default. When enabled, CMake fetches exact revisions of GLFW 3.4, GLM 1.0.1, and Dear ImGui 1.92.9b. A reproducibly generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, avoiding a build-time Python/Jinja2 dependency and runtime loader DLL. Shaders are embedded.

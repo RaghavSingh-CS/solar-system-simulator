@@ -283,3 +283,58 @@ publications do not display it.
 CUDA/Barnes--Hut counterfactual selection must fail explicitly. No local CUDA
 compile/runtime result is inferred from CPU acceptance, and no skipped or
 mocked test satisfies the future NVIDIA gate.
+
+## Large-N Laboratory L1 validation
+
+Generator tests require exact same-toolchain reproduction, a fixed regression
+checksum, stable unique ordered names, finite positive masses, finite state,
+noncoincident normal fixtures, distinct seeds, and quantitative uniform/
+clustered/planar geometry checks. Missing seed, invalid counts/scales, and
+explicit coincident adversarial states must fail.
+
+Preflight tests cover all supported requested sizes through 100K for bounded
+Barnes--Hut admission, rejection of unbounded 100K Direct work, missing Direct
+reference metadata above 4096, invalid Barnes--Hut policy, unavailable CUDA and
+CPU-only OpenMP, actual OpenMP team metadata, one-byte memory rejection, and
+integer overflow. They also assert every phase estimate, the maximum-phase
+high-water relationship, and a budget deliberately placed between the old
+underestimate and corrected retained-repetition peak. Admission of a requested
+size is not execution evidence or a process-RSS guarantee.
+
+Numerical tests cover cancellation-aware maximum/RMS/percentile error
+statistics, denominator floors, relative-division overflow, finite inputs that
+produce nonrepresentable diagnostics, exact Direct self-reference, bounded
+Barnes--Hut execution, solver statistics, timing-field nonnegativity, canonical
+CSV fields, and transactional clearing after a natural solver failure. A test
+execution seam deterministically injects an over-budget value only at the final
+scientific boundary, proving late work cannot be published without using
+wall-clock sleeps.
+
+Python negative controls exercise the production runner/verifier. They cover
+raw tampering; negative timing, error, drift, and resource fields even after
+coherent rehashing; zero denominator floors and force durations; wrong matrix
+policy; altered summaries; missing/corrupt authoritative runs; incomplete and
+unreferenced run directories; stranded legacy backups; and simulated timeout,
+malformed output, and provenance failure. Spawned-process tests prove two
+publishers serialize and a contender cannot steal a live Windows byte lock.
+Checkpoint injection covers pre-install, post-install, and atomic-pointer-
+replacement failures, plus explicit orphan recovery and byte-exact flat-layout
+migration.
+
+Additional recovery controls corrupt or omit pointer fields, mismatch pointer
+run IDs and manifest hashes, recover a real legacy backup with no primary,
+append recovered history without changing an existing current run, reject
+multiple and corrupt backups, resume a post-install interrupted adoption,
+prove repeated recovery is idempotent, and prove ordinary pilot invocation
+refuses an unadopted backup before starting measurement.
+
+The controlled pilot gate is limited to 256/1024/4096, three distributions,
+Sequential/OpenMP-4, Direct/Barnes--Hut, theta `0.25/0.5/0.8`, one warm-up,
+two retained repetitions, one step, and explicit memory/direct-work/wall-time
+bounds. Evidence verification must reconstruct all 72 summary medians from 144
+raw rows and confirm Release OpenMP build provenance, actual thread metadata,
+finite and semantically nonnegative scientific fields, the immutable run
+manifest and atomic current/history pointer, exact source/build/
+binary custody, and non-Stage-5 labeling. This pilot is exploratory;
+no accuracy threshold, stable crossover, 50K/100K feasibility, GPU result, or
+graphical FPS claim follows from it.

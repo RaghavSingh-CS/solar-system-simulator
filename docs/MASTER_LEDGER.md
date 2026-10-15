@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 ## Stage status
 
@@ -30,6 +30,7 @@ Last updated: 2026-10-14
 | 60-body scenario composition and visualization | **IMPLEMENTED LOCALLY / REVIEW PENDING** | Full/subset catalog solver composition, independent visibility, stable-ID subsystem views, local-origin rendering, parent-relative trails, and fresh CPU/OpenMP Release validation |
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
 | Barnes--Hut large-N solver roadmap | **STAGE 4B COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED** | Implementation `2ec090d` adds transactional Sequential/OpenMP paired counterfactual execution, structured failure context, and immutable approximation notices; CUDA execution and controlled large-N evaluation remain mandatory |
+| Large-N Laboratory Phase L1 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / BOUNDED PILOT COMPLETE** | Implementation/tooling `78449d3` and evidence `3f665c2` provide deterministic generation, resource admission, Direct/Barnes--Hut measurement, immutable versioned runs, an interprocess-locked atomic pointer, strict semantic verification, and a hash-custodied 144-row Ryzen 7 5700U pilot through 4096 bodies; no 50K/100K, CUDA, FPS, or Stage 5 claim |
 
 ## Decisions and rationale
 
@@ -2238,6 +2239,144 @@ No direct-force equation, Velocity Verlet mathematics, CUDA source, JPL data,
 legacy Solar initialization, Stage 1/2 evidence, or frozen Stage 5 artifact is
 changed. CUDA counterfactual Barnes--Hut, controlled large-N evaluation, and
 RTX 4050 validation remain pending.
+
+## Large-N Laboratory Phase L1 (committed, independently source-reviewed bounded pilot)
+
+Phase L1 adds a separate `nbody_large_n` library and `nbody_large_n_lab`
+headless executable without changing a force equation, integrator, or reviewed
+solver. Backend and solver are independent dimensions for Sequential/Direct,
+OpenMP/Direct, Sequential/Barnes--Hut, and OpenMP/Barnes--Hut. CUDA is retained
+as an explicit metadata value but rejected for L1 execution; no GPU result or
+fallback exists.
+
+The generator requires an explicit seed and uses a fixed SplitMix64 stream with
+an explicit 53-bit binary64 mapping. Uniform, four-cluster, and one-percent-
+thickness planar distributions receive stable ordered `large_n_########`
+identities, configurable SI scales, positive bounded masses, duplicate-position
+checks, and finite center-of-mass recentering. Reproduction is same-toolchain;
+cross-compiler floating-point bit identity is not claimed. Coincident positions
+are confined to an explicit rejection fixture.
+
+Checked preflight covers body/step/warm-up/repetition counts and reports six
+phase-specific memory values for generation, Direct reference, warm-up,
+retained repetition, scientific characterization, and serialization. The
+admission value is their checked high-water maximum. It includes all
+simultaneously retained states and arrays, Velocity Verlet buffers, first
+candidate/reference results, measurement and percentile scratch, conservative
+name/hash/container reserves, and the full configured Barnes--Hut memory budget
+where it overlaps. Allocator/runtime/OS overhead remains outside this
+conservative policy estimate, so it is not advertised as a process-RSS bound.
+Default limits are 100,000 requested bodies, 512 MiB, 500,000,000 estimated
+direct interactions, and 30 seconds per configuration. Barnes--Hut's existing
+node/depth/cell/traversal/memory limits remain independently authoritative. A
+default 100K Direct request fails preflight.
+
+The C++ runner checks time at completed boundaries, including after all final
+trajectory and diagnostic characterization, and the orchestrator supplies a
+hard subprocess timeout. Boundary checks do not preempt an in-progress solver
+or diagnostic. Before `completed`, required diagnostic, drift, force/
+trajectory-error, derived-division, and timing values must be finite and
+representable. Failed runs clear retained measurements and scientific
+summaries before serialization; missing Direct references remain explicit and
+do not use accidental NaN values.
+
+Measurement separates input generation, the initial Direct force call, Direct
+trajectory, conservation diagnostics, complete force wall time, internal tree
+construction, target traversal, complete Velocity Verlet step batches, and
+total experiment duration. It retains accounted solver memory and node/work
+counts. OpenMP Barnes--Hut records four workers observed in the timed region;
+OpenMP Direct records four requested/effective workers but zero observed with
+`runtime_probe_only`, because the protected Direct timed region has no safe
+observation hook. Direct-reference characterization records
+maximum/RMS absolute acceleration error, p50/p95/p99/maximum floored relative
+error, cancellation-sensitive counts, short matched-step position/velocity
+separation, and separate candidate/Direct energy and angular-momentum drift.
+Unavailable Direct references remain explicitly unavailable and are never
+replaced by another approximate run.
+
+The corrected exact-source exploratory Ryzen 7 5700U pilot stopped at 4096
+bodies. Its 144
+completed rows cover 72 configurations over `N=256,1024,4096`, all three
+distributions, Sequential/OpenMP-4, Direct/Barnes--Hut, and theta
+`0.25/0.5/0.8`, with one warm-up and two retained repetitions. At 4096,
+configured/runtime-probed OpenMP-4 speedup was `3.18x`--`3.85x` for Direct and
+timed-region-observed OpenMP-4 speedup was `2.94x`--`3.74x` for Barnes--Hut.
+Theta `0.25` did not cross Direct; theta `0.5` crossed only on the
+clustered/planar fixtures; theta `0.8` crossed on all three while having the
+largest measured errors. Tree construction was `0.08%`--`3.31%` of complete
+Barnes--Hut force time. Maximum 4096-body retained force variability was
+`34.7%` range/median, and only two samples were retained, so no stable crossover
+is claimed.
+
+At 4096, p95 relative acceleration error ranged from `2.28e-4` to `2.82e-3`
+for theta `0.25`, `5.83e-3` to `1.79e-2` for theta `0.5`, and `2.77e-2` to
+`6.73e-2` for theta `0.8`. One-step Barnes--Hut angular-momentum drift reached
+`2.33e-6`; the matched Direct maximum was `4.65e-15`. These are synthetic,
+short-horizon observations, not general error bounds or ephemeris validation.
+
+Evidence lives only under `data/benchmarks/large_n_l1_pilot/`. The authoritative
+run ID is `run-20261015T024851.124148Z-7a58b39da7f6`. Raw CSV SHA-256
+is `2e13f307eb5f8f500db667f02c5106c766690eb9d313900f83449a3a46a7b9a8`;
+summary SHA-256 is
+`51be7ed226eb51922988118a1bc0008e09d35436c1d12ce485e8cdb18aeed6f3`;
+build provenance SHA-256 is
+`188b76dc83ff21e8dc6c31be40b90c30b936f2b752b6acf514858c26b1a9c2ac`;
+source manifest SHA-256 is
+`47f987c664fcf1d9f52cd0e14983cd70691fcd3fe665f297770f0011822b77aa`;
+metadata SHA-256 is
+`f29181c6b59389bfb2f89a40c337bb26f3f90534223ad78cf4f06e2718d7b8eb`;
+run manifest SHA-256 is
+`9c92bfb0f01979fad51b7505ef4c0a616faeb4f22e64b9e1c49ee801ab921007`;
+and atomic publication-pointer SHA-256 is
+`33aaef69e239a5dbda0a6916726c513d5e1c7d5b6151abaa2eadcb6330a7099b`.
+The prior flat run is retained byte-for-byte as
+`legacy-dbbdef1a6ee8e3f6`; its former publication manifest is archived inside
+that immutable run. The pointer history also retains the first remediated pilot
+`run-20261014T175936.127643Z-ef334579b9a1`, which was superseded after the full
+CPU suite exposed and corrected a legacy-migration test-fixture mismatch, plus
+the pre-recovery-remediation run
+`run-20261014T180351.384473Z-c507c497a001` and the first recovery-remediation
+run `run-20261015T024403.329605Z-6b8ddc1da78e`. All are historical, not
+authoritative. The runner builds each candidate in unique
+scratch storage,
+captures provenance, verifies it, serializes publishers with an OS-backed lock,
+installs a never-overwritten run directory, and atomically replaces only the
+root current/history pointer. Simulated pre-install, post-install, pointer-
+replacement, timeout, malformed-output, and provenance-capture failures preserve
+prior authority. Post-install orphans require explicit recovery. The verifier
+requires the exact 144-row/72-group matrix, reconstructs every timing,
+scientific and resource summary, rejects negative physical/timing/resource
+values even after coherent rehashing, and checks exact source/build/binary/raw
+custody.
+
+Legacy `.large_n_l1_pilot.previous-*` recovery is explicit through
+`python -B scripts/run_large_n_l1_pilot.py --recover-legacy-backup`. Exactly one
+complete hash-valid legacy candidate is copied and strictly verified under the
+publication lock, assigned a content-derived immutable run ID, and atomically
+added to history without changing an existing current descriptor. The source
+backup is retained; zero candidates is a no-op, repeated adoption is
+idempotent, and ambiguous/corrupt/incomplete candidates fail closed. Ordinary
+measurement refuses an unadopted backup. The Windows guarantees are limited to
+process-crash lock release and atomic visibility of a successful same-filesystem
+pointer replacement. Although the temporary pointer is flushed and `fsync` is
+requested, directory-entry and device-cache survival across sudden power loss
+is not guaranteed or certified.
+This is not Stage 1/2 or Stage 5 evidence. No 8192, 50K, 100K, CUDA, RTX 4050,
+viewer, or graphical-FPS measurement was performed. Phase L1 implementation
+and tooling are committed in `78449d3`; the exact-source evidence publication
+is committed in `3f665c2`. The final focused adversarial gate found no material
+recovery, authority, source-custody, or test-validity blocker.
+
+Final remediation validation on 2026-10-14 passed all `20/20` canonical CPU
+Release CTests and `24/24` canonical OpenMP Release CTests. The focused
+laboratory/tooling pairs passed `2/2` in each configuration; the Python tooling
+executable contains 23 deterministic cases, including spawned concurrent
+publishers and injected crash boundaries. The strict
+evidence verifier, repository-layout checker, pinned dependency-cache verifier,
+`git diff --check`, untracked UTF-8/LF/trailing-whitespace audit, and protected-
+scope audit passed. No force law, Velocity Verlet implementation, CUDA source,
+JPL input, Stage 1/2 evidence, frozen Stage 5 artifact, or legacy Solar initial
+condition changed.
 
 ## Known limitations
 
