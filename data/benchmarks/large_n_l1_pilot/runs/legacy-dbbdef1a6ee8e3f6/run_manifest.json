@@ -1,0 +1,14 @@
+{
+  "files": {
+    "README.md": "a1e82c8635e1923fe1a9f56847c14df80215a2b3134fcde0201c2b4d284c9c56",
+    "build_provenance.json": "1a8cf1b36046993c9daa73bc62e52301b8aa5642a703dfae4c5741f7205d3cc1",
+    "legacy_publication.json": "a1505733950906bea2c4a5c2de3121b2391721a4a25494ae5e4981ba14e2192c",
+    "metadata.json": "44abeb864b0b48407a84a13e58ba533cf62456af06010780189831878b34a9d6",
+    "raw.csv": "dbbdef1a6ee8e3f6f64ad995fba34b7e293f4310dadf00d84d73e62b34506da9",
+    "source_manifest.sha256": "c78ef4eaf65f95cdfe1416934876b0263b137842b00649e64f79cb148d57fb33",
+    "summary.json": "fb6f5623aad4f7cfbbc9c1b714f4b8ffb37837e17571d3b6005aec3f0a859732"
+  },
+  "run_id": "legacy-dbbdef1a6ee8e3f6",
+  "schema": "large-n-l1-run-v1",
+  "status": "complete"
+}
