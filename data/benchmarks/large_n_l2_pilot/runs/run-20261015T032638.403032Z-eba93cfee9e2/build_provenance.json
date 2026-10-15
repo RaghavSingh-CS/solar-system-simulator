@@ -1,0 +1,44 @@
+{
+  "build_directory": "build/openmp-release",
+  "cmake_cache": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "C:/msys64/ucrt64/bin/c++.exe",
+    "CMAKE_GENERATOR": "Ninja",
+    "CMAKE_MAKE_PROGRAM": "C:/msys64/ucrt64/bin/ninja.exe",
+    "NBODY_ENABLE_CUDA": "OFF",
+    "NBODY_ENABLE_MPI": "OFF",
+    "NBODY_ENABLE_OPENMP": "ON",
+    "OpenMP_CXX_FLAGS": "-fopenmp",
+    "OpenMP_CXX_LIB_NAMES": "gomp;mingwthrd"
+  },
+  "compiler_version_output": [
+    "c++.exe (Rev5, Built by MSYS2 project) 15.1.0",
+    "Copyright (C) 2025 Free Software Foundation, Inc.",
+    "This is free software; see the source for copying conditions.  There is NO",
+    "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    ""
+  ],
+  "effective_commands": [
+    "C:\\msys64\\ucrt64\\bin\\c++.exe -DNBODY_BUILD_CONFIGURATION=\\\"Release\\\" -DNBODY_CXX_COMPILER_ID=\\\"GNU\\\" -DNBODY_CXX_COMPILER_VERSION=\\\"15.1.0\\\" -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -fopenmp -MD -MT CMakeFiles/nbody_large_n_lab.dir/src/large_n_laboratory_main.cpp.obj -MF CMakeFiles\\nbody_large_n_lab.dir\\src\\large_n_laboratory_main.cpp.obj.d -o CMakeFiles/nbody_large_n_lab.dir/src/large_n_laboratory_main.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/src/large_n_laboratory_main.cpp",
+    "C:\\msys64\\ucrt64\\bin\\c++.exe -DNBODY_LARGE_N_HAS_OPENMP=1 -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -fopenmp -MD -MT CMakeFiles/nbody_large_n.dir/src/large_n_laboratory.cpp.obj -MF CMakeFiles\\nbody_large_n.dir\\src\\large_n_laboratory.cpp.obj.d -o CMakeFiles/nbody_large_n.dir/src/large_n_laboratory.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/src/large_n_laboratory.cpp",
+    "C:\\msys64\\ucrt64\\bin\\c++.exe -DNBODY_HAS_OPENMP=1 -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -fopenmp -MD -MT CMakeFiles/nbody_barnes_hut.dir/src/barnes_hut.cpp.obj -MF CMakeFiles\\nbody_barnes_hut.dir\\src\\barnes_hut.cpp.obj.d -o CMakeFiles/nbody_barnes_hut.dir/src/barnes_hut.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/src/barnes_hut.cpp",
+    "C:\\msys64\\ucrt64\\bin\\c++.exe  -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -MD -MT CMakeFiles/nbody_core.dir/src/diagnostics.cpp.obj -MF CMakeFiles\\nbody_core.dir\\src\\diagnostics.cpp.obj.d -o CMakeFiles/nbody_core.dir/src/diagnostics.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/src/diagnostics.cpp",
+    "C:\\msys64\\ucrt64\\bin\\c++.exe  -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -MD -MT CMakeFiles/nbody_core.dir/src/scenarios.cpp.obj -MF CMakeFiles\\nbody_core.dir\\src\\scenarios.cpp.obj.d -o CMakeFiles/nbody_core.dir/src/scenarios.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/src/scenarios.cpp",
+    "C:\\msys64\\ucrt64\\bin\\c++.exe  -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -MD -MT CMakeFiles/nbody_core.dir/src/solar_system.cpp.obj -MF CMakeFiles\\nbody_core.dir\\src\\solar_system.cpp.obj.d -o CMakeFiles/nbody_core.dir/src/solar_system.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/src/solar_system.cpp",
+    "C:\\msys64\\ucrt64\\bin\\c++.exe  -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -MD -MT CMakeFiles/nbody_core.dir/src/simulation.cpp.obj -MF CMakeFiles\\nbody_core.dir\\src\\simulation.cpp.obj.d -o CMakeFiles/nbody_core.dir/src/simulation.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/src/simulation.cpp",
+    "C:\\WINDOWS\\system32\\cmd.exe /C \"cd . && C:\\Projects\\PCAP\\solar-system-simulator\\.tools\\cmake-4.4.3-windows-x86_64\\bin\\cmake.exe -E rm -f libnbody_core.a && C:\\msys64\\ucrt64\\bin\\ar.exe qc libnbody_core.a  CMakeFiles/nbody_core.dir/src/diagnostics.cpp.obj CMakeFiles/nbody_core.dir/src/scenarios.cpp.obj CMakeFiles/nbody_core.dir/src/solar_system.cpp.obj CMakeFiles/nbody_core.dir/src/simulation.cpp.obj && C:\\msys64\\ucrt64\\bin\\ranlib.exe libnbody_core.a && cd .\"",
+    "C:\\WINDOWS\\system32\\cmd.exe /C \"cd . && C:\\Projects\\PCAP\\solar-system-simulator\\.tools\\cmake-4.4.3-windows-x86_64\\bin\\cmake.exe -E rm -f libnbody_barnes_hut.a && C:\\msys64\\ucrt64\\bin\\ar.exe qc libnbody_barnes_hut.a  CMakeFiles/nbody_barnes_hut.dir/src/barnes_hut.cpp.obj && C:\\msys64\\ucrt64\\bin\\ranlib.exe libnbody_barnes_hut.a && cd .\"",
+    "C:\\msys64\\ucrt64\\bin\\c++.exe  -IC:/Projects/PCAP/solar-system-simulator/include -O3 -DNDEBUG -Wall -Wextra -Wpedantic -fopenmp -MD -MT CMakeFiles/nbody_openmp.dir/backends/openmp/openmp_backend.cpp.obj -MF CMakeFiles\\nbody_openmp.dir\\backends\\openmp\\openmp_backend.cpp.obj.d -o CMakeFiles/nbody_openmp.dir/backends/openmp/openmp_backend.cpp.obj -c C:/Projects/PCAP/solar-system-simulator/backends/openmp/openmp_backend.cpp",
+    "C:\\WINDOWS\\system32\\cmd.exe /C \"cd . && C:\\Projects\\PCAP\\solar-system-simulator\\.tools\\cmake-4.4.3-windows-x86_64\\bin\\cmake.exe -E rm -f libnbody_openmp.a && C:\\msys64\\ucrt64\\bin\\ar.exe qc libnbody_openmp.a  CMakeFiles/nbody_openmp.dir/backends/openmp/openmp_backend.cpp.obj && C:\\msys64\\ucrt64\\bin\\ranlib.exe libnbody_openmp.a && cd .\"",
+    "C:\\WINDOWS\\system32\\cmd.exe /C \"cd . && C:\\Projects\\PCAP\\solar-system-simulator\\.tools\\cmake-4.4.3-windows-x86_64\\bin\\cmake.exe -E rm -f libnbody_large_n.a && C:\\msys64\\ucrt64\\bin\\ar.exe qc libnbody_large_n.a  CMakeFiles/nbody_large_n.dir/src/large_n_laboratory.cpp.obj && C:\\msys64\\ucrt64\\bin\\ranlib.exe libnbody_large_n.a && cd .\"",
+    "C:\\WINDOWS\\system32\\cmd.exe /C \"cd . && C:\\msys64\\ucrt64\\bin\\c++.exe -O3 -DNDEBUG  CMakeFiles/nbody_large_n_lab.dir/src/large_n_laboratory_main.cpp.obj -o nbody_large_n_lab.exe -Wl,--out-implib,libnbody_large_n_lab.dll.a -Wl,--major-image-version,0,--minor-image-version,0  libnbody_large_n.a  libnbody_barnes_hut.a  libnbody_openmp.a  libnbody_core.a  C:/msys64/ucrt64/lib/libgomp.dll.a  C:/msys64/ucrt64/lib/libmingwthrd.a  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd .\""
+  ],
+  "executable": {
+    "path": "build/openmp-release/nbody_large_n_lab.exe",
+    "sha256": "37fa292c38ddf927e241ba9363bcd99375fc74ca4c6d15792b9137d20529dee6"
+  },
+  "protocol_sha256": "529b7c6ce6cfab66309b02795531fadccdcb815b92e6da84faf8650d055b063e",
+  "schema": "large-n-l2-build-provenance-v1",
+  "source_manifest": "source_manifest.sha256",
+  "source_manifest_sha256": "a7fe862ee93c695a4cd179f50d539849349795206fa31640086bed4fb0a211c6"
+}

@@ -1,0 +1,14 @@
+{
+  "files": {
+    "README.md": "2e754f3c9e7b9a29237cf3d65afec57eef2113f64f10ce72dd6c771aa44a0516",
+    "build_provenance.json": "3673279006d96a9b1d982592b8803ef9a4d8a17f37c845f0ed3d55fd8f2d88c3",
+    "metadata.json": "fb9836ceba97c6151c403edea6e9c3e6bb315573eb96d9c1a2bb8b3532c394b6",
+    "protocol.json": "529b7c6ce6cfab66309b02795531fadccdcb815b92e6da84faf8650d055b063e",
+    "raw.csv": "e0a11b6adcd2d508090d5317176509b583635e403ac1a60d00095e971a5019e1",
+    "source_manifest.sha256": "88f7d0673199eaf3bb8adce086778e51a176b3f65265eb616d588ae13cb98860",
+    "summary.json": "1912aa89ad7b898031bd90efb270477d82f27a4d9c80693daaafe85706ea5e12"
+  },
+  "run_id": "run-20261015T033546.667200Z-7e6af5efac98",
+  "schema": "large-n-l2-run-v1",
+  "status": "complete"
+}

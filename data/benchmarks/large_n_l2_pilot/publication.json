@@ -1,0 +1,45 @@
+{
+  "current": {
+    "files": {
+      "README.md": "afcbd84ef965c23e925c4194d7a17f6d1199373594571912624d8cc43bad31d2",
+      "build_provenance.json": "022a090c45c0c9593a3b2b0bc18cebfdc2918d6ffb3a423e712eb6d19bf3d96a",
+      "metadata.json": "32e414e1ddd735bfa0f9605ff3c9963fe3d67519de90345175ad25f11f978769",
+      "protocol.json": "529b7c6ce6cfab66309b02795531fadccdcb815b92e6da84faf8650d055b063e",
+      "raw.csv": "c9189b14003f9c4a82ffbbd186b0f5846a494cfef08d77ec689306df86b76329",
+      "source_manifest.sha256": "bce6f3b44156982e46da34e3b0d1ba71ea645a0f9197cf3fdd846aaf5dc7ae11",
+      "summary.json": "ac3940a66cc196544474ebf8c5ddb174280c3cf537d97edfe8c0eb3f66b98e4f"
+    },
+    "run_id": "run-20261015T040233.498852Z-9878e74b0e13",
+    "run_manifest_sha256": "bdacb008e7470690acef801bca548e7276537b65d82fd9d354b9a169dee9426f"
+  },
+  "history": [
+    {
+      "files": {
+        "README.md": "2e754f3c9e7b9a29237cf3d65afec57eef2113f64f10ce72dd6c771aa44a0516",
+        "build_provenance.json": "3673279006d96a9b1d982592b8803ef9a4d8a17f37c845f0ed3d55fd8f2d88c3",
+        "metadata.json": "fb9836ceba97c6151c403edea6e9c3e6bb315573eb96d9c1a2bb8b3532c394b6",
+        "protocol.json": "529b7c6ce6cfab66309b02795531fadccdcb815b92e6da84faf8650d055b063e",
+        "raw.csv": "e0a11b6adcd2d508090d5317176509b583635e403ac1a60d00095e971a5019e1",
+        "source_manifest.sha256": "88f7d0673199eaf3bb8adce086778e51a176b3f65265eb616d588ae13cb98860",
+        "summary.json": "1912aa89ad7b898031bd90efb270477d82f27a4d9c80693daaafe85706ea5e12"
+      },
+      "run_id": "run-20261015T033546.667200Z-7e6af5efac98",
+      "run_manifest_sha256": "3a620d0630eb5283a9c57455b80238a0b914b762afeac4478744e45760ef6661"
+    },
+    {
+      "files": {
+        "README.md": "afcbd84ef965c23e925c4194d7a17f6d1199373594571912624d8cc43bad31d2",
+        "build_provenance.json": "edeaaae0f713224395f264d7530f1c3e641f9e095c8dcd207775e54b8b792d86",
+        "metadata.json": "ac9f46aca4880de32d2e3c17b65af2714a1457985ecc08fca75e0f7db404cb19",
+        "protocol.json": "529b7c6ce6cfab66309b02795531fadccdcb815b92e6da84faf8650d055b063e",
+        "raw.csv": "889ad9408e4eeec88e2d2663537abd2a83181dda72ea6c3b7298dec521258aed",
+        "source_manifest.sha256": "a7fe862ee93c695a4cd179f50d539849349795206fa31640086bed4fb0a211c6",
+        "summary.json": "a476f8586f279a06f58a6795b0d428650ab5828d9e546807d1c64aeac6e8d533"
+      },
+      "run_id": "run-20261015T032638.403032Z-eba93cfee9e2",
+      "run_manifest_sha256": "b907a977fe1f8801cb7261d23e95dba0a68b19fb0563af2020820a8226e96683"
+    }
+  ],
+  "schema": "large-n-l2-pointer-v1",
+  "status": "complete"
+}

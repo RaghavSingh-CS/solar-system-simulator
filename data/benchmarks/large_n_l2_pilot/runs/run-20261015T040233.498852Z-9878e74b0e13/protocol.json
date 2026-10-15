@@ -1,0 +1,97 @@
+{
+  "accuracy_thresholds": {
+    "0.25": {
+      "maximum_relative_error": 0.25,
+      "p95_relative_error": 0.01,
+      "relative_angular_momentum_drift": 0.0001,
+      "relative_energy_drift": 0.0001
+    },
+    "0.5": {
+      "maximum_relative_error": 1.0,
+      "p95_relative_error": 0.05,
+      "relative_angular_momentum_drift": 0.0001,
+      "relative_energy_drift": 0.0001
+    },
+    "0.8": {
+      "maximum_relative_error": 5.0,
+      "p95_relative_error": 0.15,
+      "relative_angular_momentum_drift": 0.0001,
+      "relative_energy_drift": 0.0001
+    }
+  },
+  "backends": [
+    {
+      "name": "sequential",
+      "threads": 1
+    },
+    {
+      "name": "openmp",
+      "threads": 4
+    }
+  ],
+  "candidate_body_counts": [
+    8192,
+    16384,
+    32768,
+    50000
+  ],
+  "classification": {
+    "calibration": "preflight and bounded smoke checks only; never retained as performance evidence",
+    "final_controlled_measurement": "not authorized until a later protocol is pre-registered after pilot review",
+    "pilot": "exploratory retained evidence used only to decide whether the next size should be proposed"
+  },
+  "distributions": [
+    "uniform",
+    "clustered",
+    "planar"
+  ],
+  "execution": {
+    "hard_subprocess_timeout_s": 35.0,
+    "memory_budget_bytes": 536870912,
+    "maximum_direct_interactions": 500000000,
+    "maximum_direct_reference_bodies": 8192,
+    "per_configuration_wall_time_budget_s": 30.0,
+    "retained_repetitions": 3,
+    "steps": 1,
+    "timestep_s": 10.0,
+    "warmups": 1
+  },
+  "optional_stretch_body_count": 100000,
+  "pilot_body_counts": [
+    8192
+  ],
+  "reference_policy": {
+    "barnes_hut": "full Direct reference only when admitted by the unchanged interaction and memory budgets",
+    "direct": "no redundant reference; the Direct solver configuration remains subject to the same work cap",
+    "sampled": "not implemented or used in this pilot; any future sampled reference requires an explicit sampled label, deterministic indices, sample size, and separate metrics"
+  },
+  "schema": "large-n-l2-protocol-v1",
+  "seed_formula": "0x4c3250494c4f5400 + distribution_index*0x100000 + N",
+  "solvers": {
+    "barnes-hut": {
+      "request_direct_reference": true,
+      "theta_values": [
+        0.25,
+        0.5,
+        0.8
+      ]
+    },
+    "direct": {
+      "expected_pilot_outcome": "resource_skip",
+      "request_direct_reference": false,
+      "theta_values": [
+        0.25
+      ]
+    }
+  },
+  "stop_rules": {
+    "accuracy_failure": "publish the completed pilot with a failed accuracy gate and do not authorize a larger N",
+    "direct_rejection": "retain an explicit skipped row; never increase the interaction cap or substitute Barnes-Hut",
+    "nonfinite_or_execution_failure": "do not publish a completed run and do not execute a larger N",
+    "resource_rejection": "retain an explicit skipped row and do not automatically raise a limit",
+    "scale_progression": "this task stops after N=8192 regardless of outcome",
+    "variability_warning_fraction": 0.2
+  },
+  "study": "large_n_laboratory_l2_controlled_scaling",
+  "version": "2.0.0-pilot-8192"
+}
