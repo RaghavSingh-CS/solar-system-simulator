@@ -1,5 +1,6 @@
 /build/
 data/benchmarks/large_n_l1_pilot/.publication.lock
+data/benchmarks/large_n_l2_pilot/.publication.lock
 /build-*/
 /CMakeUserPresets.json
 /cmake-build-*/

@@ -412,6 +412,11 @@ if(BUILD_TESTING)
             COMMAND ${Python3_EXECUTABLE} -B
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_large_n_l1_tools.py
         )
+        add_test(
+            NAME nbody_large_n_l2_tools
+            COMMAND ${Python3_EXECUTABLE} -B
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_large_n_l2_tools.py
+        )
     endif()
 
     add_executable(nbody_tests tests/test_two_body.cpp)

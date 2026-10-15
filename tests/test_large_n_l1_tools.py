@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib.util
 import json
 import multiprocessing
@@ -60,7 +61,8 @@ def copy_candidate(destination: Path, run_id: str) -> Path:
         "w", encoding="utf-8", newline="\n"
     ) as stream:
         for relative in sorted(VERIFY.MANIFEST_INPUTS):
-            stream.write(f"{RUNNER.sha256(ROOT / relative)} *{relative}\n")
+            digest = hashlib.sha256(VERIFY.committed_source_bytes(ROOT, relative)).hexdigest()
+            stream.write(f"{digest} *{relative}\n")
     provenance_path = destination / "build_provenance.json"
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
     provenance["source_manifest_sha256"] = RUNNER.sha256(

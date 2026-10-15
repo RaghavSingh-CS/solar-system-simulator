@@ -10,6 +10,7 @@ import json
 import math
 import re
 import statistics
+import subprocess
 from pathlib import Path
 
 
@@ -24,6 +25,7 @@ RUN_FILES = (
     "README.md",
 )
 LEGACY_PUBLICATION_FILE = "legacy_publication.json"
+SOURCE_CUSTODY_COMMIT = "3f665c2610f3d65214494ff18f2f06d3c063513a"
 RUN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 MANIFEST_INPUTS = {
     ".gitattributes",
@@ -250,6 +252,18 @@ def validate_nonnegative_integer(row: dict[str, str], field: str) -> int:
     return value
 
 
+def committed_source_bytes(root: Path, relative: str) -> bytes:
+    try:
+        return subprocess.check_output(
+            ["git", "show", f"{SOURCE_CUSTODY_COMMIT}:{relative}"],
+            cwd=root,
+        )
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"committed L1 source custody input is unavailable: {relative}"
+        ) from error
+
+
 def verify_source_manifest(run_directory: Path, root: Path) -> dict[str, str]:
     manifest_entries: dict[str, str] = {}
     for line in (run_directory / "source_manifest.sha256").read_text(
@@ -260,9 +274,8 @@ def verify_source_manifest(run_directory: Path, root: Path) -> dict[str, str]:
         manifest_entries[relative] = expected
     require(set(manifest_entries) == MANIFEST_INPUTS, "source manifest input set is not exact")
     for relative, expected in manifest_entries.items():
-        source = root / relative
-        require(source.is_file(), f"manifest source missing: {relative}")
-        require(sha256(source) == expected, f"source hash mismatch: {relative}")
+        actual = hashlib.sha256(committed_source_bytes(root, relative)).hexdigest()
+        require(actual == expected, f"committed source hash mismatch: {relative}")
     return manifest_entries
 
 
