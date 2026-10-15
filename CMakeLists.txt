@@ -196,6 +196,30 @@ if(NBODY_ENABLE_OPENMP)
     endif()
 endif()
 
+add_library(nbody_large_n
+    src/large_n_laboratory.cpp
+)
+target_include_directories(nbody_large_n PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_features(nbody_large_n PUBLIC cxx_std_17)
+target_link_libraries(nbody_large_n PUBLIC nbody_core nbody_barnes_hut)
+if(NBODY_ENABLE_OPENMP)
+    target_compile_definitions(nbody_large_n PRIVATE NBODY_LARGE_N_HAS_OPENMP=1)
+    target_link_libraries(nbody_large_n PRIVATE nbody_openmp)
+endif()
+if(MSVC)
+    target_compile_options(nbody_large_n PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(nbody_large_n PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_executable(nbody_large_n_lab src/large_n_laboratory_main.cpp)
+target_link_libraries(nbody_large_n_lab PRIVATE nbody_large_n)
+target_compile_definitions(nbody_large_n_lab PRIVATE
+    NBODY_BUILD_CONFIGURATION="$<CONFIG>"
+    NBODY_CXX_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+    NBODY_CXX_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+)
+
 function(nbody_configure_experiments_library target)
     target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_features(${target} PUBLIC cxx_std_17)
@@ -383,6 +407,11 @@ if(BUILD_TESTING)
             NAME nbody_stage6d_tools
             COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_stage6d_tools.py
         )
+        add_test(
+            NAME nbody_large_n_l1_tools
+            COMMAND ${Python3_EXECUTABLE} -B
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_large_n_l1_tools.py
+        )
     endif()
 
     add_executable(nbody_tests tests/test_two_body.cpp)
@@ -433,6 +462,10 @@ if(BUILD_TESTING)
     add_executable(nbody_barnes_hut_tests tests/test_barnes_hut.cpp)
     target_link_libraries(nbody_barnes_hut_tests PRIVATE nbody_barnes_hut)
     add_test(NAME nbody_barnes_hut COMMAND nbody_barnes_hut_tests)
+
+    add_executable(nbody_large_n_laboratory_tests tests/test_large_n_laboratory.cpp)
+    target_link_libraries(nbody_large_n_laboratory_tests PRIVATE nbody_large_n)
+    add_test(NAME nbody_large_n_laboratory COMMAND nbody_large_n_laboratory_tests)
 
     add_executable(
         nbody_barnes_hut_packed_tests

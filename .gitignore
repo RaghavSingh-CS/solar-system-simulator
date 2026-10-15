@@ -1,4 +1,5 @@
 /build/
+data/benchmarks/large_n_l1_pilot/.publication.lock
 /build-*/
 /CMakeUserPresets.json
 /cmake-build-*/
@@ -8,6 +9,8 @@
 /validation-*.json
 /test-results*/
 /.cache/
+__pycache__/
+*.py[cod]
 /.vs/
 /.vscode/
 /.tools/
