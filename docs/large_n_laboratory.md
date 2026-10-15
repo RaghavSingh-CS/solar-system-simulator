@@ -179,6 +179,57 @@ Direct records four requested/effective workers but `observed_worker_threads=0`
 and `runtime_probe_only`, because the protected timed Direct region has no safe
 worker observation hook.
 
+## L2 controlled-scaling pilot
+
+Phase L2 reuses the L1 executable, checked admission, finite publication gate,
+locking, atomic pointer, and immutable run layout. The machine-readable
+protocol and rationale are in `tools/large_n_l2_protocol.json` and
+`docs/large_n_l2_protocol.md`. Candidate sizes are 8,192, 16,384, 32,768, and
+50,000, with 100,000 optional, but the first task executed only 8,192.
+
+The authoritative run
+`run-20261015T040233.498852Z-9878e74b0e13` contains 60 rows: 54 completed
+Barnes--Hut repetitions and six explicit Direct resource skips. Every
+Barnes--Hut group used a complete all-body Sequential Direct force and matched
+one-step trajectory reference. No sampled reference exists. OpenMP groups
+record four workers observed in the timed region.
+
+Across the three distributions, the largest measured errors at each theta
+were:
+
+| Theta | Max absolute acceleration error (m/s^2) | Max RMS absolute error (m/s^2) | Max P95 relative error | Max relative error |
+|---:|---:|---:|---:|---:|
+| 0.25 | 3.0168081821199618e-6 | 9.539488371983964e-7 | 0.003394105263629308 | 0.0315266838299639 |
+| 0.5 | 4.472887708798449e-5 | 1.611858328840151e-5 | 0.019780346613629218 | 0.21783472826199934 |
+| 0.8 | 2.553484338127513e-4 | 7.390546265847096e-5 | 0.06739768993217483 | 0.730731603862977 |
+
+All pre-registered theta-specific gates passed. The largest candidate relative
+energy drift was `8.539377768340509e-10`; the largest relative angular-momentum
+drift was `8.978002562373171e-6`. These are one-step synthetic-fixture results,
+not long-duration or universal accuracy guarantees.
+
+Median complete force times ranged from 0.0382162 to 1.7239281 seconds and
+median complete timesteps from 0.0759511 to 3.5933919 seconds (0.278289 to
+13.166366 steps/s). Tree construction was 0.0012593--0.0014887 seconds; force
+traversal was 0.0366581--1.7224039 seconds. OpenMP/Sequential complete-force
+ratios for matched groups ranged from 3.5331 to 4.0867. Direct solver groups did
+not complete, so the pilot establishes no Direct/Barnes--Hut crossover. The
+complete Direct reference force component ranged from 0.6591396 to 0.7235039
+seconds but is not a retained Direct solver configuration.
+
+Maximum conservative admitted memory was 273,351,848 bytes (50.92% of the
+512 MiB budget), maximum charged work was 301,953,024 interactions, maximum
+median total experiment time was 24.3093273 seconds (81.03% of budget), and
+maximum force range-over-median was 26.156%. The wall-time result exceeds the
+pre-registered 80% continuation limit, so the protocol does not recommend
+advancing automatically. It does not show that a complete Direct reference is
+admissible at 16,384. No larger size was executed.
+
+The current pointer retains both earlier exact publications as immutable
+history. The current run binds 26 exact source/test files and passes protocol-
+derived row, command, admission, source, and artifact reconstruction. It is
+committed and independently source-reviewed; it is not frozen Stage 5 evidence.
+
 ## Future gates
 
 Before any full-scale experiment, independently review L1 admission, timing,

@@ -31,6 +31,7 @@ Last updated: 2026-10-15
 | CUDA paired counterfactual execution | **IMPLEMENTED LOCALLY / NVIDIA VALIDATION PENDING** | Separate persistent full/compacted CUDA executors, transactional paired host publication, explicit device gating, CPU-only rejection, and CUDA-dependent skip-registered tests |
 | Barnes--Hut large-N solver roadmap | **STAGE 4B COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED** | Implementation `2ec090d` adds transactional Sequential/OpenMP paired counterfactual execution, structured failure context, and immutable approximation notices; CUDA execution and controlled large-N evaluation remain mandatory |
 | Large-N Laboratory Phase L1 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / BOUNDED PILOT COMPLETE** | Implementation/tooling `78449d3` and evidence `3f665c2` provide deterministic generation, resource admission, Direct/Barnes--Hut measurement, immutable versioned runs, an interprocess-locked atomic pointer, strict semantic verification, and a hash-custodied 144-row Ryzen 7 5700U pilot through 4096 bodies; no 50K/100K, CUDA, FPS, or Stage 5 claim |
+| Large-N Laboratory Phase L2 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / 8192 PILOT COMPLETE** | Pre-registered 24-group protocol; authoritative 60-row run `run-20261015T040233.498852Z-9878e74b0e13` has 54 full-Direct-referenced Barnes--Hut measurements and six explicit Direct skips; accuracy/memory pass but the 81.03% wall-budget fraction blocks automatic progression, and no larger workload was executed |
 
 ## Decisions and rationale
 
@@ -2454,3 +2455,57 @@ condition changed.
   Barnes--Hut viewer selection, transactional advancement, and lifecycle tests.
 - `2ec090d` — independently source-reviewed Stage 4B Sequential/OpenMP
   Barnes--Hut paired counterfactual integration, failure attribution, and tests.
+
+## Large-N Laboratory Phase L2 (committed 8192 pilot, independently source-reviewed)
+
+Phase L2 adds a separate machine-readable scaling protocol, runner, provenance
+capture, strict verifier, and 25 focused adversarial tests without changing
+the L1 C++ laboratory or any physics implementation. Candidate scale points are
+8192, 16384, 32768, and 50000 with 100000 optional, but this increment executed
+only 8192. Calibration, exploratory pilot, and future final controlled
+measurements are explicitly distinct.
+
+The protocol crosses uniform/clustered/planar, Sequential/OpenMP-4, Direct and
+Barnes--Hut, and theta 0.25/0.5/0.8 with fixed seeds, one warm-up, three
+retained repetitions, one 10-second step, 512 MiB, 500,000,000 Direct
+interactions, a 30-second internal budget, and a 35-second subprocess timeout.
+Sampled Direct comparison is neither implemented nor used.
+
+The authoritative run `run-20261015T040233.498852Z-9878e74b0e13` contains 60
+rows: 54 completed Barnes--Hut repetitions with complete all-body Direct force
+and trajectory references, plus six explicit Direct resource skips. All
+theta-specific scientific gates passed. Maximum p95/max relative acceleration
+errors were 0.0033941053/0.0315266838 at theta 0.25,
+0.0197803466/0.2178347283 at theta 0.5, and
+0.0673976899/0.7307316039 at theta 0.8. The maximum relative energy and
+angular-momentum drifts were `8.539377768340509e-10` and
+`8.978002562373171e-6`.
+
+Median complete force and timestep ranges were 0.0382162--1.7239281 seconds
+and 0.0759511--3.5933919 seconds. Matched OpenMP/Sequential force ratios were
+3.5331--4.0867, but Direct solver configurations did not complete, so no
+Direct/Barnes--Hut crossover is claimed. Peak admitted memory was 273,351,848
+bytes, peak charged work 301,953,024 interactions, peak median total time
+24.3093273 seconds, and peak force range-over-median 26.156%.
+
+The 50.92% memory-budget fraction satisfies its gate, but the 81.03% wall-
+budget fraction exceeds the pre-registered 80% continuation limit. Automatic
+progression is therefore prohibited; no 16384 performance-only preflight is
+recommended by this run, and no complete Direct reference is admitted there.
+No 16384, 32768, 50000, 100000, CUDA, RTX 4050, graphical, or Stage 5 work was
+executed.
+
+The immutable publication pointer retains both earlier exact runs as history.
+The authoritative
+raw, summary, protocol, provenance, and source-manifest SHA-256 values are
+`c9189b14003f9c4a82ffbbd186b0f5846a494cfef08d77ec689306df86b76329`,
+`ac3940a66cc196544474ebf8c5ddb174280c3cf537d97edfe8c0eb3f66b98e4f`,
+`529b7c6ce6cfab66309b02795531fadccdcb815b92e6da84faf8650d055b063e`,
+`022a090c45c0c9593a3b2b0bc18cebfdc2918d6ffb3a423e712eb6d19bf3d96a`,
+and `bce6f3b44156982e46da34e3b0d1ba71ea645a0f9197cf3fdd846aaf5dc7ae11`.
+Focused L2 tooling passed 25/25, inherited L1 publication/custody tooling passed
+23/23, CPU Release passed 21/21 CTests, and OpenMP Release passed 25/25 CTests.
+Repository layout, pinned dependency, strict evidence, and whitespace checks
+also passed.
+The implementation and immutable evidence are committed and independently
+source-reviewed. The failed wall-time continuation gate remains binding.

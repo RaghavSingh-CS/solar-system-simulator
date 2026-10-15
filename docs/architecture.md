@@ -202,6 +202,33 @@ power loss: flushing the temporary pointer does not provide a portable Python
 guarantee that the containing directory entry or storage-device cache reached
 durable media.
 
+## Large-N Laboratory L2
+
+L2 is a protocol/publication layer over the unchanged L1 laboratory executable.
+It pre-registers candidate scale points but the first runner enumerates only
+the 8,192-body matrix. Direct and Barnes--Hut requests pass through the same
+checked C++ admission; the Python layer accepts only the expected explicit
+Direct skips or three complete Barnes--Hut repetitions with a full Direct
+reference. It cannot substitute a sampled reference or silently change solver.
+
+The L2 verifier owns an L2-specific ordered 60-row/24-group schema rather than
+applying the L1 144-row shape. It derives exact seeds, backends, solvers, theta,
+threads, repetitions, limits, expected status, and invocation arguments from
+the retained protocol and deterministic generator. It independently checks
+admission work, skip-zero semantics, worker provenance, theta-specific gates,
+summaries, executable identity, manifests, and the current/history pointer.
+L2 reuses the reviewed L1 interprocess lock and atomic pointer
+primitives. Historical L1 source custody resolves bytes from the committed L1
+evidence revision, preventing later source development from invalidating or
+reinterpreting L1 evidence.
+
+The authoritative 8,192-body run is a headless CPU experiment. Accuracy and
+memory gates pass, but its 81.03% wall-budget fraction exceeds the pre-
+registered 80% continuation limit. The recorded decision is therefore not to
+advance automatically. It does not admit full Direct work at 16,384, select a
+production theta, establish a crossover, or say anything about renderer FPS or
+CUDA.
+
 ## Visualization architecture and dependencies
 
 `NBODY_BUILD_VISUALIZATION=OFF` remains the default. When enabled, CMake fetches exact revisions of GLFW 3.4, GLM 1.0.1, and Dear ImGui 1.92.9b. A reproducibly generated GLAD 2.0.6 OpenGL 3.3 loader is committed under `third_party/glad`, avoiding a build-time Python/Jinja2 dependency and runtime loader DLL. Shaders are embedded.

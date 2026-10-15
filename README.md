@@ -257,6 +257,25 @@ retained repetitions. It is neither frozen Stage 5 evidence nor a claim about
 [the Large-N Laboratory methodology](docs/large_n_laboratory.md) and the
 [custodied publication pointer](data/benchmarks/large_n_l1_pilot/publication.json).
 
+### Large-N Laboratory L2 pilot
+
+Phase L2 has a pre-registered controlled-scaling protocol and a committed,
+independently source-reviewed 8,192-body exploratory publication. The 24-group
+matrix covers the three deterministic distributions, Sequential/OpenMP-4,
+Direct/Barnes--Hut, and theta `0.25/0.5/0.8`. All 18 Barnes--Hut groups produced
+three retained repetitions with complete all-body Direct references; all six
+full Direct solver groups were explicitly skipped by the unchanged
+500,000,000-interaction admission limit. No fallback or sampled reference was
+used.
+
+The authoritative 60-row run passes its theta-specific accuracy and memory
+checks, but reaches 81.03% of the 30-second wall budget and therefore fails the
+pre-registered 80% continuation gate. It does not authorize a 16,384 preflight
+or a complete Direct reference at that size. No
+16,384/32,768/50,000/100,000, CUDA, RTX 4050, or graphical-FPS run was
+performed. See the [L2 protocol and results](docs/large_n_l2_protocol.md) and
+[L2 publication pointer](data/benchmarks/large_n_l2_pilot/publication.json).
+
 Run the controlled Stage 3 CPU matrix after configuring the OpenMP Release build:
 
 ```powershell

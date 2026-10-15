@@ -338,3 +338,35 @@ manifest and atomic current/history pointer, exact source/build/
 binary custody, and non-Stage-5 labeling. This pilot is exploratory;
 no accuracy threshold, stable crossover, 50K/100K feasibility, GPU result, or
 graphical FPS claim follows from it.
+
+## Large-N Laboratory L2 validation
+
+The machine protocol must contain exactly the candidate sizes 8,192, 16,384,
+32,768, and 50,000 plus optional 100,000, while the first executable pilot
+matrix contains only 8,192. The matrix must reconstruct as 24 groups: three
+distributions, Sequential/OpenMP-4, six Direct requests, and 18 Barnes--Hut
+requests across theta 0.25/0.5/0.8. Direct must yield six explicit interaction-
+budget skips; Barnes--Hut must yield 54 retained rows with complete all-body
+Direct references. Any timeout, malformed status, non-finite result, sampled
+reference label, fallback, or matrix expansion fails publication.
+
+The strict verifier checks the exact ordered 60-row sequence derived from the
+protocol generator: identities, deterministic seeds, timestep, repetitions,
+memory/work limits, requested/effective/observed worker provenance, reference
+mode and sample size, skip-zero semantics, finite timing/scientific values,
+positive Direct-reference floors and durations, admission/resource fields,
+steps-per-second derivation, exact metadata matrix and command arguments,
+summary reconstruction, executable identity, and all artifact/source/build/
+pointer hashes. Twenty-five focused tests include coherently rehashed changes
+to seeds, worker counts, wall limits, repetitions, references, skipped-row
+measurements, matrix membership, metadata, commands, admission, and status. The
+23 L1 publication tests also remain required to protect inherited locking,
+crash, migration, and recovery behavior.
+
+Continuation gates require all Barnes--Hut groups, all expected Direct skips,
+all theta-specific accuracy gates, at most 80% of the wall budget, and at most
+90% of memory. A 20% force range-over-median is a variability warning. Passing
+permits only a separately reviewed performance-only preflight at 16,384; it is
+not authority to execute and does not replace a full Direct reference. The
+authoritative pilot reached 81.03% of wall budget, so this gate did not pass and
+automatic progression remains prohibited.
