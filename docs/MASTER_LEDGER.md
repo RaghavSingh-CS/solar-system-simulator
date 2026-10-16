@@ -33,6 +33,7 @@ Last updated: 2026-10-16
 | Large-N Laboratory Phase L1 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / BOUNDED PILOT COMPLETE** | Implementation/tooling `78449d3` and evidence `3f665c2` provide deterministic generation, resource admission, Direct/Barnes--Hut measurement, immutable versioned runs, an interprocess-locked atomic pointer, strict semantic verification, and a hash-custodied 144-row Ryzen 7 5700U pilot through 4096 bodies; no 50K/100K, CUDA, FPS, or Stage 5 claim |
 | Large-N Laboratory Phase L2 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / 8192 PILOT COMPLETE** | Pre-registered 24-group protocol; authoritative 60-row run `run-20261015T040233.498852Z-9878e74b0e13` has 54 full-Direct-referenced Barnes--Hut measurements and six explicit Direct skips; accuracy/memory pass but the 81.03% wall-budget fraction blocks automatic progression, and no larger workload was executed |
 | Large-N Laboratory Phase L3 | **CLOSED / INDEPENDENTLY REVIEWED / TOOLING COMMITTED / 16384 CHECKPOINT TIMED OUT / NO EVIDENCE** | Tooling `32af36a` implements the guarded performance-only protocol and explicit unavailable-science serialization; the first Sequential/uniform/theta-0.25 subprocess exceeded its 70-second hard timeout, so the remaining five groups and all larger sizes were not run |
+| Stage G1 GUI completion and synthetic scenes | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / REAL-CONTEXT SMOKE PASSED** | Uses the deterministic Large-N generation contract for uniform/clustered/planar 256/1024/4096/8192-body scenes; adds solver-aware admission, bounded one-draw point rendering, scenario-generation invalidation, and separate display/simulation diagnostics without changing physics |
 
 ## Decisions and rationale
 
@@ -56,6 +57,12 @@ Last updated: 2026-10-16
 - Stage 6C remains optional and one-way dependent on the simulation core; presentation geometry cannot affect physics, display timing is never benchmark evidence, and no Auto backend selector exists.
 - Stage 6D MPI uses replicated global state, deterministic contiguous force-target partitions, and full acceleration exchange. Hybrid OpenMP is confined to local target work under `MPI_THREAD_FUNNELED`.
 - Stage 6D large-N display support does not change the exact O(N^2) algorithm: continuous viewer computation ends above N=1024, manual direct-force steps end above N=8192, and larger workloads are display-only.
+- Stage G1 supersedes the operator-facing Stage 6D synthetic menu: only
+  256/1024/4096/8192 are exposed, CPU direct work ends at 1024, 4096 permits a
+  bounded Sequential/OpenMP Barnes--Hut step, and 8192 requires OpenMP
+  Barnes--Hut. Unsupported larger scenes are rejected rather than grandfathered
+  as display-only. Historical Stage 6D validation remains an accurate record of
+  what that earlier revision launched.
 - Barnes--Hut is the required approximate-force path for large-N work, not an
   optional enhancement. Stages 1 and 2 implement and validate the Sequential
   and OpenMP variants; Stages 3A/3B implement source-reviewed CUDA force and
@@ -2544,3 +2551,69 @@ evidence, repository-layout, dependency-cache, and whitespace checks passed.
 Future CUDA scaling requires a separate hardware-specific protocol. Frozen
 Stage 5, L1/L2 evidence, CUDA, GUI, JPL data, and existing solver mathematics
 remain unchanged.
+
+## Stage G1 GUI completion and synthetic-scene integration (committed and independently reviewed)
+
+Stage G1 uses a byte-compatible presentation adapter for the committed Large-N
+generator in the desktop viewer without changing the source-custodied L1/L2
+generator or root CMake file, any force law, integrator, CUDA implementation,
+JPL record, or counterfactual scientific calculation. The adapter preserves
+the generator's SplitMix64 draw order, distribution geometry, SI scales,
+identities, and barycentric reduction. The operator-facing synthetic presets
+are now exactly 256, 1,024, 4,096, and 8,192 bodies with explicit deterministic
+seed and uniform/clustered/planar distribution controls. Stable IDs derive from
+the generator's deterministic body names. The legacy nine-body default and
+60-body astronomical scenario remain separate and unchanged.
+
+Synthetic rendering uses one dynamic point buffer and one `GL_POINTS` draw for
+every admitted preset, with an explicit 8,192-body renderer admission ceiling.
+Continuous simulation, trails, conservation, and live CPU comparison remain
+bounded to N <= 1,024. Direct work above 1,024 is rejected for every backend:
+N=4,096 admits
+only a manual Sequential/OpenMP Barnes--Hut step, and N=8,192 admits only a
+manual OpenMP Barnes--Hut step. CUDA Barnes--Hut remains unavailable and NVIDIA
+runtime validation remains pending. An inadmissible scene application or
+backend/solver change is rejected before controller mutation, preserving the
+previous scene and execution configuration.
+
+Scenario replacement now prepares and validates the candidate scene, render
+transform, visibility/diagnostic resources, workload policy, and generation
+advance before mutation. The controller copies replacement state before a
+no-throw swap. Only a successful commit cancels the experiment worker,
+increments the generation, clears publications/overlays, and installs metadata;
+workload admission must allow continuous or bounded manual advancement before
+commit. Failed preparation preserves the prior scene, time, metadata, worker identity,
+and last valid render state. Invalid distribution enum values are explicitly
+rejected. Buffer uploads use checked byte arithmetic and pre/post OpenGL error
+checks, and a failed upload cannot proceed to its draw call. The UI displays
+active scene/body count/backend/solver/theta and reports
+display FPS separately from measured simulation batch milliseconds and steps/s;
+these are live diagnostics, not benchmark evidence.
+
+The final G1 remediation extracts that boundary into the production application
+transaction coordinator used by both the GUI and headless tests. It covers the
+controller, scenario/body metadata, visibility, worker generation, accepted
+publication/presentation data, and timing; GUI analysis allocations complete
+before commit. Invalid distribution, unsupported count, workload rejection, and
+injected `std::bad_alloc` preserve the full committed state, while success resets
+time/timing, clears results/warnings/overlays, and rejects the old generation.
+Simulation timing now has an independent generation token and is invalidated
+only by successful effective backend/solver/thread/theta/step-batch/reset/scene
+changes. Rejected and identical selections preserve it, and stale completion
+cannot republish it. Display FPS remains separate.
+
+The implementation was committed as `bc856f3` after a focused independent
+source-level commit-gate review found no remaining correctness or test-validity
+blocker. Canonical CPU Release passed 21/21 CTests and OpenMP Release passed 25/25.
+Focused visualization and counterfactual-worker tests passed in both builds;
+repository layout, dependency cache, and strict L1/L2 custody verification also
+passed. Real AMD Radeon OpenGL 3.3 hidden-window smokes remained live for six
+seconds and closed cleanly: planar N=256 Sequential/direct reported 60.1024 FPS,
+10.3332 ms per eight-step batch, and 774.204 steps/s; clustered N=8192
+OpenMP-4/Barnes--Hut reported 60.0002 FPS while correctly paused, with no
+fabricated throughput. A separate focused controller test completed one
+admitted N=8192 OpenMP-4 Barnes--Hut step in 570.8403 ms and reset to the exact
+initial state. That synchronous manual action may briefly stall drawing, so
+continuous advancement remains disabled. These single-launch readings are not
+benchmark evidence and do not constitute human visual inspection. Human visual
+review and all NVIDIA validation remain pending.

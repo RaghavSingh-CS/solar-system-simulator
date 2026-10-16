@@ -21,7 +21,7 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 - Reproducible sequential conservation-study harness with retained timestep-duration evidence.
 - Prepared Stage 5 v2.0 phase-separated runner, deterministic policy/freezer, independent evidence verifier, and source/build/test provenance chain; no Stage 5 timings collected yet.
 - Optional replicated-state MPI backend with deterministic target partitioning, global acceleration exchange, and MPI+OpenMP local force computation.
-- Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with Solar/Compute Experiment modes, deterministic camera presets, stable inner-system callouts, camera-aware body sizing, reference/history/Sun-motion trails, barycenter marker, procedural planet identity, batched large-N points through 100,000 bodies, live numerical-health bounds, and an isolated CPU-backend comparison.
+- Optional presentation-ready GLFW/OpenGL 3.3 + ImGui viewer with legacy and 60-body astronomical modes plus bounded 256/1,024/4,096/8,192-body synthetic scenes, deterministic camera presets, camera-aware body sizing, batched point rendering, live numerical-health bounds, and isolated CPU diagnostics.
 
 Stage 4 real-GPU validation and the controlled 154-sample CUDA matrix are complete; evidence is under `data/benchmarks/stage4_cuda/`. No same-machine CPU/OpenMP/CUDA crossover has been measured, so no automatic selector is implemented. Stage 6D completes the MPI, large-N infrastructure, and final presentation feature scope; native-window appearance and interaction still require the final user visual pass. Ephemeris-grade JPL Horizons initial conditions remain outside this stage.
 
@@ -120,8 +120,11 @@ study rejected 300 seconds for fast satellites (Metis was the worst case); 60
 versus 30 seconds reduced the worst parent-relative final-position difference
 to about `1.07e-3`. This
 bounded convergence result is not long-horizon ephemeris validation. A
-deterministic seeded `Compute Experiment` remains available with
-`--scenario synthetic`.
+deterministic seeded `Synthetic N-body Sandbox` remains available with
+`--scenario synthetic`. A byte-compatible presentation adapter preserves the
+Large-N generator's deterministic sequence and exposes uniform, clustered, and
+planar distributions without treating them as astronomical data or changing
+the source-custodied L1/L2 measurement inputs.
 
 Controls:
 
@@ -173,7 +176,21 @@ Controls:
   unavailable. Separation is not labeled as escape.
 - Approximate reference orbit guides provide immediate context; fading history trails remain simulation-derived and planet positions always come from N-body integration.
 - `Barycenter & real Sun motion` marks the barycentric origin and traces integrated Sun positions; an explicit presentation-only amplification control defaults to `10x`.
-- Compute Experiment offers deterministic `N=32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,100000`; workloads above 64 use one batched point-sprite draw. Continuous simulation and live O(N^2) diagnostics stop above 1024, bounded manual stepping is available only through 8192, and larger workloads are explicitly display/inspection-only in the viewer.
+- The synthetic sandbox offers only the admitted `N=256,1024,4096,8192`
+  presets with explicit seed and distribution controls. One reusable point
+  buffer and one `GL_POINTS` draw avoid per-body draw calls. Continuous
+  simulation, trails, conservation, and live CPU comparison stop above 1,024.
+  Larger CPU scenes start paused: 4,096 permits a bounded Sequential/OpenMP
+  Barnes--Hut step, while 8,192 requires OpenMP Barnes--Hut. Direct execution
+  above 1,024 is rejected for every backend, including CUDA, and CUDA
+  Barnes--Hut remains unavailable. Configure an admitted backend/solver before
+  applying a larger preset; an incompatible apply or later backend/solver
+  change is rejected without replacing the scene. Unsupported larger counts
+  fail explicitly instead of entering a display-only mode.
+- Live simulation batch timing is scoped to the effective backend, solver,
+  OpenMP thread count, Barnes--Hut configuration, step batch, and scenario.
+  Successful changes clear old timing; rejected or identical selections keep
+  the last valid measurement, and generation gating rejects stale completion.
 - `Compare CPU Backends` times isolated identical Sequential/OpenMP state copies, checks established mixed correctness tolerances, and is explicitly a live diagnostic—not benchmark evidence.
 - `Space`: pause/resume; `R`: exact scenario reset; `Esc`: exit.
 - `1`: Sequential; `2`: OpenMP using `--threads N` when OpenMP was built; `3`:

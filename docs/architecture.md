@@ -282,15 +282,62 @@ separation. Body centers and physical state never move. Fixed screen slots and
 leader lines provide stable Sun-through-Mars callouts while outer labels retain
 dynamic decluttering.
 
-Compute Experiment uses sphere draws through N=64 and one reusable dynamic
-point-sprite draw above N=64. Supported sizes extend through 100,000, but the
-direct O(N^2) solver is deliberately bounded: continuous advancement and live
-conservation/trails stop above 1024, manual one-step execution is limited to
-OpenMP through 8192 (and Sequential/OpenMP at 2048), and larger cases are
-display/inspection-only. Synthetic labeling is selected-body-only and no
-per-body UI list is built. Its live CPU comparison is a separate model operation
-over two identical state copies; it cannot feed Stage 5 calibration or Auto
-selection.
+Stage G1 replaces the earlier broad display-only synthetic menu with four
+explicitly admitted scene presets: 256, 1,024, 4,096, and 8,192. Scenario
+construction uses a byte-compatible presentation adapter for the existing
+Large-N generator with an explicit seed and uniform, clustered, or planar
+distribution. The adapter preserves its SplitMix64 sequence, geometry, SI
+scales, mass/velocity order, names, and barycentric reduction; it lives in the
+viewer module because the root CMake file is immutable source custody for the
+committed L1/L2 measurements. Generated body names determine
+stable presentation IDs, so selection survives deterministic reconstruction
+without coupling renderer identity to vector addresses. This path is wholly
+separate from the legacy nine-body and JPL 60-body initial conditions.
+
+All admitted synthetic scenes use one reusable dynamic point buffer and one
+`GL_POINTS` draw rather than per-body sphere calls. A renderer-side 8,192-body
+admission check rejects oversized snapshots explicitly. Continuous advancement,
+history, conservation, and live CPU comparison are bounded to N <= 1,024.
+N=4,096 permits only a manual CPU Barnes--Hut step; N=8,192 requires OpenMP
+Barnes--Hut. Direct work above 1,024 is rejected for every backend, including
+CUDA, and CUDA Barnes--Hut remains unavailable pending explicit integration and
+NVIDIA validation. Candidate scenes and backend/solver changes must have at
+least one admitted advancement mode before controller mutation; rejection
+preserves the existing scene and execution configuration. The frame loop reports display FPS separately
+from measured fixed-step batch time and steps/s; neither is benchmark evidence.
+
+Scenario replacement prepares and validates the complete scenario, render
+transform, visibility vectors, diagnostics, experiment UI, generation advance,
+and workload policy before changing the active application. Controller state is
+also copied before a no-throw swap. Only after successful preparation and
+controller replacement does the application cancel the counterfactual worker,
+advance the scenario generation, clear old publications/overlays, and install
+the prepared state. Invalid counts/distributions and recoverable preparation
+failures therefore leave active state, time, metadata, and worker generation
+unchanged. Late worker publications cannot contaminate a successfully installed
+synthetic or astronomical scene.
+
+The scene identity, controller replacement, visibility swap, worker-generation
+advance, publication/presentation clearing, and simulation-timing invalidation
+share one production transaction coordinator used by both the GUI and headless
+tests. GUI-only analysis resources are allocated through its preparation
+completion hook before mutation. Tests inject `std::bad_alloc` at that boundary
+and exercise invalid distribution, unsupported count, and workload rejection
+against the actual coordinator. After the controller's transactional
+replacement succeeds, the remaining single-UI-thread commit operations are
+non-throwing.
+
+Live simulation timing carries its own generation token. A completed batch can
+publish milliseconds and steps/s only if its captured token still matches.
+Successful effective backend, solver, OpenMP-thread, Barnes--Hut-configuration,
+steps-per-frame, reset, or scenario changes invalidate the token and value.
+Rejected requests and effective no-op reselections do neither. Display FPS has
+separate provenance and is never stored as simulation throughput.
+
+Every OpenGL buffer upload uses checked byte multiplication and checks
+`glGetError` before and after `glBufferData`. A failed upload throws before its
+draw call, so the invalid frame is never swapped and stale buffer storage is not
+drawn. Context loss remains an unrecoverable process-level graphics failure.
 
 The ImGui panel owns 380--680 pixels, capped at 55% of the current display. The
 camera aspect, projection, picking, and labels use the complementary scene

@@ -1,12 +1,12 @@
-# Final visualization system (Stage 6D)
+# Visualization system (Stage G1)
 
 ## Scope and status
 
-Stage 6D completes the feature scope of the scientifically functional desktop
-application. It retains the Stage 6C presentation system and adds camera-aware
-Solar body sizing, fixed inner-system callouts, a resizable polished panel with
-complete hover help, and safely bounded synthetic displays through 100,000
-bodies. The physics library remains independent of graphics and UI dependencies.
+Stage G1 retains the validated Stage 6D astronomical and counterfactual viewer
+and narrows its synthetic scene surface to the reviewed 256/1,024/4,096/8,192
+presets. It adds uniform/clustered/planar generation, solver-aware workload
+admission, bounded batched rendering, and separate live display/simulation
+timing. The physics library remains independent of graphics and UI dependencies.
 
 Earlier stages were manually inspected and their findings drove these passes.
 Stage 6D automated and real-context validation is recorded below, but automation
@@ -116,8 +116,9 @@ use `.\scripts\test-local.ps1 -Configuration CUDA` and then
 silently substitutes a CPU backend.
 
 Options are `--scenario solar|catalog|synthetic`, `--backend sequential|openmp|cuda`,
-`--threads N`, `--device N`, `--bodies N`, `--seed N`, `--width N`, and
-`--height N`. Body count and seed apply to the synthetic scenario. CUDA is
+`--threads N`, `--device N`, `--bodies N`, `--seed N`,
+`--distribution uniform|clustered|planar`, `--width N`, and `--height N`.
+Body count, seed, and distribution apply to the synthetic scenario. CUDA is
 accepted only when support was compiled and the requested device is available;
 otherwise it issues a clear diagnostic and never silently falls back. MPI is
 exercised by its separate benchmark executable and Auto is not exposed because
@@ -140,8 +141,9 @@ there is no CUDA/OpenGL interoperability or automatic backend selection.
 The legacy Solar scenario uses a six-hour timestep. Named presets map to 1, 4, 16, or
 64 steps per render: six hours, one day, four days, or sixteen days of simulated
 time. Trails are sampled every simulated day and retained in a bounded deque.
-The synthetic fixture uses its established deterministic generator and a
-10-second timestep.
+The synthetic viewer uses the reviewed Large-N deterministic generator and a
+10-second demonstration timestep. It is not an astronomical state or a general
+accuracy guarantee.
 
 Positions, trails, orbit guides, labels, rings, picking, and markers share one
 linear render transform. Overview uses the SSB origin. Subsystem views first
@@ -500,25 +502,92 @@ SFNS); Dear ImGui's built-in font is the no-asset fallback. Every primary
 control has delayed hover help. CUDA, Auto-selection development history, and
 stage diary wording are not displayed as inactive pseudo-features.
 
-### Large-N viewer safety policy
+### Stage G1 synthetic-viewer safety policy
 
-Supported structured sizes are `32, 64, 128, 256, 512, 1024, 2048, 4096,
-8192, 16384, 32768, 65536, 100000`. The viewer enforces these boundaries:
+The current operator-facing presets are exactly `256, 1024, 4096, 8192`.
+Uniform, four-cluster, and thin-planar distributions use explicit 64-bit seeds.
+The viewer enforces these boundaries:
 
 | N | Viewer behavior |
 |---:|---|
-| 32--1024 | Continuous advancement, bounded trails, conservation diagnostics, and live Sequential/OpenMP comparison are available. |
-| 2048 | Starts paused; one explicit manual direct-force step is available with Sequential or OpenMP. |
-| 4096--8192 | Starts paused; one explicit manual step requires OpenMP. |
-| 16384--100000 | Display and selection inspection only; the viewer never invokes the O(N^2) solver. |
+| 256--1024 | Continuous advancement, bounded trails, conservation diagnostics, and live Sequential/OpenMP comparison are available. |
+| 4096 | Starts paused; one explicit manual step requires Sequential or OpenMP Barnes--Hut. Direct and CUDA execution are rejected. |
+| 8192 | Starts paused; one explicit manual step requires OpenMP Barnes--Hut. Direct, Sequential Barnes--Hut, and CUDA execution are rejected. |
+| Other sizes | Rejected by CLI/scenario and renderer admission; no silent fallback or display-only bypass. |
+
+Select an admitted backend/solver before applying 4,096 or 8,192. An
+incompatible scene apply, backend change, or solver change is rejected before
+controller mutation and leaves the current scene/configuration active.
 
 Above 1024 the application does not allocate per-body trail deques or execute
-O(N^2) live conservation diagnostics. Above 64 the renderer reuses one point
-buffer and one `GL_POINTS` draw. Synthetic labels and inspection remain
+O(N^2) live conservation diagnostics. Every admitted synthetic preset uses one
+point buffer and one `GL_POINTS` draw. Synthetic labels and inspection remain
 selected-body-only, and the selector stores an integer index rather than a
-100,000-entry name list. These limits provide practical 100,000-body display;
-they do not claim a scalable force algorithm. Barnes--Hut, FMM, and GPU
-instancing are not implemented.
+per-body name widget. The renderer rejects snapshots above 8,192. Barnes--Hut
+is the existing validated CPU approximate-force path; no new force algorithm,
+GPU instancing, or CUDA validation is introduced by G1.
+
+Only the uniform, clustered, and planar enum values are accepted; malformed or
+casted values fail before candidate construction. Applying a synthetic
+count/distribution/seed first prepares the complete physical scenario, render
+transform, visibility/diagnostic state, workload policy, experiment UI, and
+next generation without touching the active application. Successful controller
+replacement is the commit boundary; only then are stale workers cancelled and
+gated, old results/overlays cleared, simulation time reset, and new metadata
+published. Workload admission is a preparation gate, not merely a post-commit
+pause. A recoverable preparation failure preserves the prior scene, time,
+metadata, counterfactual state, and last valid render state.
+
+The GUI and headless tests call the same application transaction coordinator.
+It commits controller state, scenario metadata, visibility, experiment worker
+generation, accepted publication/presentation state, and simulation timing as
+one single-owner operation. GUI analysis allocations occur through the
+coordinator's pre-commit completion hook; injected allocation failure and all
+other preparation failures leave the active application untouched. Successful
+replacement resets physical time and timing, clears warnings/results/overlays,
+and rejects late publications from the former generation.
+
+Simulation batch milliseconds and steps/s are configuration-scoped. Successful
+changes to backend, solver, effective OpenMP thread count, Barnes--Hut theta or
+other tree configuration, steps per frame, reset, or scenario invalidate them.
+Rejected requests and identical effective selections retain the last valid
+sample. Each measured batch carries a generation token, so a stale completion
+cannot restore timing after a configuration transition.
+
+All `glBufferData` calls use checked byte counts and explicit pre/post OpenGL
+error checks. Upload failure throws before the corresponding draw and before
+buffer swap, so stale or partial buffer storage is not presented. Automated
+tests cover application-resource allocation failure, upload arithmetic overflow,
+and the nonzero-error no-draw decision without a GL context; actual GPU-memory
+allocation failure and context-loss recovery still require dedicated graphics
+testing. Display FPS and live simulation batch
+milliseconds/steps-per-second are shown separately and are not controlled
+benchmark evidence.
+
+### Stage G1 automated and launch validation
+
+Canonical Release CPU and OpenMP suites passed 21/21 and 25/25 CTests. Focused
+visualization and counterfactual-worker executables passed in both builds. The
+OpenMP test's optional live diagnostic observed a 256-body 128-step comparison;
+that timing is not benchmark evidence. Repository-layout, dependency-cache, L1,
+and L2 custody checks passed.
+
+Two bounded hidden-window launch smokes created real AMD Radeon OpenGL 3.3 core
+contexts and remained in the event loop for six seconds before a graceful close:
+
+- Sequential/direct, planar N=256: display 60.1024 FPS; last eight-step batch
+  10.3332 ms, or 774.204 steps/s.
+- OpenMP-4/Barnes--Hut, clustered N=8,192: display 60.0002 FPS while correctly
+  paused; no simulation-throughput value was fabricated. A separate focused
+  headless controller check completed one admitted fixed step in 570.8403 ms,
+  preserved pause, and reset exactly to the generated initial state.
+
+These are live VSync-limited diagnostics from one launch, not controlled
+performance evidence. The smoke confirms context/application construction and
+bounded rendering survival, not appearance, interaction quality, or NVIDIA
+execution. The large manual step is synchronous and can briefly stall drawing;
+continuous advancement remains disabled at that size. Human visual validation
+and CUDA device validation remain pending.
 
 ### Stage 6D automated and runtime validation
 
@@ -619,14 +688,14 @@ that focus relationship easy to miss. No camera change or eccentricity
 exaggeration was introduced; this remains an approximate mean-element demo, not
 an ephemeris-grade claim.
 
-### Final user visual-validation checklist
+### Stage G1 user visual-validation checklist
 
-Launch a Solar view at 1920x1080 and a laptop-sized window, plus a 100,000-body
-display-only view:
+Launch a Solar view and representative bounded synthetic views through the
+canonical launcher:
 
 ```powershell
-./build-stage6d-visual/nbody_visualizer.exe --scenario solar --backend openmp --threads 4 --width 1920 --height 1080
-./build-stage6d-visual/nbody_visualizer.exe --scenario synthetic --backend sequential --bodies 100000 --seed 24301 --width 1280 --height 800
+.\scripts\run-visualizer.ps1 -Backend OpenMP -ApplicationArguments '--scenario','solar','--width','1920','--height','1080'
+.\scripts\run-visualizer.ps1 -Backend OpenMP -ApplicationArguments '--scenario','synthetic','--solver','barnes-hut','--bodies','8192','--distribution','clustered','--seed','24301','--width','1280','--height','800'
 ```
 
 1. Resize the window and panel; verify readable wrapping and that the scene never
@@ -641,8 +710,9 @@ display-only view:
    units and long numeric values at both window sizes.
 5. Confirm selection/focus, trails, guides, barycenter, 1x/10x real Sun motion,
    conservation status, reset, pause, and live Sequential/OpenMP switching.
-6. Visit N=1024, 2048, 8192, and 100000. Confirm warnings and paused/manual or
-   display-only behavior match the table, selected-only inspection remains
-   responsive, and no large workload silently begins direct-force integration.
-7. Confirm the 100,000-body point cloud and restrained starfield are legible and
-   that no UI text presents FPS or live comparison as benchmark evidence.
+6. Visit every admitted count and distribution. Confirm 4,096/8,192 start
+   paused, unsafe backend/solver combinations disable manual advancement, and
+   applying count/distribution/seed clears old diagnostics and overlays.
+7. Confirm the 8,192-body point cloud and restrained starfield are legible and
+   responsive, and that display FPS is distinct from simulation steps/s and
+   neither is presented as benchmark evidence.

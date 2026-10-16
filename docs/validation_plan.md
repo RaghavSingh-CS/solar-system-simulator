@@ -48,6 +48,40 @@ Initial thresholds for the analytic two-body CI test are implementation guards, 
 - Record omitted physics (relativity, oblateness, minor bodies) and do not attribute model error to numerical integration.
 - Use conservation diagnostics as internal checks, not as proof of ephemeris accuracy.
 
+## Stage G1 synthetic viewer validation
+
+- Reconstruct each of the 256, 1,024, 4,096, and 8,192 body presets twice for
+  uniform, clustered, and planar distributions and require identical states,
+  ordering, stable IDs, and independently captured committed-generator
+  checksums for identical seeds.
+- Require different distribution selections to change physical initial states
+  without changing their deterministic index identities.
+- Reject unsupported counts before renderer or solver execution; independently
+  require the renderer admission ceiling to be exactly 8,192.
+- Keep direct CPU advancement above 1,024 disabled. Admit only bounded manual
+  CPU Barnes--Hut combinations (4,096 Sequential/OpenMP and 8,192 OpenMP).
+  Reject Direct above 1,024 for every backend and reject CUDA Barnes--Hut at
+  every size without claiming GPU validation.
+- Reject casted/unknown distribution values before scene construction. Verify a
+  failed preparation, injected analysis-resource allocation failure, or
+  inadmissible backend/solver combination preserves active controller
+  state/time/configuration, visibility, accepted publication/presentation, and
+  worker generation. Exercise the same production coordinator used by the GUI;
+  successful replacement must reset time/timing and invalidate stale work.
+- Scope simulation timing to its effective execution generation. Require
+  successful backend, OpenMP-thread, solver, theta, step-batch, reset, and scene
+  changes to clear old values; require rejected and effective no-op selections
+  to preserve them; reject publication from a captured stale generation.
+- Check renderer byte-count overflow and the no-draw decision for a simulated
+  nonzero OpenGL upload error. A real context smoke confirms only that actual
+  uploads complete on the tested driver; it is not fault injection or visual QA.
+- Exercise scenario replacement, pause/reset/manual-step semantics, stale
+  counterfactual publication rejection, and immutable legacy/catalog states in
+  headless tests. These tests do not replace native-window inspection.
+- A launch smoke test establishes context/application construction and event-loop
+  survival only. Rendering FPS and live simulation steps/s are reported
+  separately and are not research benchmark evidence.
+
 ## Barnes--Hut Stage 1--2 validation
 
 The direct solver remains the numerical reference. Barnes--Hut tests retain
