@@ -34,6 +34,7 @@ Last updated: 2026-10-16
 | Large-N Laboratory Phase L2 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / 8192 PILOT COMPLETE** | Pre-registered 24-group protocol; authoritative 60-row run `run-20261015T040233.498852Z-9878e74b0e13` has 54 full-Direct-referenced Barnes--Hut measurements and six explicit Direct skips; accuracy/memory pass but the 81.03% wall-budget fraction blocks automatic progression, and no larger workload was executed |
 | Large-N Laboratory Phase L3 | **CLOSED / INDEPENDENTLY REVIEWED / TOOLING COMMITTED / 16384 CHECKPOINT TIMED OUT / NO EVIDENCE** | Tooling `32af36a` implements the guarded performance-only protocol and explicit unavailable-science serialization; the first Sequential/uniform/theta-0.25 subprocess exceeded its 70-second hard timeout, so the remaining five groups and all larger sizes were not run |
 | Stage G1 GUI completion and synthetic scenes | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / REAL-CONTEXT SMOKE PASSED** | Uses the deterministic Large-N generation contract for uniform/clustered/planar 256/1024/4096/8192-body scenes; adds solver-aware admission, bounded one-draw point rendering, scenario-generation invalidation, and separate display/simulation diagnostics without changing physics |
+| RTX 4050 NVIDIA handoff package | **HANDOFF READY / HOST-ONLY VALIDATED / NVIDIA UNVERIFIED** | Exact-target Windows launchers provide isolated preflight, CUDA/full Release build modes, strict no-skip CUDA gates, staged-executable identity checks, a five-minute CUDA Direct viewer path, immutable stage records, and bounded transactional result collection; automated Stage 5 execution is disabled |
 
 ## Decisions and rationale
 
@@ -2617,3 +2618,48 @@ initial state. That synchronous manual action may briefly stall drawing, so
 continuous advancement remains disabled. These single-launch readings are not
 benchmark evidence and do not constitute human visual inspection. Human visual
 review and all NVIDIA validation remain pending.
+
+## RTX 4050 NVIDIA handoff package (host-validated handoff)
+
+The `nvidia_handoff/` operator package discovers the repository from each
+script location and provides fail-closed Windows PowerShell stages for RTX 4050
+hardware/toolchain preflight, canonical CPU/OpenMP/CUDA Release builds,
+CPU/OpenMP regression baselines, strict no-skip CUDA Direct and Barnes--Hut
+tests, repeated numerical/resource/lifetime gates, CUDA Direct viewer launch,
+and bounded result collection. A separate five-minute path performs preflight,
+a CUDA-only Release build, the Direct and Barnes--Hut correctness gates, and a
+staged CUDA Direct Solar viewer launch before packaging results. CUDA builds
+explicitly request architecture 89 and the
+build stage verifies that value plus CUDA/C++ compiler identities in
+`CMakeCache.txt`. The checked-in manifest is an expected inventory of real
+CMake targets; generated binaries are staged and hashed only after a native
+NVIDIA-host build, and their manifest, staged, and build bytes are rechecked
+before execution. Generated binaries remain Git-ignored.
+
+Every run is a marked direct child of `nvidia_handoff/results`. Repeated stages
+fail before touching completed logs or statuses. Collection copies only
+allowlisted logs, status, provenance, diagnostics, numerical text records, and
+executable hashes into a temporary tree, enforces 512-file, 32-MiB-per-file,
+and 128-MiB-total bounds, rejects reparse traversal, and publishes the ZIP only
+after success. Failed collection leaves the run unchanged.
+
+Automated Stage 5 execution is disabled. The retained stage launcher always
+fails closed with the recorded deployment-packet/v2-runner inconsistency, and
+neither master launcher calls it. Frozen Stage 5 scripts, protocol, thresholds,
+runbooks, and evidence remain unchanged. No launcher silently falls back to
+CPU, accepts skip 77 as an RTX pass, modifies global machine settings, or runs
+large-N stress workloads.
+
+The package does not claim CUDA compilation or execution on the AMD development
+machine. CUDA Barnes--Hut remains headless-only; the viewer and paired
+counterfactual CUDA paths remain Direct-only. The host-only adversarial suite
+passed isolated missing-nvcc/GPU, unsupported-SM, missing-MSVC, staged-binary
+tamper/missing, CUDA nonzero/skip, immutable-repeat, collection scope/bounds,
+space-containing-path, Stage 5 refusal, syntax, manifest, and partial-run
+packaging checks. Canonical CPU Release passed `21/21`; canonical OpenMP Release
+passed `25/25`. Strict L1 run
+`run-20261015T024851.124148Z-7a58b39da7f6` and L2 run
+`run-20261015T040233.498852Z-9878e74b0e13` verified without modification, and
+layout/dependency/diff checks passed. Genuine RTX 4050 compilation/execution,
+zero unexpected CUDA skips, manual visual inspection, and returned-result
+review remain pending.

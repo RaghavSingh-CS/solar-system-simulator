@@ -322,6 +322,21 @@ CUDA remains opt-in and does not affect either CPU build. On an NVIDIA-equipped 
 
 Use `docs/colab_cuda_workflow.md` for the controlled pilot and full benchmark. Do not compare Colab CUDA timings directly with the Stage 3 Windows CPU dataset.
 
+For the bounded RTX 4050 academic demonstration, use the fail-closed handoff
+instead of assembling commands manually:
+
+```powershell
+$run = Join-Path $PWD "nvidia_handoff/results/rtx4050-demo-$(Get-Date -Format yyyyMMdd-HHmmss)"
+.\nvidia_handoff\scripts\run_demo.ps1 -RunDirectory $run -Device 0 -Scenario solar
+```
+
+The launcher performs preflight, a CUDA Release build, genuine no-skip CUDA
+correctness tests, the staged CUDA Direct Solar viewer, and bounded result
+collection. CUDA remains RTX-unverified until that workflow succeeds on the
+target laptop. Automated Stage 5 execution is deliberately disabled; see the
+[handoff instructions](nvidia_handoff/README.md) and
+[five-minute script](nvidia_handoff/DEMO.md).
+
 ### Optional MPI and large-N pilot
 
 MPI remains outside the three ordinary local presets. Frozen MPI and large-N
@@ -350,6 +365,7 @@ python3 -B scripts/verify_cuda_evidence.py data/benchmarks/stage4_cuda/run
 - `docs/stage5_protocol.md`: versioned Stage 5 protocol index and retained v1.0 history.
 - `docs/stage5_v2_protocol.md`: authoritative phase custody, policy, provenance, metrics, and gates.
 - `docs/stage5_rtx4050_runbook.md`: Windows RTX 4050 pilot-gated execution procedure.
+- `nvidia_handoff/README.md`: fail-closed RTX 4050 build, validation, five-minute CUDA Direct viewer, and bounded result-return launchers; Stage 5 automation is disabled.
 - `docs/visualization.md`: final viewer provenance, presentation policy, controls, and validation boundary.
 - `docs/repository_layout.md`: canonical build policy, historical-build inventory, and safe cleanup manifest.
 - `docs/mpi_and_large_n.md`: MPI/hybrid architecture, workload safety policy, and bounded pilot protocol.
