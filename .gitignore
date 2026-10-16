@@ -15,6 +15,10 @@ __pycache__/
 /.vs/
 /.vscode/
 /.tools/
+/nvidia_handoff/bin/*
+!/nvidia_handoff/bin/README.md
+/nvidia_handoff/results/*
+!/nvidia_handoff/results/README.md
 /out/
 /solar-system-simulator.zip
 *.exe

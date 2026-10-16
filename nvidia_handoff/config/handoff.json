@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "cuda_architecture": "89",
+  "device_index": 0,
+  "expected_gpu_name_contains": "RTX 4050",
+  "required_compute_capability": "8.9",
+  "cpu_preset": "cpu-release",
+  "openmp_preset": "openmp-release",
+  "cuda_preset": "cuda-release",
+  "cuda_ctest_groups": {
+    "direct": ["nbody_cuda_validation", "nbody_visualization_cuda", "nbody_counterfactual_cuda"],
+    "barnes_hut": ["nbody_barnes_hut_cuda", "nbody_barnes_hut_cuda_integration"],
+    "all_gpu": ["nbody_cuda_validation", "nbody_visualization_cuda", "nbody_counterfactual_cuda", "nbody_barnes_hut_cuda", "nbody_barnes_hut_cuda_integration"]
+  }
+}
