@@ -1,0 +1,4 @@
+# Large-N L3 manifest inputs require stable checkout bytes.
+run_large_n_l3_pilot.py text eol=lf
+capture_large_n_l3_provenance.py text eol=lf
+verify_large_n_l3_evidence.py text eol=lf

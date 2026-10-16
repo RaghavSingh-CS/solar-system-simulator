@@ -1,0 +1,2 @@
+# Large-N L3 manifest input requires stable checkout bytes.
+test_large_n_l3_tools.py text eol=lf

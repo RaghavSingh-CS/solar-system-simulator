@@ -1,0 +1,87 @@
+{
+  "backends": [
+    {
+      "name": "sequential",
+      "threads": 1
+    },
+    {
+      "name": "openmp",
+      "threads": 4
+    }
+  ],
+  "candidate_body_counts": [
+    16384,
+    32768,
+    50000
+  ],
+  "classification": "exploratory_performance_only_checkpoint",
+  "distributions": [
+    "uniform",
+    "clustered",
+    "planar"
+  ],
+  "execution": {
+    "hard_subprocess_timeout_s": 70.0,
+    "memory_budget_bytes": 536870912,
+    "maximum_direct_interactions": 500000000,
+    "maximum_direct_reference_bodies": 0,
+    "per_configuration_wall_time_budget_s": 60.0,
+    "retained_repetitions": 3,
+    "steps": 1,
+    "timestep_s": 10.0,
+    "warmups": 1
+  },
+  "pilot_body_counts": [
+    16384
+  ],
+  "pilot_matrix": [
+    {
+      "distribution": "uniform",
+      "theta": 0.25
+    },
+    {
+      "distribution": "clustered",
+      "theta": 0.5
+    },
+    {
+      "distribution": "planar",
+      "theta": 0.8
+    }
+  ],
+  "progression_gate": {
+    "maximum_memory_budget_fraction": 0.9,
+    "maximum_wall_budget_fraction": 0.8,
+    "maximum_within_group_force_range_over_median": 0.3,
+    "next_checkpoint": 32768,
+    "requires_all_pilot_groups_completed": true,
+    "requires_independent_review": true
+  },
+  "reference_policy": {
+    "accuracy_status": "unavailable_performance_only",
+    "conservation_status": "unavailable_performance_only",
+    "direct_reference": "disabled; no complete or sampled Direct reference is executed",
+    "reference_mode": "none"
+  },
+  "schema": "large-n-l3-protocol-v1",
+  "seed_formula": "0x4c33504552460000 + distribution_index*0x100000 + N",
+  "solver": {
+    "maximum_nodes": 1000000,
+    "maximum_traversal_work": 1000000000,
+    "memory_budget_bytes": 268435456,
+    "name": "barnes-hut",
+    "theta_values": [
+      0.25,
+      0.5,
+      0.8
+    ]
+  },
+  "stop_rules": {
+    "execution_failure": "stop without publishing the candidate and do not execute a larger N",
+    "finite_state_failure": "stop without publishing the candidate and do not execute a larger N",
+    "resource_rejection": "record the rejection in operator diagnostics, stop the pilot, and do not raise a limit",
+    "scale_progression": "this task stops after N=16384 regardless of outcome",
+    "timeout": "stop without publishing the candidate and do not execute a larger N"
+  },
+  "study": "large_n_laboratory_l3_performance_only_scaling",
+  "version": "3.0.0-pilot-16384"
+}
