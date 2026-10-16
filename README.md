@@ -276,6 +276,18 @@ or a complete Direct reference at that size. No
 performed. See the [L2 protocol and results](docs/large_n_l2_protocol.md) and
 [L2 publication pointer](data/benchmarks/large_n_l2_pilot/publication.json).
 
+### Large-N Laboratory L3 checkpoint
+
+Phase L3 defines a separate performance-only Barnes--Hut protocol for 16,384,
+32,768, and 50,000 bodies. It does not override L2 or claim Direct-reference
+accuracy. The first 16,384-body retained attempt stopped when its initial
+Sequential/uniform/theta-0.25 configuration exceeded the 70-second hard
+subprocess timeout. No later configuration ran, no limit was raised, and no L3
+publication or performance result was created. Consequently 32,768 and 50,000
+remain unauthorized. The guarded tooling is committed and independently
+closeout-reviewed, but there is intentionally no L3 evidence commit. See the
+[L3 protocol](docs/large_n_l3_protocol.md).
+
 Run the controlled Stage 3 CPU matrix after configuring the OpenMP Release build:
 
 ```powershell

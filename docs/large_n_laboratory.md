@@ -230,6 +230,37 @@ history. The current run binds 26 exact source/test files and passes protocol-
 derived row, command, admission, source, and artifact reconstruction. It is
 committed and independently source-reviewed; it is not frozen Stage 5 evidence.
 
+## L3 performance-only checkpoint
+
+Phase L3 adds a separate performance-only protocol for 16,384, 32,768, and
+50,000 bodies. It disables complete and sampled Direct references and O(N^2)
+conservation diagnostics. The L3 publication layer validates the laboratory's
+legacy no-reference zero placeholders, then leaves all published scientific
+error and drift fields empty and carries explicit `unavailable_performance_only` accuracy
+and conservation status. Finite Barnes--Hut forces and post-step states remain
+mandatory.
+
+The first bounded 16,384 attempt began with the predeclared
+Sequential/uniform/theta-0.25 configuration. That subprocess exceeded the
+70-second hard timeout before producing a completed record. The runner stopped
+immediately, cleaned its scratch staging directory, and did not execute the
+remaining five configurations. No L3 evidence pointer, immutable run, timing,
+throughput, or scientific result was published. Limits were not changed and no
+32,768 or 50,000 work was attempted.
+
+Before the retained attempt, one disposable single-repetition Sequential,
+uniform, theta-0.5 calibration with no warm-up exercised the performance-only
+path. It was neither retained nor treated as controlled evidence. The 60-second
+internal and 70-second external limits were fixed before the retained pilot;
+the timeout did not trigger a further increase.
+
+The tooling and protocol are committed and independently closeout-reviewed;
+there is deliberately no L3 evidence commit. A future retry requires a
+separately reviewed protocol decision; this failed attempt itself does not
+authorize a reduced matrix, fewer repetitions, a larger timeout, or automatic
+progression. It establishes no throughput, numerical-accuracy, memory-headroom,
+graphical-FPS, GPU, or 50,000-body feasibility result.
+
 ## Future gates
 
 Before any full-scale experiment, independently review L1 admission, timing,

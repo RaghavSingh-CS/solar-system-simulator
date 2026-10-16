@@ -396,6 +396,26 @@ buffer, and therefore survives warning saturation and live control edits while
 remaining suppressible on reset or scenario replacement. CUDA/Barnes--Hut is rejected;
 no CPU or direct-force fallback is present.
 
+## Large-N L3 performance-only boundary
+
+L3 continues to call the reviewed `nbody_large_n_lab` executable and does not
+introduce another solver. A performance-only configuration sets
+`request_direct_reference=false`; preflight therefore charges no Direct work,
+and execution skips Direct acceleration, Direct trajectory, and all pairwise
+conservation diagnostics. The Barnes--Hut force result and complete post-step
+state still pass finite-value validation. Before publication, the L3 layer
+requires the legacy laboratory's no-reference placeholders to be zero and then
+serializes unavailable scientific fields as empty rather than treating those
+placeholders as measured results.
+
+The Python layer predeclares six matched 16,384-body groups and reuses L1's
+kernel-owned publication lock and atomic pointer. Its independent verifier
+derives the exact command/row sequence, checks worker provenance and resource
+admission, rejects any populated scientific field, and reconstructs summaries.
+The first retained subprocess timed out before publication, so there is no L3
+authoritative pointer or result. No larger checkpoint is architecturally or
+operationally authorized by this attempt.
+
 ## Data provenance
 
 Stage 6B's approximate Solar demonstration uses JPL's published 1800--2050 mean orbital elements at J2000.0, derives velocities from the same model, and uses NASA factsheet masses/radii. It is explicitly not an ephemeris. A future ephemeris-grade scenario will use JPL Horizons Cartesian vector tables; its committed source record must include query, epoch, TDB/TT choice, reference plane/frame, center, units, Horizons version, retrieval time, and raw response.

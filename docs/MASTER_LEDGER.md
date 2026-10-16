@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-10-15
+Last updated: 2026-10-16
 
 ## Stage status
 
@@ -32,6 +32,7 @@ Last updated: 2026-10-15
 | Barnes--Hut large-N solver roadmap | **STAGE 4B COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED** | Implementation `2ec090d` adds transactional Sequential/OpenMP paired counterfactual execution, structured failure context, and immutable approximation notices; CUDA execution and controlled large-N evaluation remain mandatory |
 | Large-N Laboratory Phase L1 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / BOUNDED PILOT COMPLETE** | Implementation/tooling `78449d3` and evidence `3f665c2` provide deterministic generation, resource admission, Direct/Barnes--Hut measurement, immutable versioned runs, an interprocess-locked atomic pointer, strict semantic verification, and a hash-custodied 144-row Ryzen 7 5700U pilot through 4096 bodies; no 50K/100K, CUDA, FPS, or Stage 5 claim |
 | Large-N Laboratory Phase L2 | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / 8192 PILOT COMPLETE** | Pre-registered 24-group protocol; authoritative 60-row run `run-20261015T040233.498852Z-9878e74b0e13` has 54 full-Direct-referenced Barnes--Hut measurements and six explicit Direct skips; accuracy/memory pass but the 81.03% wall-budget fraction blocks automatic progression, and no larger workload was executed |
+| Large-N Laboratory Phase L3 | **CLOSED / INDEPENDENTLY REVIEWED / TOOLING COMMITTED / 16384 CHECKPOINT TIMED OUT / NO EVIDENCE** | Tooling `32af36a` implements the guarded performance-only protocol and explicit unavailable-science serialization; the first Sequential/uniform/theta-0.25 subprocess exceeded its 70-second hard timeout, so the remaining five groups and all larger sizes were not run |
 
 ## Decisions and rationale
 
@@ -2509,3 +2510,37 @@ Repository layout, pinned dependency, strict evidence, and whitespace checks
 also passed.
 The implementation and immutable evidence are committed and independently
 source-reviewed. The failed wall-time continuation gate remains binding.
+
+## Large-N Laboratory Phase L3 (local candidate, checkpoint stopped)
+
+Phase L3 defines a separate performance-only path for 16384, 32768, and 50000
+bodies without changing Barnes--Hut, Velocity Verlet, or any gravitational
+equation. The bounded first matrix contains six matched Sequential/OpenMP-4
+groups across uniform/theta 0.25, clustered/theta 0.5, and planar/theta 0.8.
+It uses deterministic seeds, one warm-up, three retained repetitions, one
+10-second step, 512 MiB laboratory and 256 MiB solver limits, a 60-second
+internal wall budget, and a 70-second subprocess timeout.
+
+Performance-only execution disables all Direct references and O(N^2)
+conservation diagnostics. The L3 publication layer validates the existing
+laboratory's zero no-reference placeholders and publishes empty scientific
+fields instead, while attaching explicit
+accuracy/conservation status and reason fields. Finite accelerations and final
+states, solver statistics, memory admission, and observed workers remain
+mandatory. Focused C++ coverage verifies this contract.
+
+The first retained configuration (Sequential, uniform, theta 0.25, N=16384)
+exceeded the 70-second hard timeout before returning a completed record. The
+orchestrator stopped immediately, removed scratch staging, and launched no
+other configuration. No L3 evidence directory, publication pointer, timing,
+throughput, or scientific result exists. Limits were not raised; N=32768 and
+N=50000 are not eligible. Tooling commit `32af36a` passed focused independent
+closeout review. Directory-local Git attributes preserve the new L3 source
+bytes as LF without changing the root attribute file bound by L1/L2; a fresh
+`core.autocrlf=true` checkout reproduced all 34 checked inputs byte-for-byte.
+Focused L3 tooling reported 7 passes and 14 explicit publication-dependent
+skips; CPU Release passed 21/21 and OpenMP Release passed 25/25. Strict L1/L2
+evidence, repository-layout, dependency-cache, and whitespace checks passed.
+Future CUDA scaling requires a separate hardware-specific protocol. Frozen
+Stage 5, L1/L2 evidence, CUDA, GUI, JPL data, and existing solver mathematics
+remain unchanged.

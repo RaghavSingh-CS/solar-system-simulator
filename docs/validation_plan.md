@@ -370,3 +370,33 @@ permits only a separately reviewed performance-only preflight at 16,384; it is
 not authority to execute and does not replace a full Direct reference. The
 authoritative pilot reached 81.03% of wall budget, so this gate did not pass and
 automatic progression remains prohibited.
+
+## Large-N Laboratory L3 validation
+
+The L3 machine protocol must contain candidate sizes 16,384, 32,768, and
+50,000, while the first checkpoint contains only 16,384. Its exact six-group
+matrix pairs Sequential and OpenMP-4 for uniform/theta 0.25, clustered/theta
+0.5, and planar/theta 0.8. Every command must select Barnes--Hut, disable Direct
+reference, retain the zero Direct-reference body limit, and bind the declared
+memory, node, traversal-work, internal wall, and external timeout limits.
+
+Focused C++ validation requires a completed no-reference Barnes--Hut run to
+report zero charged Direct work and zero Direct/diagnostic timing while leaving
+all acceleration, trajectory, energy, and angular-momentum fields empty. The
+Python verifier rejects nonempty scientific values (including fabricated
+zero), hidden Direct/diagnostic timing, nonzero estimated Direct work, wrong
+workers, commands, seeds, identities, resources, rows, summaries, manifests,
+or pointers. Evidence-dependent adversarial cases are explicitly skipped when
+no completed L3 publication exists; missing publication must still fail closed.
+
+The bounded 16,384 attempt stopped on the first configuration's 70-second hard
+timeout. Therefore no L3 evidence verification or performance conclusion is
+available, and 32,768/50,000 remain ineligible. CPU/OpenMP regressions and L1/L2
+custody verification remain required for source-level review.
+
+Closeout validation reported 7 focused L3 passes and 14 explicit skips whose
+fixtures require a completed publication. The executed cases include the real
+bounded no-reference C++ path and a production-runner timeout negative control
+that writes partial output, then verifies no publication and no retained
+staging. CPU Release passed 21/21 and OpenMP Release passed 25/25; strict L1/L2
+evidence, layout, dependency, LF checkout, and whitespace checks also passed.
