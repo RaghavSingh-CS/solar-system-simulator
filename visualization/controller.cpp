@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 namespace nbody::visualization {
@@ -213,8 +214,12 @@ void SimulationController::replace_scenario(
     }
 #endif
 
-    initial_state_ = std::move(initial_state);
-    state_ = initial_state_;
+    SimulationState replacement_initial = std::move(initial_state);
+    SimulationState replacement_state = replacement_initial;
+    static_assert(std::is_nothrow_swappable_v<SimulationState>);
+    using std::swap;
+    swap(initial_state_, replacement_initial);
+    swap(state_, replacement_state);
     config_.dt_s = dt_s;
     config_.steps_per_frame = steps_per_frame;
     last_barnes_hut_statistics_.reset();

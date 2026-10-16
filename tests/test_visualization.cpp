@@ -3,9 +3,11 @@
 #include "nbody/scenarios.hpp"
 #include "nbody/solar_system.hpp"
 #include "nbody/visualization/camera.hpp"
+#include "nbody/visualization/application_transaction.hpp"
 #include "nbody/visualization/conservation.hpp"
 #include "nbody/visualization/compute_comparison.hpp"
 #include "nbody/visualization/controller.hpp"
+#include "nbody/visualization/counterfactual_worker.hpp"
 #include "nbody/visualization/presentation.hpp"
 #include "nbody/visualization/render_space.hpp"
 #include "nbody/visualization/scenario.hpp"
@@ -17,12 +19,16 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <deque>
 #include <exception>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -50,6 +56,32 @@ bool same_state(const nbody::SimulationState& left, const nbody::SimulationState
         }
     }
     return true;
+}
+
+std::uint64_t state_checksum(const nbody::SimulationState& state) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    const auto append = [&hash](const void* data, std::size_t size) {
+        const auto* bytes = static_cast<const unsigned char*>(data);
+        for (std::size_t index = 0; index < size; ++index) {
+            hash ^= bytes[index];
+            hash *= 1099511628211ULL;
+        }
+    };
+    const auto bits = [](double value) {
+        std::uint64_t result = 0;
+        std::memcpy(&result, &value, sizeof(result));
+        return result;
+    };
+    for (const auto& body : state.bodies) {
+        append(body.name.data(), body.name.size());
+        const std::uint64_t values[]{
+            bits(body.mass_kg), bits(body.position_m.x), bits(body.position_m.y),
+            bits(body.position_m.z), bits(body.velocity_m_s.x),
+            bits(body.velocity_m_s.y), bits(body.velocity_m_s.z),
+        };
+        append(values, sizeof(values));
+    }
+    return hash;
 }
 
 bool same_diagnostics(
@@ -453,6 +485,29 @@ void test_controller_solver_selection_and_transactionality() {
         {legacy.dt_s, 1, BackendKind::sequential, 1, 0,
          SolverKind::barnes_hut, barnes_hut});
     scenario_controller.set_paused(true);
+    scenario_controller.advance_steps(2);
+    const auto state_before_invalid_replacement = scenario_controller.state();
+    const auto initial_before_invalid_replacement = scenario_controller.initial_state();
+    const double dt_before_invalid_replacement = scenario_controller.dt_s();
+    const std::size_t steps_before_invalid_replacement =
+        scenario_controller.steps_per_frame();
+    auto invalid_replacement = catalog.initial_state;
+    invalid_replacement.bodies.front().mass_kg =
+        std::numeric_limits<double>::quiet_NaN();
+    bool invalid_replacement_rejected = false;
+    try {
+        scenario_controller.replace_scenario(
+            std::move(invalid_replacement), catalog.dt_s, 1);
+    } catch (const std::invalid_argument&) {
+        invalid_replacement_rejected = true;
+    }
+    require(invalid_replacement_rejected && scenario_controller.paused() &&
+                same_state(state_before_invalid_replacement, scenario_controller.state()) &&
+                same_state(initial_before_invalid_replacement,
+                    scenario_controller.initial_state()) &&
+                scenario_controller.dt_s() == dt_before_invalid_replacement &&
+                scenario_controller.steps_per_frame() == steps_before_invalid_replacement,
+            "failed controller scenario replacement changed state, time, or metadata");
     scenario_controller.replace_scenario(catalog.initial_state, catalog.dt_s, 1);
     require(scenario_controller.paused() &&
                 scenario_controller.solver_kind() == SolverKind::barnes_hut &&
@@ -595,7 +650,7 @@ void test_scenario_switch_and_diagnostics() {
     const auto solar = nbody::visualization::make_visual_scenario(
         nbody::visualization::ScenarioKind::solar_system);
     const auto synthetic = nbody::visualization::make_visual_scenario(
-        nbody::visualization::ScenarioKind::synthetic, 10, 24301);
+        nbody::visualization::ScenarioKind::synthetic, 256, 24301);
     require(solar.initial_state.bodies.size() == 9 && solar.styles.size() == 9,
             "visual Solar-System definition is incomplete");
     require(solar.dt_s == nbody::solar_system_recommended_dt_s,
@@ -605,20 +660,37 @@ void test_scenario_switch_and_diagnostics() {
                 solar.styles[6].material == nbody::visualization::BodyMaterial::saturn,
             "visual Solar-System presentation metadata is incomplete");
     require(synthetic.label_policy == nbody::visualization::LabelPolicy::selected_only &&
-                synthetic.name == "Compute Experiment",
+                synthetic.name == "Synthetic N-body Sandbox",
             "synthetic mode is not intentionally framed as a low-clutter compute experiment");
 
     nbody::visualization::SimulationController controller(
         solar.initial_state,
         {solar.dt_s, 1, nbody::visualization::BackendKind::sequential, 1});
     controller.replace_scenario(synthetic.initial_state, synthetic.dt_s, 3);
-    require(controller.state().bodies.size() == 10 && controller.state().time_s == 0.0 &&
+    require(controller.state().bodies.size() == 256 && controller.state().time_s == 0.0 &&
                 controller.dt_s() == synthetic.dt_s && controller.steps_per_frame() == 3,
             "scenario replacement did not reset controller state/configuration");
     controller.advance_frame();
     controller.reset();
     require(same_state(synthetic.initial_state, controller.state()),
             "reset after scenario replacement did not restore the replacement state");
+
+    const auto clustered = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::synthetic, 256, 91,
+        nbody::LargeNDistribution::clustered);
+    controller.set_paused(true);
+    controller.replace_scenario(clustered.initial_state, clustered.dt_s, 1);
+    const auto paused_state = controller.state();
+    controller.advance_frame();
+    require(controller.paused() && same_state(paused_state, controller.state()) &&
+                controller.state().time_s == 0.0,
+            "synthetic scenario replacement did not preserve pause or reset time");
+    controller.advance_steps(1);
+    require(controller.state().time_s == clustered.dt_s,
+            "manual synthetic advancement while paused used incorrect timestep");
+    controller.reset();
+    require(controller.paused() && same_state(clustered.initial_state, controller.state()),
+            "synthetic reset did not restore the selected distribution and pause state");
 
     nbody::visualization::ConservationTracker tracker(solar.initial_state);
     const auto initial_drift = tracker.update(solar.initial_state);
@@ -1334,67 +1406,544 @@ void test_presentation_helpers() {
 }
 
 void test_compute_experiment_scaling_and_comparison() {
+    // Captured independently from the committed nbody_large_n target using its
+    // public generator and the exact field-wise checksum below.
+    constexpr std::array<std::array<std::uint64_t, 3>, 4> expected_checksums{{
+        {{7825184865471401019ULL, 6917549025945125182ULL, 13520912006326907165ULL}},
+        {{4564111068250750988ULL, 4745212845247103561ULL, 1790368443155452445ULL}},
+        {{8111121325248395463ULL, 14334474822168884208ULL, 6706342535779300325ULL}},
+        {{13542330320252189013ULL, 1315021589615441400ULL, 2429501922212237394ULL}},
+    }};
+    std::array<std::array<std::uint64_t, 3>, 4> observed_checksums{};
+    std::size_t count_index = 0U;
     for (const std::size_t count : nbody::visualization::compute_body_counts) {
-        const auto first = nbody::visualization::make_visual_scenario(
-            nbody::visualization::ScenarioKind::synthetic, count, 24301);
-        const auto second = nbody::visualization::make_visual_scenario(
-            nbody::visualization::ScenarioKind::synthetic, count, 24301);
-        require(first.initial_state.bodies.size() == count &&
-                    same_state(first.initial_state, second.initial_state),
-                "supported Compute Experiment workload is not deterministic");
-        nbody::visualization::RenderSpaceTransform transform(
-            first.initial_state, first.styles, 9.0F, first.default_radius_multiplier);
-        std::vector<nbody::visualization::RenderBody> snapshot;
-        transform.update_snapshot(first.initial_state, snapshot);
-        require(snapshot.size() == count,
-                "large-N Compute Experiment render snapshot is incomplete");
+        std::size_t distribution_index = 0U;
+        for (const auto distribution : {
+                 nbody::LargeNDistribution::uniform,
+                 nbody::LargeNDistribution::clustered,
+                 nbody::LargeNDistribution::planar}) {
+            const auto first = nbody::visualization::make_visual_scenario(
+                nbody::visualization::ScenarioKind::synthetic, count, 24301, distribution);
+            const auto second = nbody::visualization::make_visual_scenario(
+                nbody::visualization::ScenarioKind::synthetic, count, 24301, distribution);
+            require(first.initial_state.bodies.size() == count &&
+                        same_state(first.initial_state, second.initial_state),
+                    "supported synthetic scene is not deterministic");
+            require(first.stable_ids.size() == count &&
+                        first.synthetic_distribution == distribution &&
+                        first.synthetic_seed == 24301U,
+                    "synthetic scene identity metadata is incomplete");
+            for (std::size_t index = 0; index < count; ++index) {
+                require(first.stable_ids[index] == second.stable_ids[index] &&
+                            first.stable_ids[index] ==
+                                "synthetic:" + first.initial_state.bodies[index].name,
+                        "synthetic stable identity changed with regeneration");
+            }
+            observed_checksums[count_index][distribution_index] =
+                state_checksum(first.initial_state);
+            require(observed_checksums[count_index][distribution_index] ==
+                        expected_checksums[count_index][distribution_index],
+                    "viewer scene differs from the independently captured committed Large-N generator state");
+            nbody::visualization::RenderSpaceTransform transform(
+                first.initial_state, first.styles, 9.0F, first.default_radius_multiplier);
+            std::vector<nbody::visualization::RenderBody> snapshot;
+            transform.update_snapshot(first.initial_state, snapshot);
+            require(snapshot.size() == count &&
+                        nbody::visualization::render_resource_admitted(snapshot.size()),
+                    "bounded synthetic render snapshot is incomplete or unadmitted");
+            ++distribution_index;
+        }
+        ++count_index;
     }
 
-    const auto ordinary = nbody::visualization::interactive_workload_policy(
-        1024, nbody::visualization::WorkloadBackend::sequential);
-    const auto guarded = nbody::visualization::interactive_workload_policy(
-        4096, nbody::visualization::WorkloadBackend::openmp);
-    const auto cuda_guarded = nbody::visualization::interactive_workload_policy(
-        4096, nbody::visualization::WorkloadBackend::cuda);
-    const auto sequential_guarded = nbody::visualization::interactive_workload_policy(
-        4096, nbody::visualization::WorkloadBackend::sequential);
+    const auto uniform = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::synthetic, 256, 24301,
+        nbody::LargeNDistribution::uniform);
+    const auto clustered = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::synthetic, 256, 24301,
+        nbody::LargeNDistribution::clustered);
+    const auto planar = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::synthetic, 256, 24301,
+        nbody::LargeNDistribution::planar);
+    require(!same_state(uniform.initial_state, clustered.initial_state) &&
+                !same_state(uniform.initial_state, planar.initial_state) &&
+                uniform.stable_ids == clustered.stable_ids &&
+                uniform.stable_ids == planar.stable_ids,
+            "synthetic distributions are not distinct or changed stable identities");
+    require(state_checksum(uniform.initial_state) == 7825184865471401019ULL &&
+                state_checksum(clustered.initial_state) == 6917549025945125182ULL &&
+                state_checksum(planar.initial_state) == 13520912006326907165ULL,
+            "viewer adapter diverged from the committed Large-N generator contract");
+
+    bool rejected_invalid_distribution = false;
+    try {
+        (void)nbody::visualization::make_visual_scenario(
+            nbody::visualization::ScenarioKind::synthetic, 256, 24301,
+            static_cast<nbody::LargeNDistribution>(99));
+    } catch (const std::invalid_argument&) {
+        rejected_invalid_distribution = true;
+    }
+    require(rejected_invalid_distribution,
+        "invalid synthetic distribution was not rejected explicitly");
+
+    bool rejected_high_count = false;
+    try {
+        (void)nbody::visualization::make_visual_scenario(
+            nbody::visualization::ScenarioKind::synthetic, 16384, 24301);
+    } catch (const std::invalid_argument&) {
+        rejected_high_count = true;
+    }
+    require(rejected_high_count &&
+                !nbody::visualization::render_resource_admitted(8193) &&
+                nbody::visualization::render_resource_admitted(8192),
+            "synthetic scene or renderer admission exceeded the G1 bound");
+
+    const std::array backends{
+        nbody::visualization::WorkloadBackend::sequential,
+        nbody::visualization::WorkloadBackend::openmp,
+        nbody::visualization::WorkloadBackend::cuda,
+    };
+    const std::array solvers{
+        nbody::visualization::WorkloadSolver::direct,
+        nbody::visualization::WorkloadSolver::barnes_hut,
+    };
+    for (const std::size_t count : nbody::visualization::compute_body_counts) {
+        for (const auto backend : backends) {
+            for (const auto solver : solvers) {
+                const auto policy = nbody::visualization::interactive_workload_policy(
+                    count, backend, solver);
+                const bool cuda_barnes_hut =
+                    backend == nbody::visualization::WorkloadBackend::cuda &&
+                    solver == nbody::visualization::WorkloadSolver::barnes_hut;
+                const bool expected_continuous = count <= 1024U && !cuda_barnes_hut;
+                const bool expected_manual = expected_continuous ||
+                    (count == 4096U &&
+                     backend != nbody::visualization::WorkloadBackend::cuda &&
+                     solver == nbody::visualization::WorkloadSolver::barnes_hut) ||
+                    (count == 8192U &&
+                     backend == nbody::visualization::WorkloadBackend::openmp &&
+                     solver == nbody::visualization::WorkloadSolver::barnes_hut);
+                require(policy.continuous_advancement == expected_continuous &&
+                            policy.manual_single_step == expected_manual &&
+                            (expected_manual || policy.explanation[0] != '\0'),
+                        "backend/solver/count workload admission matrix is incorrect");
+            }
+        }
+    }
     const auto prohibited = nbody::visualization::interactive_workload_policy(
-        100000, nbody::visualization::WorkloadBackend::cuda);
-    const auto cuda_boundary = nbody::visualization::interactive_workload_policy(
-        8192, nbody::visualization::WorkloadBackend::cuda);
-    const auto cuda_above_boundary = nbody::visualization::interactive_workload_policy(
-        16384, nbody::visualization::WorkloadBackend::cuda);
-    require(ordinary.continuous_advancement && ordinary.live_cpu_comparison &&
-                !guarded.continuous_advancement && guarded.manual_single_step &&
-                cuda_guarded.manual_single_step && !sequential_guarded.manual_single_step &&
-                cuda_boundary.manual_single_step && !cuda_above_boundary.manual_single_step &&
-                !guarded.history_trails && !prohibited.manual_single_step &&
-                prohibited.warning_required,
-            "large-N interactive feasibility policy is unsafe or incomplete");
+        16384, nbody::visualization::WorkloadBackend::cuda,
+        nbody::visualization::WorkloadSolver::direct);
+    require(!prohibited.continuous_advancement && !prohibited.manual_single_step &&
+                prohibited.explanation[0] != '\0',
+            "unsupported workload did not fail with an explicit reason");
+
+    require(nbody::visualization::checked_render_upload_bytes(8192U, 32U) ==
+                262144U,
+            "checked render upload byte count is incorrect");
+    bool rejected_upload_overflow = false;
+    try {
+        (void)nbody::visualization::checked_render_upload_bytes(
+            std::numeric_limits<std::size_t>::max(), 2U);
+    } catch (const std::overflow_error&) {
+        rejected_upload_overflow = true;
+    }
+    require(rejected_upload_overflow,
+        "render upload byte-count overflow was not rejected");
+    require(nbody::visualization::render_upload_allows_draw(0U) &&
+                !nbody::visualization::render_upload_allows_draw(0x0505U),
+            "failed OpenGL upload was not prevented from reaching the draw path");
+
+    const auto prior = nbody::visualization::make_visual_scenario(
+        nbody::visualization::ScenarioKind::solar_system);
+    nbody::visualization::CounterfactualPublicationGate gate(7U);
+    gate.accept_job(3U, 7U);
+    const auto prior_generation = gate.scenario_generation();
+    const auto prior_worker = gate.accepted_worker_generation();
+    try {
+        (void)nbody::visualization::prepare_visual_scenario_replacement(
+            nbody::visualization::ScenarioKind::synthetic, 256U, 24301U,
+            static_cast<nbody::LargeNDistribution>(99));
+        require(false, "invalid replacement preparation unexpectedly succeeded");
+    } catch (const std::invalid_argument&) {
+    }
+    require(prior.initial_state.bodies.size() == 9U &&
+                gate.scenario_generation() == prior_generation &&
+                gate.accepted_worker_generation() == prior_worker,
+            "failed replacement preparation mutated active scene or worker generation");
+
+    auto prepared = nbody::visualization::prepare_visual_scenario_replacement(
+        nbody::visualization::ScenarioKind::synthetic, 1024U, 24301U,
+        nbody::LargeNDistribution::planar);
+    require(prepared.scenario.initial_state.bodies.size() == 1024U &&
+                prepared.profile_visibility.size() == 1024U &&
+                prepared.individual_visibility.size() == 1024U,
+            "valid replacement preparation is incomplete");
+    gate.replace_scenario();
+    require(gate.scenario_generation() == prior_generation + 1U &&
+                !gate.accepted_worker_generation().has_value(),
+            "successful prepared replacement did not invalidate stale worker identity");
+
+    if (nbody::visualization::SimulationController::openmp_available()) {
+        const auto large = nbody::visualization::make_visual_scenario(
+            nbody::visualization::ScenarioKind::synthetic, 8192, 24301,
+            nbody::LargeNDistribution::clustered);
+        nbody::visualization::SimulationController large_controller(
+            large.initial_state,
+            {large.dt_s, 1, nbody::visualization::BackendKind::openmp, 4, 0,
+             nbody::visualization::SolverKind::barnes_hut, {}});
+        large_controller.set_paused(true);
+        const auto started = std::chrono::steady_clock::now();
+        large_controller.advance_steps(1);
+        const double elapsed_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+        require(large_controller.paused() &&
+                    large_controller.state().time_s == large.dt_s &&
+                    large_controller.state().bodies.size() == 8192U &&
+                    large_controller.barnes_hut_statistics().has_value(),
+                "admitted 8192-body OpenMP Barnes-Hut manual step was not complete");
+        large_controller.reset();
+        require(large_controller.paused() &&
+                    same_state(large.initial_state, large_controller.state()),
+                "8192-body manual-step reset did not restore the selected scene");
+        std::cout << "live diagnostic (not benchmark evidence): N=8192 OpenMP-4 "
+                  << "Barnes-Hut manual_step_ms=" << elapsed_ms << '\n';
+    }
 
     const auto initial = nbody::visualization::make_visual_scenario(
-        nbody::visualization::ScenarioKind::synthetic, 512, 24301);
+        nbody::visualization::ScenarioKind::synthetic, 256, 24301);
     const auto visible_state = initial.initial_state;
     if (nbody::visualization::SimulationController::openmp_available()) {
         const auto comparison = nbody::visualization::run_live_compute_comparison(
             initial.initial_state, initial.dt_s, 4);
-        require(comparison.body_count == 512 && comparison.integration_steps > 0 &&
+        require(comparison.body_count == 256 && comparison.integration_steps > 0 &&
                     comparison.sequential_ms > 0.0 && comparison.openmp_ms > 0.0,
                 "live CPU comparison did not execute the declared fixed workload");
         require(comparison.correctness_passed,
                 "live Sequential/OpenMP comparison failed established mixed tolerances");
-        require(nbody::visualization::live_comparison_matches(comparison, 512, 4) &&
-                    !nbody::visualization::live_comparison_matches(comparison, 256, 4) &&
-                    !nbody::visualization::live_comparison_matches(comparison, 512, 2),
+        require(nbody::visualization::live_comparison_matches(comparison, 256, 4) &&
+                    !nbody::visualization::live_comparison_matches(comparison, 1024, 4) &&
+                    !nbody::visualization::live_comparison_matches(comparison, 256, 2),
                 "live comparison result did not invalidate for N/thread changes");
         require(same_state(visible_state, initial.initial_state),
                 "live CPU comparison mutated its visible input state");
-        std::cout << "live diagnostic (not benchmark evidence): N=512 steps="
+        std::cout << "live diagnostic (not benchmark evidence): N=256 steps="
                   << comparison.integration_steps
                   << " sequential_ms=" << comparison.sequential_ms
                   << " openmp4_ms=" << comparison.openmp_ms
                   << " ratio=" << comparison.sequential_to_openmp_ratio << '\n';
     }
+}
+
+void test_application_transaction_and_timing_provenance() {
+    using namespace nbody::visualization;
+
+    const auto solar = make_visual_scenario(ScenarioKind::solar_system);
+    SimulationController controller(
+        solar.initial_state,
+        {solar.dt_s, 1U, BackendKind::sequential, 1, 0,
+         SolverKind::direct, {}});
+    controller.set_paused(true);
+    controller.advance_steps(1U);
+    ScenarioDefinition active = solar;
+    RenderSpaceTransform render_space(
+        active.initial_state, active.styles, 9.0F,
+        active.default_radius_multiplier);
+    render_space.set_origin_m({11.0, 22.0, 33.0});
+    std::vector<bool> profile(active.initial_state.bodies.size(), true);
+    std::vector<bool> individual(active.initial_state.bodies.size(), true);
+    individual[2] = false;
+    CounterfactualPublicationGate gate(7U);
+    gate.accept_job(3U, 7U);
+    CounterfactualExperimentWorker worker;
+    CounterfactualWorkerPublication publication;
+    publication.generation = 3U;
+    publication.state = CounterfactualWorkerState::running;
+    publication.scenario_id = active.name;
+    auto run = std::make_shared<CounterfactualRunDescriptor>();
+    run->scenario_generation = 7U;
+    run->worker_generation = 3U;
+    run->scenario_id = active.name;
+    publication.run = run;
+    auto accepted_result =
+        std::make_shared<nbody::experiments::CounterfactualExperimentResult>();
+    accepted_result->issues.push_back({});
+    publication.result = accepted_result;
+    require(gate.accepts(publication),
+        "transaction fixture did not begin with an accepted publication");
+    CounterfactualPresentationCache presentation;
+    presentation.generation = 3U;
+    presentation.result = accepted_result.get();
+    presentation.result_rows.push_back({});
+    presentation.error = "retained presentation marker";
+    presentation.frame_error = "retained frame marker";
+    presentation.warning_groups.push_back({});
+    SimulationTimingTracker timing;
+    const auto timing_generation = timing.generation();
+    require(timing.publish(timing_generation, 12.5, 80.0),
+        "transaction fixture timing publication failed");
+
+    const nbody::SimulationState committed_state = controller.state();
+    const std::string committed_scenario_name = active.name;
+    const auto committed_stable_ids = active.stable_ids;
+    const auto committed_body_metadata = active.body_metadata;
+    const double committed_dt = controller.dt_s();
+    const std::size_t committed_steps_per_frame = controller.steps_per_frame();
+    const nbody::Vec3 committed_origin = render_space.origin_m();
+    const float committed_position_scale = render_space.position_scale();
+    const float committed_radius_multiplier = render_space.radius_multiplier();
+    const auto committed_profile = profile;
+    const auto committed_individual = individual;
+    const auto committed_publication = publication;
+    const std::uint64_t committed_gate_generation = gate.scenario_generation();
+    const auto committed_worker_generation = gate.accepted_worker_generation();
+
+    const auto require_failed_preparation_preserved_state =
+        [&](const char* failure_kind) {
+            bool metadata_unchanged =
+                active.body_metadata.size() == committed_body_metadata.size();
+            for (std::size_t index = 0;
+                 metadata_unchanged && index < active.body_metadata.size(); ++index) {
+                const auto& observed = active.body_metadata[index];
+                const auto& expected = committed_body_metadata[index];
+                metadata_unchanged = observed.stable_id == expected.stable_id &&
+                    observed.parent_stable_id == expected.parent_stable_id &&
+                    observed.body_class == expected.body_class &&
+                    observed.counterfactual_removal_eligible ==
+                        expected.counterfactual_removal_eligible;
+            }
+            require(same_state(controller.state(), committed_state) &&
+                        controller.dt_s() == committed_dt &&
+                        controller.steps_per_frame() == committed_steps_per_frame &&
+                        controller.backend_kind() == BackendKind::sequential &&
+                        controller.solver_kind() == SolverKind::direct &&
+                        active.name == committed_scenario_name &&
+                        active.stable_ids == committed_stable_ids &&
+                        metadata_unchanged &&
+                        render_space.origin_m().x == committed_origin.x &&
+                        render_space.origin_m().y == committed_origin.y &&
+                        render_space.origin_m().z == committed_origin.z &&
+                        render_space.position_scale() == committed_position_scale &&
+                        render_space.radius_multiplier() ==
+                            committed_radius_multiplier &&
+                        profile == committed_profile &&
+                        individual == committed_individual &&
+                        gate.scenario_generation() == committed_gate_generation &&
+                        gate.accepted_worker_generation() == committed_worker_generation &&
+                        publication.generation == committed_publication.generation &&
+                        publication.run == committed_publication.run &&
+                        publication.result == committed_publication.result &&
+                        presentation.generation == 3U &&
+                        presentation.result == accepted_result.get() &&
+                        presentation.result_rows.size() == 1U &&
+                        presentation.error == "retained presentation marker" &&
+                        presentation.frame_error == "retained frame marker" &&
+                        presentation.warning_groups.size() == 1U &&
+                        timing.generation() == timing_generation &&
+                        timing.sample() &&
+                        timing.sample()->batch_milliseconds == 12.5,
+                    std::string(failure_kind) +
+                        " mutated committed application transaction state");
+        };
+
+    bool rejected_invalid_distribution = false;
+    try {
+        (void)prepare_application_scenario_transaction(
+            ScenarioKind::synthetic, 256U, 24301U,
+            static_cast<nbody::LargeNDistribution>(99), {}, controller, gate);
+    } catch (const std::invalid_argument&) {
+        rejected_invalid_distribution = true;
+    }
+    require(rejected_invalid_distribution,
+        "production transaction accepted an invalid distribution");
+    require_failed_preparation_preserved_state("invalid distribution");
+
+    bool rejected_unsupported_count = false;
+    try {
+        (void)prepare_application_scenario_transaction(
+            ScenarioKind::synthetic, 16384U, 24301U,
+            nbody::LargeNDistribution::uniform, {}, controller, gate);
+    } catch (const std::invalid_argument&) {
+        rejected_unsupported_count = true;
+    }
+    require(rejected_unsupported_count,
+        "production transaction accepted an unsupported body count");
+    require_failed_preparation_preserved_state("unsupported count");
+
+    bool rejected_workload = false;
+    try {
+        (void)prepare_application_scenario_transaction(
+            ScenarioKind::synthetic, 4096U, 24301U,
+            nbody::LargeNDistribution::uniform, {}, controller, gate);
+    } catch (const std::invalid_argument&) {
+        rejected_workload = true;
+    }
+    require(rejected_workload,
+        "production transaction accepted a prohibited Direct workload");
+    require_failed_preparation_preserved_state("workload admission failure");
+
+    bool injected_allocation_failure = false;
+    try {
+        (void)prepare_application_scenario_transaction(
+            ScenarioKind::synthetic, 256U, 24301U,
+            nbody::LargeNDistribution::uniform, {}, controller, gate,
+            [](const PreparedScenarioReplacement&) {
+                throw std::bad_alloc();
+            });
+    } catch (const std::bad_alloc&) {
+        injected_allocation_failure = true;
+    }
+    require(injected_allocation_failure,
+        "production preparation failure injection did not propagate");
+    require_failed_preparation_preserved_state("allocation failure");
+
+    auto prepared = prepare_application_scenario_transaction(
+        ScenarioKind::synthetic, 1024U, 24301U,
+        nbody::LargeNDistribution::planar, {}, controller, gate);
+    const auto expected_initial_state = prepared.visual.scenario.initial_state;
+    const std::string expected_name = prepared.visual.scenario.name;
+    const double expected_dt = prepared.visual.scenario.dt_s;
+    const std::size_t expected_steps = prepared.visual.scenario.speed_presets[
+        prepared.visual.speed_index].steps_per_frame;
+    commit_application_scenario_transaction(
+        std::move(prepared), {
+            controller,
+            active,
+            render_space,
+            profile,
+            individual,
+            gate,
+            worker,
+            publication,
+            presentation,
+            timing,
+        });
+    require(active.kind == ScenarioKind::synthetic && active.name == expected_name &&
+                active.initial_state.bodies.size() == 1024U &&
+                same_state(controller.state(), expected_initial_state) &&
+                controller.state().time_s == 0.0 && controller.dt_s() == expected_dt &&
+                controller.steps_per_frame() == expected_steps &&
+                controller.paused() &&
+                controller.backend_kind() == BackendKind::sequential &&
+                controller.solver_kind() == SolverKind::direct &&
+                profile.size() == 1024U && individual.size() == 1024U &&
+                gate.scenario_generation() == committed_gate_generation + 1U &&
+                !gate.accepted_worker_generation() &&
+                publication.generation == 0U && !publication.run &&
+                presentation.empty() && !timing.sample() &&
+                !gate.accepts(committed_publication),
+            "successful production transaction did not atomically reset scene, "
+            "controller, timing, generation, publication, and overlays");
+
+    SimulationTimingTracker scoped_timing;
+    const std::uint64_t direct_generation = scoped_timing.generation();
+    require(scoped_timing.publish(direct_generation, 2.0, 500.0),
+        "initial configuration-scoped timing was not published");
+    require(!backend_selection_changes_execution(
+                controller, BackendKind::sequential, 99, 17) &&
+            !solver_selection_changes_execution(
+                controller, SolverKind::direct,
+                controller.barnes_hut_configuration()) &&
+            !steps_per_frame_changes_execution(
+                controller, controller.steps_per_frame()),
+        "identical effective backend/solver reselection was treated as a change");
+    select_application_backend(
+        controller, scoped_timing, BackendKind::sequential, 99, 17);
+    select_application_solver(
+        controller, scoped_timing, SolverKind::direct,
+        controller.barnes_hut_configuration());
+    set_application_steps_per_frame(
+        controller, scoped_timing, controller.steps_per_frame());
+    require(scoped_timing.sample() &&
+                scoped_timing.sample()->batch_milliseconds == 2.0,
+        "identical effective reselection invalidated timing");
+
+    auto barnes_hut = controller.barnes_hut_configuration();
+    require(solver_selection_changes_execution(
+                controller, SolverKind::barnes_hut, barnes_hut),
+        "successful solver change was not identified");
+    select_application_solver(
+        controller, scoped_timing, SolverKind::barnes_hut, barnes_hut);
+    require(!scoped_timing.sample(),
+        "successful solver change retained stale timing");
+    const std::uint64_t barnes_hut_generation = scoped_timing.generation();
+    require(scoped_timing.publish(barnes_hut_generation, 3.0, 333.0),
+        "Barnes-Hut timing was not published");
+
+    auto changed_theta = barnes_hut;
+    changed_theta.theta = 0.5;
+    require(solver_selection_changes_execution(
+                controller, SolverKind::barnes_hut, changed_theta),
+        "theta change was not identified as an execution change");
+    select_application_solver(
+        controller, scoped_timing, SolverKind::barnes_hut, changed_theta);
+    require(!scoped_timing.sample() &&
+                !scoped_timing.publish(barnes_hut_generation, 99.0, 99.0),
+        "stale asynchronous timing republished after theta invalidation");
+
+    const std::uint64_t rejected_generation = scoped_timing.generation();
+    require(scoped_timing.publish(rejected_generation, 4.0, 250.0),
+        "pre-rejection timing was not published");
+    auto invalid_barnes_hut = changed_theta;
+    invalid_barnes_hut.theta = 0.0;
+    bool rejected_solver_change = false;
+    try {
+        select_application_solver(
+            controller, scoped_timing, SolverKind::barnes_hut,
+            invalid_barnes_hut);
+    } catch (const std::invalid_argument&) {
+        rejected_solver_change = true;
+    }
+    require(rejected_solver_change && scoped_timing.sample() &&
+                scoped_timing.generation() == rejected_generation &&
+                scoped_timing.sample()->batch_milliseconds == 4.0,
+        "rejected solver change invalidated valid timing");
+
+    bool rejected_backend_change = false;
+    try {
+        select_application_backend(
+            controller, scoped_timing, BackendKind::openmp, 0, 0);
+    } catch (const std::invalid_argument&) {
+        rejected_backend_change = true;
+    }
+    require(rejected_backend_change && scoped_timing.sample() &&
+                scoped_timing.generation() == rejected_generation,
+        "rejected backend change invalidated valid timing");
+
+    if (SimulationController::openmp_available()) {
+        require(backend_selection_changes_execution(
+                    controller, BackendKind::openmp, 2, 0),
+            "successful OpenMP backend change was not identified");
+        select_application_backend(
+            controller, scoped_timing, BackendKind::openmp, 2, 0);
+        require(!scoped_timing.sample(),
+            "successful backend change retained stale timing");
+        const std::uint64_t openmp_generation = scoped_timing.generation();
+        require(scoped_timing.publish(openmp_generation, 5.0, 200.0),
+            "OpenMP timing was not published");
+        require(!backend_selection_changes_execution(
+                    controller, BackendKind::openmp, 2, 99),
+            "identical effective OpenMP reselection was treated as a change");
+        select_application_backend(
+            controller, scoped_timing, BackendKind::openmp, 2, 99);
+        require(scoped_timing.sample() &&
+                    scoped_timing.sample()->batch_milliseconds == 5.0,
+            "identical OpenMP reselection invalidated timing");
+        require(backend_selection_changes_execution(
+                    controller, BackendKind::openmp, 3, 0),
+            "OpenMP thread change was not identified");
+        select_application_backend(
+            controller, scoped_timing, BackendKind::openmp, 3, 0);
+        require(!scoped_timing.sample(),
+            "successful OpenMP thread change retained stale timing");
+    }
+
+    const std::size_t old_steps = controller.steps_per_frame();
+    require(steps_per_frame_changes_execution(controller, old_steps + 1U),
+        "steps-per-frame change was not identified");
+    set_application_steps_per_frame(
+        controller, scoped_timing, old_steps + 1U);
+    require(!scoped_timing.sample(),
+        "successful steps-per-frame change retained stale timing");
 }
 
 }  // namespace
@@ -1418,6 +1967,7 @@ int main() {
         test_camera_math();
         test_presentation_helpers();
         test_compute_experiment_scaling_and_comparison();
+        test_application_transaction_and_timing_provenance();
         std::cout << "all visualization model tests passed\n";
         return 0;
     } catch (const std::exception& error) {

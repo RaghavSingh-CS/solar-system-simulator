@@ -1,4 +1,5 @@
 #include "renderer.hpp"
+#include "nbody/visualization/workload.hpp"
 
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -9,6 +10,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -394,6 +397,52 @@ int uniform_location(unsigned int program, const char* name) {
     return location;
 }
 
+const char* gl_error_name(GLenum error) noexcept {
+    switch (error) {
+        case GL_INVALID_ENUM: return "GL_INVALID_ENUM";
+        case GL_INVALID_VALUE: return "GL_INVALID_VALUE";
+        case GL_INVALID_OPERATION: return "GL_INVALID_OPERATION";
+        case GL_OUT_OF_MEMORY: return "GL_OUT_OF_MEMORY";
+#ifdef GL_CONTEXT_LOST
+        case GL_CONTEXT_LOST: return "GL_CONTEXT_LOST";
+#endif
+        default: return "unknown OpenGL error";
+    }
+}
+
+[[noreturn]] void throw_gl_error(const char* operation, GLenum error) {
+    std::ostringstream message;
+    message << operation << " failed with " << gl_error_name(error)
+            << " (0x" << std::hex << static_cast<unsigned int>(error) << ')';
+    throw std::runtime_error(message.str());
+}
+
+void checked_buffer_data(
+    GLenum target,
+    std::size_t element_count,
+    std::size_t element_size,
+    const void* data,
+    GLenum usage,
+    const char* operation) {
+    const std::size_t bytes = checked_render_upload_bytes(element_count, element_size);
+    if (bytes > static_cast<std::size_t>(std::numeric_limits<GLsizeiptr>::max())) {
+        throw std::overflow_error(std::string(operation) +
+            " exceeds the OpenGL buffer-size range");
+    }
+    const GLenum prior_error = glGetError();
+    if (prior_error != GL_NO_ERROR) {
+        throw_gl_error("OpenGL state before buffer upload", prior_error);
+    }
+    glBufferData(
+        target, static_cast<GLsizeiptr>(bytes), data, usage);
+    const GLenum upload_error = glGetError();
+    if (!render_upload_allows_draw(static_cast<unsigned int>(upload_error))) {
+        // Do not issue a draw after a failed allocation/upload. OpenGL retains
+        // implementation-defined prior storage; this frame is explicitly invalid.
+        throw_gl_error(operation, upload_error);
+    }
+}
+
 }  // namespace
 
 BodyRenderer::BodyRenderer() : program_(create_program()) {
@@ -416,17 +465,13 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
         glGenBuffers(1, &index_buffer_);
         glBindVertexArray(vertex_array_);
         glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
-            vertices.data(),
-            GL_STATIC_DRAW);
+        checked_buffer_data(
+            GL_ARRAY_BUFFER, vertices.size(), sizeof(Vertex), vertices.data(),
+            GL_STATIC_DRAW, "sphere vertex-buffer upload");
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
-        glBufferData(
-            GL_ELEMENT_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(indices.size() * sizeof(unsigned int)),
-            indices.data(),
-            GL_STATIC_DRAW);
+        checked_buffer_data(
+            GL_ELEMENT_ARRAY_BUFFER, indices.size(), sizeof(unsigned int),
+            indices.data(), GL_STATIC_DRAW, "sphere index-buffer upload");
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(
             0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
@@ -467,11 +512,9 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
         glGenBuffers(1, &ring_vertex_buffer_);
         glBindVertexArray(ring_vertex_array_);
         glBindBuffer(GL_ARRAY_BUFFER, ring_vertex_buffer_);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(ring_vertices.size() * sizeof(glm::vec3)),
-            ring_vertices.data(),
-            GL_STATIC_DRAW);
+        checked_buffer_data(
+            GL_ARRAY_BUFFER, ring_vertices.size(), sizeof(glm::vec3),
+            ring_vertices.data(), GL_STATIC_DRAW, "ring vertex-buffer upload");
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
         glBindVertexArray(0);
@@ -485,11 +528,9 @@ BodyRenderer::BodyRenderer() : program_(create_program()) {
         glGenBuffers(1, &star_vertex_buffer_);
         glBindVertexArray(star_vertex_array_);
         glBindBuffer(GL_ARRAY_BUFFER, star_vertex_buffer_);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(stars.size() * sizeof(StarVertex)),
-            stars.data(),
-            GL_STATIC_DRAW);
+        checked_buffer_data(
+            GL_ARRAY_BUFFER, stars.size(), sizeof(StarVertex), stars.data(),
+            GL_STATIC_DRAW, "starfield vertex-buffer upload");
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(
             0, 3, GL_FLOAT, GL_FALSE, sizeof(StarVertex),
@@ -613,6 +654,10 @@ void BodyRenderer::render(
     int scene_viewport_width,
     std::optional<std::size_t> selected_body,
     std::optional<RenderMarker> barycenter_marker) const {
+    if (!render_resource_admitted(bodies.size())) {
+        throw std::length_error(
+            "renderer body count exceeds the bounded 8192-body viewer admission");
+    }
     if (framebuffer_width <= 0 || framebuffer_height <= 0) {
         return;
     }
@@ -645,11 +690,9 @@ void BodyRenderer::render(
             continue;
         }
         glBindBuffer(GL_ARRAY_BUFFER, line_vertex_buffer_);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(trail.points.size() * sizeof(glm::vec3)),
-            trail.points.data(),
-            GL_DYNAMIC_DRAW);
+        checked_buffer_data(
+            GL_ARRAY_BUFFER, trail.points.size(), sizeof(glm::vec3),
+            trail.points.data(), GL_DYNAMIC_DRAW, "trail vertex-buffer upload");
         glUniform3fv(line_color_location_, 1, glm::value_ptr(trail.color));
         glUniform1f(line_alpha_location_, trail.alpha);
         glUniform1i(line_fade_location_, trail.fade_with_age ? 1 : 0);
@@ -676,11 +719,9 @@ void BodyRenderer::render(
                 (std::cos(angle) * right + std::sin(angle) * up));
         }
         glBindBuffer(GL_ARRAY_BUFFER, line_vertex_buffer_);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(marker.size() * sizeof(glm::vec3)),
-            marker.data(),
-            GL_DYNAMIC_DRAW);
+        checked_buffer_data(
+            GL_ARRAY_BUFFER, marker.size(), sizeof(glm::vec3), marker.data(),
+            GL_DYNAMIC_DRAW, "selection marker vertex-buffer upload");
         const glm::vec3 marker_color(1.0F, 0.80F, 0.28F);
         glUniform3fv(line_color_location_, 1, glm::value_ptr(marker_color));
         glUniform1f(line_alpha_location_, 0.92F);
@@ -698,11 +739,9 @@ void BodyRenderer::render(
             marker.position - glm::vec3(0.0F, marker.radius, 0.0F),
         };
         glBindBuffer(GL_ARRAY_BUFFER, line_vertex_buffer_);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(diamond.size() * sizeof(glm::vec3)),
-            diamond.data(),
-            GL_DYNAMIC_DRAW);
+        checked_buffer_data(
+            GL_ARRAY_BUFFER, diamond.size(), sizeof(glm::vec3), diamond.data(),
+            GL_DYNAMIC_DRAW, "barycenter marker vertex-buffer upload");
         glUniform3fv(line_color_location_, 1, glm::value_ptr(marker.color));
         glUniform1f(line_alpha_location_, 0.90F);
         glUniform1i(line_fade_location_, 0);
@@ -737,11 +776,9 @@ void BodyRenderer::render(
         glUniformMatrix4fv(point_projection_location_, 1, GL_FALSE, glm::value_ptr(projection));
         glBindVertexArray(point_vertex_array_);
         glBindBuffer(GL_ARRAY_BUFFER, point_vertex_buffer_);
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(points.size() * sizeof(PointBodyVertex)),
-            points.data(),
-            GL_DYNAMIC_DRAW);
+        checked_buffer_data(
+            GL_ARRAY_BUFFER, points.size(), sizeof(PointBodyVertex), points.data(),
+            GL_DYNAMIC_DRAW, "synthetic point vertex-buffer upload");
         glDrawArrays(GL_POINTS, 0, static_cast<int>(points.size()));
     } else {
         glUseProgram(program_);

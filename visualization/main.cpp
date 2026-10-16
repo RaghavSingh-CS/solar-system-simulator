@@ -1,4 +1,5 @@
 #include "nbody/visualization/camera.hpp"
+#include "nbody/visualization/application_transaction.hpp"
 #include "nbody/visualization/conservation.hpp"
 #include "nbody/visualization/compute_comparison.hpp"
 #include "nbody/visualization/controller.hpp"
@@ -21,6 +22,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -35,6 +37,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -43,14 +46,16 @@ namespace {
 using nbody::visualization::BackendKind;
 using nbody::visualization::ScenarioKind;
 using nbody::visualization::SolverKind;
+using nbody::LargeNDistribution;
 
 struct Options {
     ScenarioKind scenario{ScenarioKind::solar_system};
     std::string backend{"sequential"};
     std::string solver{"direct"};
     double barnes_hut_theta{0.25};
-    std::size_t bodies{32};
+    std::size_t bodies{256};
     std::uint64_t seed{24301};
+    LargeNDistribution distribution{LargeNDistribution::uniform};
     int openmp_threads{4};
     int cuda_device{0};
     int width{1440};
@@ -65,8 +70,9 @@ void print_usage(const char* program) {
               << "  --theta X                         Barnes-Hut opening angle (0, 2], default 0.25\n"
               << "  --threads N                        OpenMP threads (default 4)\n"
               << "  --device N                         CUDA device index (default 0)\n"
-              << "  --bodies N                         Synthetic body count (default 32)\n"
+              << "  --bodies N                         Synthetic bodies: 256|1024|4096|8192\n"
               << "  --seed N                           Synthetic seed (default 24301)\n"
+              << "  --distribution uniform|clustered|planar  Synthetic distribution\n"
               << "  --width PIXELS --height PIXELS     Initial window size\n";
 }
 
@@ -106,6 +112,17 @@ Options parse_options(int argc, char** argv) {
             options.bodies = std::stoull(value);
         } else if (argument == "--seed") {
             options.seed = std::stoull(value);
+        } else if (argument == "--distribution") {
+            if (value == "uniform") {
+                options.distribution = LargeNDistribution::uniform;
+            } else if (value == "clustered") {
+                options.distribution = LargeNDistribution::clustered;
+            } else if (value == "planar") {
+                options.distribution = LargeNDistribution::planar;
+            } else {
+                throw std::invalid_argument(
+                    "distribution must be uniform, clustered, or planar");
+            }
         } else if (argument == "--width") {
             options.width = std::stoi(value);
         } else if (argument == "--height") {
@@ -134,8 +151,7 @@ Options parse_options(int argc, char** argv) {
     if (options.scenario == ScenarioKind::synthetic &&
         !nbody::visualization::is_supported_compute_body_count(options.bodies)) {
         throw std::invalid_argument(
-            "synthetic body count must be one of 32,64,128,256,512,1024,2048,4096,"
-            "8192,16384,32768,65536,100000");
+            "synthetic body count must be one of 256, 1024, 4096, or 8192");
     }
     return options;
 }
@@ -277,6 +293,16 @@ struct ApplicationModel {
         nbody::visualization::CounterfactualPresentationCache presentation;
     };
 
+    struct PreparedApplicationScenario {
+        nbody::visualization::PreparedApplicationScenarioTransaction core;
+        std::unique_ptr<nbody::visualization::ConservationTracker> conservation;
+        std::unique_ptr<nbody::visualization::TrailHistory> trails;
+        std::vector<bool> catalog_inclusion;
+        ExperimentUiState experiment_ui;
+        bool show_reference_orbits{false};
+        bool show_trails{false};
+    };
+
     nbody::visualization::ScenarioDefinition scenario;
     nbody::visualization::SimulationController controller;
     nbody::visualization::RenderSpaceTransform render_space;
@@ -302,13 +328,18 @@ struct ApplicationModel {
     std::optional<nbody::visualization::LiveComputeComparison> live_comparison;
     std::string live_comparison_error;
     std::string view_error;
-    std::size_t synthetic_body_count{32};
+    std::size_t synthetic_body_count{256};
     std::uint64_t synthetic_seed{24301};
+    LargeNDistribution synthetic_distribution{LargeNDistribution::uniform};
+    std::size_t synthetic_body_count_draft{256};
+    std::uint64_t synthetic_seed_draft{24301};
+    LargeNDistribution synthetic_distribution_draft{LargeNDistribution::uniform};
     int preferred_cuda_device{0};
     bool cuda_device_available{false};
     double barnes_hut_theta_draft{0.25};
     std::string solver_error;
     std::string simulation_error;
+    nbody::visualization::SimulationTimingTracker simulation_timing;
     bool show_trails{true};
     bool show_labels{true};
     bool show_reference_orbits{true};
@@ -336,7 +367,7 @@ struct ApplicationModel {
 
     ApplicationModel(const Options& options, BackendKind backend)
         : scenario(nbody::visualization::make_visual_scenario(
-              options.scenario, options.bodies, options.seed)),
+              options.scenario, options.bodies, options.seed, options.distribution)),
           controller(scenario.initial_state, controller_config(options, scenario, backend)),
           render_space(
               scenario.initial_state,
@@ -347,6 +378,10 @@ struct ApplicationModel {
           selected_body(0U),
           synthetic_body_count(options.bodies),
           synthetic_seed(options.seed),
+          synthetic_distribution(options.distribution),
+          synthetic_body_count_draft(options.bodies),
+          synthetic_seed_draft(options.seed),
+          synthetic_distribution_draft(options.distribution),
           preferred_cuda_device(options.cuda_device),
           cuda_device_available(
               nbody::visualization::SimulationController::cuda_available(options.cuda_device)) {
@@ -364,6 +399,9 @@ struct ApplicationModel {
         for (const auto& body : full_catalog.initial_state.bodies) {
             catalog_roster_names.push_back(body.name);
         }
+        if (scenario.kind == ScenarioKind::synthetic) {
+            require_admitted_workload(workload_policy());
+        }
         rebuild_optional_analysis();
         apply_workload_safety();
         reset_experiment_ui();
@@ -380,8 +418,138 @@ struct ApplicationModel {
         } else if (controller.backend_kind() == BackendKind::cuda) {
             backend = nbody::visualization::WorkloadBackend::cuda;
         }
+        const auto solver = controller.solver_kind() == SolverKind::barnes_hut
+            ? nbody::visualization::WorkloadSolver::barnes_hut
+            : nbody::visualization::WorkloadSolver::direct;
         return nbody::visualization::interactive_workload_policy(
-            synthetic_body_count, backend);
+            synthetic_body_count, backend, solver);
+    }
+
+    nbody::visualization::InteractiveWorkloadPolicy workload_policy_for(
+        BackendKind backend_kind,
+        SolverKind solver_kind,
+        std::size_t body_count) const noexcept {
+        nbody::visualization::WorkloadBackend backend =
+            nbody::visualization::WorkloadBackend::sequential;
+        if (backend_kind == BackendKind::openmp) {
+            backend = nbody::visualization::WorkloadBackend::openmp;
+        } else if (backend_kind == BackendKind::cuda) {
+            backend = nbody::visualization::WorkloadBackend::cuda;
+        }
+        const auto solver = solver_kind == SolverKind::barnes_hut
+            ? nbody::visualization::WorkloadSolver::barnes_hut
+            : nbody::visualization::WorkloadSolver::direct;
+        return nbody::visualization::interactive_workload_policy(
+            body_count, backend, solver);
+    }
+
+    static void require_admitted_workload(
+        const nbody::visualization::InteractiveWorkloadPolicy& policy) {
+        if (!policy.continuous_advancement && !policy.manual_single_step) {
+            throw std::invalid_argument(policy.explanation);
+        }
+    }
+
+    void select_backend_admitted(
+        BackendKind backend,
+        int openmp_threads = 1,
+        int cuda_device = 0) {
+        if (scenario.kind == ScenarioKind::synthetic) {
+            require_admitted_workload(workload_policy_for(
+                backend, controller.solver_kind(), synthetic_body_count));
+        }
+        nbody::visualization::select_application_backend(
+            controller, simulation_timing, backend, openmp_threads, cuda_device);
+        apply_workload_safety();
+    }
+
+    void select_solver_admitted(
+        SolverKind solver,
+        const nbody::BarnesHutConfiguration& barnes_hut) {
+        if (scenario.kind == ScenarioKind::synthetic) {
+            require_admitted_workload(workload_policy_for(
+                controller.backend_kind(), solver, synthetic_body_count));
+        }
+        nbody::visualization::select_application_solver(
+            controller, simulation_timing, solver, barnes_hut);
+        apply_workload_safety();
+    }
+
+    void set_steps_per_frame(std::size_t steps) {
+        nbody::visualization::set_application_steps_per_frame(
+            controller, simulation_timing, steps);
+    }
+
+    static ExperimentUiState make_experiment_ui(
+        const nbody::visualization::ScenarioDefinition& next_scenario) {
+        ExperimentUiState result;
+        result.observation_horizon_s =
+            next_scenario.kind == ScenarioKind::astronomical_catalog
+                ? 86400.0 : 30.0 * 86400.0;
+        result.sample_cadence_s =
+            next_scenario.kind == ScenarioKind::astronomical_catalog
+                ? 3600.0 : 86400.0;
+        result.monitored.assign(next_scenario.stable_ids.size(), true);
+        const auto candidates =
+            nbody::visualization::counterfactual_removal_candidates(next_scenario);
+        if (!candidates.empty()) {
+            result.removed_body_stable_id = candidates.front();
+        }
+        return result;
+    }
+
+    PreparedApplicationScenario prepare_scenario(
+        ScenarioKind kind,
+        std::size_t bodies,
+        std::uint64_t seed,
+        LargeNDistribution distribution,
+        const std::vector<std::string>& catalog_subset) const {
+        std::unique_ptr<nbody::visualization::ConservationTracker> next_conservation;
+        std::unique_ptr<nbody::visualization::TrailHistory> next_trails;
+        std::vector<bool> next_catalog_inclusion = catalog_inclusion_draft;
+        ExperimentUiState next_experiment_ui;
+        bool next_show_trails = false;
+        bool next_show_reference_orbits = false;
+        auto core = nbody::visualization::prepare_application_scenario_transaction(
+            kind, bodies, seed, distribution, catalog_subset, controller,
+            experiment_gate,
+            [&](const nbody::visualization::PreparedScenarioReplacement& visual) {
+                const bool full_analysis =
+                    visual.scenario.kind != ScenarioKind::synthetic ||
+                    visual.scenario.initial_state.bodies.size() <= 1024U;
+                if (full_analysis) {
+                    next_conservation =
+                        std::make_unique<nbody::visualization::ConservationTracker>(
+                            visual.scenario.initial_state);
+                    next_trails = std::make_unique<nbody::visualization::TrailHistory>(
+                        visual.scenario.initial_state, 768,
+                        visual.scenario.trail_sample_interval_s);
+                }
+                if (visual.scenario.kind == ScenarioKind::astronomical_catalog) {
+                    for (std::size_t index = 0;
+                         index < catalog_roster_ids.size(); ++index) {
+                        next_catalog_inclusion[index] =
+                            nbody::visualization::find_body_index(
+                                visual.scenario, catalog_roster_ids[index]).has_value();
+                    }
+                }
+                next_experiment_ui = make_experiment_ui(visual.scenario);
+                next_show_trails =
+                    visual.scenario.kind != ScenarioKind::synthetic ||
+                    visual.scenario.initial_state.bodies.size() <= 1024U;
+                next_show_reference_orbits =
+                    visual.scenario.kind == ScenarioKind::solar_system;
+            }
+        );
+        return {
+            std::move(core),
+            std::move(next_conservation),
+            std::move(next_trails),
+            std::move(next_catalog_inclusion),
+            std::move(next_experiment_ui),
+            next_show_reference_orbits,
+            next_show_trails,
+        };
     }
 
     void rebuild_optional_analysis() {
@@ -410,43 +578,43 @@ struct ApplicationModel {
         ScenarioKind kind,
         std::size_t bodies,
         std::uint64_t seed,
+        LargeNDistribution distribution,
         const std::vector<std::string>& catalog_subset = {}) {
-        experiment_worker.request_cancel();
-        auto next = kind == ScenarioKind::astronomical_catalog
-            ? nbody::visualization::make_astronomical_catalog_scenario(catalog_subset)
-            : nbody::visualization::make_visual_scenario(kind, bodies, seed);
-        experiment_gate.replace_scenario();
-        experiment_publication = {};
-        const std::size_t next_speed = next.default_speed_index;
-        controller.replace_scenario(
-            next.initial_state, next.dt_s, next.speed_presets[next_speed].steps_per_frame);
-        scenario = std::move(next);
-        render_space = nbody::visualization::RenderSpaceTransform(
-            scenario.initial_state, scenario.styles, 9.0F, scenario.default_radius_multiplier);
+        auto prepared = prepare_scenario(kind, bodies, seed, distribution, catalog_subset);
+        const std::size_t next_speed = prepared.core.visual.speed_index;
+        const std::size_t next_selected_body = prepared.core.visual.selected_body;
+        static_assert(std::is_nothrow_move_assignable_v<ExperimentUiState>);
+        nbody::visualization::commit_application_scenario_transaction(
+            std::move(prepared.core), {
+                controller,
+                scenario,
+                render_space,
+                profile_visibility,
+                individual_visibility,
+                experiment_gate,
+                experiment_worker,
+                experiment_publication,
+                experiment_ui.presentation,
+                simulation_timing,
+            });
+        conservation.swap(prepared.conservation);
+        trails.swap(prepared.trails);
+        catalog_inclusion_draft.swap(prepared.catalog_inclusion);
+        experiment_ui = std::move(prepared.experiment_ui);
         speed_index = next_speed;
-        selected_body = 0U;
-        if (const auto earth = nbody::visualization::find_body_index(
-                scenario, scenario.kind == ScenarioKind::astronomical_catalog
-                    ? "sol:earth" : "earth")) {
-            selected_body = *earth;
-        }
-        profile_visibility.assign(scenario.initial_state.bodies.size(), true);
-        individual_visibility.assign(scenario.initial_state.bodies.size(), true);
+        selected_body = next_selected_body;
         class_visibility.fill(true);
         if (scenario.kind == ScenarioKind::synthetic) {
-            synthetic_body_count = bodies;
-            synthetic_seed = seed;
-        } else if (scenario.kind == ScenarioKind::astronomical_catalog) {
-            for (std::size_t index = 0; index < catalog_roster_ids.size(); ++index) {
-                catalog_inclusion_draft[index] =
-                    nbody::visualization::find_body_index(
-                        scenario, catalog_roster_ids[index]).has_value();
-            }
+            synthetic_body_count = scenario.initial_state.bodies.size();
+            synthetic_seed = *scenario.synthetic_seed;
+            synthetic_distribution = *scenario.synthetic_distribution;
+            synthetic_body_count_draft = synthetic_body_count;
+            synthetic_seed_draft = synthetic_seed;
+            synthetic_distribution_draft = synthetic_distribution;
         }
         show_labels = true;
-        show_reference_orbits = scenario.kind == ScenarioKind::solar_system;
-        show_trails = scenario.kind != ScenarioKind::synthetic || bodies <= 1024;
-        rebuild_optional_analysis();
+        show_reference_orbits = prepared.show_reference_orbits;
+        show_trails = prepared.show_trails;
         apply_workload_safety();
         label_layout.clear();
         live_comparison.reset();
@@ -456,7 +624,6 @@ struct ApplicationModel {
         focused_body.reset();
         local_origin_body.reset();
         trail_reference_body.reset();
-        reset_experiment_ui();
     }
 
     bool astronomical() const noexcept {
@@ -464,19 +631,7 @@ struct ApplicationModel {
     }
 
     void reset_experiment_ui() {
-        experiment_ui = {};
-        experiment_ui.observation_horizon_s =
-            scenario.kind == ScenarioKind::astronomical_catalog
-                ? 86400.0 : 30.0 * 86400.0;
-        experiment_ui.sample_cadence_s =
-            scenario.kind == ScenarioKind::astronomical_catalog
-                ? 3600.0 : 86400.0;
-        experiment_ui.monitored.assign(scenario.stable_ids.size(), true);
-        const auto candidates =
-            nbody::visualization::counterfactual_removal_candidates(scenario);
-        if (!candidates.empty()) {
-            experiment_ui.removed_body_stable_id = candidates.front();
-        }
+        experiment_ui = make_experiment_ui(scenario);
     }
 
     void refresh_experiment_publication() {
@@ -538,6 +693,7 @@ struct ApplicationModel {
         experiment_ui.error.clear();
         controller.reset();
         simulation_error.clear();
+        simulation_timing.invalidate();
         if (conservation) {
             conservation->reset(controller.state());
         }
@@ -691,7 +847,15 @@ void key_callback(GLFWwindow* window, int key, int, int action, int) {
         if (key == GLFW_KEY_ESCAPE && initial_press) {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         } else if (key == GLFW_KEY_SPACE && initial_press) {
-            app.controller.toggle_paused();
+            if (app.scenario.kind == ScenarioKind::synthetic &&
+                !app.workload_policy().continuous_advancement) {
+                app.controller.set_paused(true);
+                app.solver_error =
+                    "Continuous advancement is not admitted for this synthetic workload; "
+                    "use an enabled bounded manual step.";
+            } else {
+                app.controller.toggle_paused();
+            }
         } else if (key == GLFW_KEY_R && initial_press) {
             app.reset();
         } else if (key == GLFW_KEY_C && initial_press) {
@@ -706,13 +870,15 @@ void key_callback(GLFWwindow* window, int key, int, int action, int) {
             app.render_space.configure_view(app.controller.state(), {}, indices, 8.0F);
             input->camera->reset();
         } else if (key == GLFW_KEY_1 && initial_press) {
-            app.controller.select_backend(BackendKind::sequential);
+            app.select_backend_admitted(BackendKind::sequential);
             log_backend(app.controller);
         } else if (key == GLFW_KEY_2 && initial_press) {
-            app.controller.select_backend(BackendKind::openmp, input->preferred_openmp_threads);
+            app.select_backend_admitted(
+                BackendKind::openmp, input->preferred_openmp_threads);
             log_backend(app.controller);
         } else if (key == GLFW_KEY_3 && initial_press) {
-            app.controller.select_backend(BackendKind::cuda, 1, app.preferred_cuda_device);
+            app.select_backend_admitted(
+                BackendKind::cuda, 1, app.preferred_cuda_device);
             log_backend(app.controller);
         } else if (key == GLFW_KEY_A) {
             input->camera->orbit(-8.0F, 0.0F);
@@ -1111,7 +1277,7 @@ nbody::experiments::ExperimentSnapshot make_ui_experiment_snapshot(
 
 struct UiActions {
     std::optional<ScenarioKind> scenario;
-    std::optional<std::size_t> synthetic_body_count;
+    bool apply_synthetic_configuration{false};
     std::optional<std::vector<std::string>> catalog_subset;
     std::optional<nbody::visualization::CameraPreset> camera_preset;
     bool reset{false};
@@ -1397,8 +1563,10 @@ UiActions draw_control_panel(
     help_for_last_item(nbody::visualization::HelpTopic::scenario);
     if (app.scenario.kind == ScenarioKind::synthetic) {
         ImGui::TextWrapped(
-            "Deterministic direct N-body workload: N=%zu, seed=%llu",
+            "Deterministic synthetic scene: N=%zu, distribution=%s, seed=%llu",
             app.synthetic_body_count,
+            nbody::visualization::synthetic_distribution_name(
+                app.synthetic_distribution),
             static_cast<unsigned long long>(app.synthetic_seed));
     }
     if (app.scenario.kind == ScenarioKind::astronomical_catalog &&
@@ -1466,7 +1634,20 @@ UiActions draw_control_panel(
                                 : ImVec4(0.40F, 0.88F, 0.62F, 1.0F),
         "%s", app.controller.paused() ? "Paused" : "Running");
     if (begin_property_table("simulation_summary")) {
+        property_row("Active scenario", app.scenario.name);
+        property_row("Bodies", std::to_string(app.controller.state().bodies.size()));
         property_row("Simulated time", human_time(app.controller.state().time_s));
+        property_row("Fixed timestep",
+            nbody::visualization::format_measurement(app.controller.dt_s(), "s", 3));
+        const auto& simulation_timing = app.simulation_timing.sample();
+        property_row("Live simulation timing",
+            simulation_timing
+                ? nbody::visualization::format_measurement(
+                      simulation_timing->batch_milliseconds, "ms/batch", 3) + "; " +
+                      nbody::visualization::format_measurement(
+                          simulation_timing->simulation_steps_per_second,
+                          "steps/s", 3)
+                : "Not measured for the active execution configuration");
         ImGui::EndTable();
     }
 
@@ -1480,7 +1661,7 @@ UiActions draw_control_panel(
     if (ImGui::Combo("##SimulationSpeed", &speed_index, speed_names.data(),
                      static_cast<int>(speed_names.size()))) {
         app.speed_index = static_cast<std::size_t>(speed_index);
-        app.controller.set_steps_per_frame(
+        app.set_steps_per_frame(
             app.scenario.speed_presets[app.speed_index].steps_per_frame);
     }
     help_for_last_item(nbody::visualization::HelpTopic::simulation_speed);
@@ -1490,10 +1671,9 @@ UiActions draw_control_panel(
     section_heading("Compute Backend");
     if (ImGui::RadioButton("Sequential", app.controller.backend_kind() == BackendKind::sequential)) {
         try {
-            app.controller.select_backend(BackendKind::sequential);
+            app.select_backend_admitted(BackendKind::sequential);
             app.solver_error.clear();
             app.live_comparison.reset();
-            app.apply_workload_safety();
         } catch (const std::exception& error) {
             app.solver_error = error.what();
         }
@@ -1503,10 +1683,10 @@ UiActions draw_control_panel(
     ImGui::BeginDisabled(!openmp_available);
     if (ImGui::RadioButton("OpenMP", app.controller.backend_kind() == BackendKind::openmp)) {
         try {
-            app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+            app.select_backend_admitted(
+                BackendKind::openmp, preferred_openmp_threads);
             app.solver_error.clear();
             app.live_comparison.reset();
-            app.apply_workload_safety();
         } catch (const std::exception& error) {
             app.solver_error = error.what();
         }
@@ -1518,10 +1698,10 @@ UiActions draw_control_panel(
     ImGui::BeginDisabled(!app.cuda_device_available || cuda_barnes_hut_blocked);
     if (ImGui::RadioButton("CUDA", app.controller.backend_kind() == BackendKind::cuda)) {
         try {
-            app.controller.select_backend(BackendKind::cuda, 1, app.preferred_cuda_device);
+            app.select_backend_admitted(
+                BackendKind::cuda, 1, app.preferred_cuda_device);
             app.solver_error.clear();
             app.live_comparison.reset();
-            app.apply_workload_safety();
         } catch (const std::exception& error) {
             app.solver_error = error.what();
         }
@@ -1547,9 +1727,9 @@ UiActions draw_control_panel(
                 "%d threads")) {
             if (app.controller.backend_kind() == BackendKind::openmp) {
                 try {
-                    app.controller.select_backend(BackendKind::openmp, preferred_openmp_threads);
+                    app.select_backend_admitted(
+                        BackendKind::openmp, preferred_openmp_threads);
                     app.solver_error.clear();
-                    app.apply_workload_safety();
                 } catch (const std::exception& error) {
                     app.solver_error = error.what();
                 }
@@ -1564,12 +1744,11 @@ UiActions draw_control_panel(
     if (ImGui::RadioButton(
             "Direct O(N^2)", app.controller.solver_kind() == SolverKind::direct)) {
         try {
-            app.controller.select_solver(
+            app.select_solver_admitted(
                 SolverKind::direct, app.controller.barnes_hut_configuration());
             app.solver_error.clear();
             app.live_comparison.reset();
             app.live_comparison_error.clear();
-            app.apply_workload_safety();
         } catch (const std::exception& error) {
             app.solver_error = error.what();
         }
@@ -1580,11 +1759,10 @@ UiActions draw_control_panel(
         try {
             auto configuration = app.controller.barnes_hut_configuration();
             configuration.theta = app.barnes_hut_theta_draft;
-            app.controller.select_solver(SolverKind::barnes_hut, configuration);
+            app.select_solver_admitted(SolverKind::barnes_hut, configuration);
             app.solver_error.clear();
             app.live_comparison.reset();
             app.live_comparison_error.clear();
-            app.apply_workload_safety();
         } catch (const std::exception& error) {
             app.solver_error = error.what();
         }
@@ -1610,7 +1788,7 @@ UiActions draw_control_panel(
         try {
             auto configuration = app.controller.barnes_hut_configuration();
             configuration.theta = app.barnes_hut_theta_draft;
-            app.controller.select_solver(SolverKind::barnes_hut, configuration);
+            app.select_solver_admitted(SolverKind::barnes_hut, configuration);
             app.solver_error.clear();
             app.live_comparison.reset();
             app.live_comparison_error.clear();
@@ -1673,24 +1851,42 @@ UiActions draw_control_panel(
                 "monopole approximation. Theta 0.25 is provisional and distribution-dependent.");
         }
     } else {
-        const std::string current_count = std::to_string(app.synthetic_body_count);
+        const std::string current_count = std::to_string(app.synthetic_body_count_draft);
         ImGui::SetNextItemWidth(-1.0F);
         if (ImGui::BeginCombo("Workload size", current_count.c_str())) {
             for (const std::size_t count : nbody::visualization::compute_body_counts) {
                 const std::string label = std::to_string(count);
-                if (ImGui::Selectable(label.c_str(), app.synthetic_body_count == count)) {
-                    actions.synthetic_body_count = count;
+                if (ImGui::Selectable(
+                        label.c_str(), app.synthetic_body_count_draft == count)) {
+                    app.synthetic_body_count_draft = count;
                 }
             }
             ImGui::EndCombo();
         }
         help_for_last_item(nbody::visualization::HelpTopic::workload_size);
+        constexpr const char* distribution_names[] = {
+            "Uniform volume", "Four clusters", "Thin planar disk"};
+        int distribution_index = static_cast<int>(app.synthetic_distribution_draft);
+        ImGui::SetNextItemWidth(-1.0F);
+        if (ImGui::Combo(
+                "Distribution", &distribution_index, distribution_names, 3)) {
+            app.synthetic_distribution_draft =
+                static_cast<LargeNDistribution>(distribution_index);
+        }
+        unsigned long long seed =
+            static_cast<unsigned long long>(app.synthetic_seed_draft);
+        ImGui::SetNextItemWidth(-1.0F);
+        if (ImGui::InputScalar("Deterministic seed", ImGuiDataType_U64, &seed)) {
+            app.synthetic_seed_draft = static_cast<std::uint64_t>(seed);
+        }
+        if (ImGui::Button("Apply synthetic scene", {220.0F, 0.0F})) {
+            actions.apply_synthetic_configuration = true;
+        }
+        ImGui::TextDisabled(
+            "Applying replaces the physical scene and invalidates prior diagnostics and overlays.");
         if (workload_policy.warning_required) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96F, 0.72F, 0.32F, 1.0F));
-            ImGui::TextWrapped(
-                app.controller.solver_kind() == SolverKind::direct
-                    ? "Direct O(N^2) workload: continuous advancement is paused to keep the viewer responsive."
-                    : "Bounded Barnes-Hut workload: continuous advancement is paused to keep the viewer responsive; tree, traversal, and memory limits still apply.");
+            ImGui::TextWrapped("%s", workload_policy.explanation);
             if (!workload_policy.manual_single_step) {
                 ImGui::TextWrapped(
                     "This size is rendering/inspection only here; use the bounded pilot runner for computation.");
@@ -2542,8 +2738,8 @@ UiActions draw_control_panel(
     if (ImGui::CollapsingHeader("Advanced / Technical Details")) {
         help_for_last_item(nbody::visualization::HelpTopic::advanced_details);
         ImGui::TextWrapped("%s", app.scenario.provenance.c_str());
-        ImGui::TextWrapped("Solver: direct O(N^2) point-mass Velocity Verlet (%s)",
-                           app.controller.backend_name());
+        ImGui::TextWrapped("Execution: %s / %s point-mass Velocity Verlet",
+                           app.controller.backend_name(), app.controller.solver_name());
         if (!app.scenario.scientific_limitations.empty()) {
             ImGui::TextWrapped("Scientific limitations: %s",
                                app.scenario.scientific_limitations.c_str());
@@ -2569,8 +2765,10 @@ UiActions draw_control_panel(
             help_for_last_item(nbody::visualization::HelpTopic::trail_history);
         }
         if (app.scenario.kind == ScenarioKind::synthetic) {
-            ImGui::TextWrapped("Deterministic workload: N=%zu, seed=%llu",
+            ImGui::TextWrapped("Deterministic scene: N=%zu, %s, seed=%llu",
                                app.synthetic_body_count,
+                               nbody::visualization::synthetic_distribution_name(
+                                   app.synthetic_distribution),
                                static_cast<unsigned long long>(app.synthetic_seed));
         }
         const float fps = ImGui::GetIO().Framerate;
@@ -2753,7 +2951,28 @@ int main(int argc, char** argv) {
             }
 
             try {
-                app.controller.advance_frame();
+                if (!app.controller.paused()) {
+                    const auto policy = app.workload_policy();
+                    if (app.scenario.kind == ScenarioKind::synthetic &&
+                        !policy.continuous_advancement) {
+                        app.controller.set_paused(true);
+                        app.solver_error = policy.explanation;
+                        throw std::runtime_error(policy.explanation);
+                    }
+                    const auto started = std::chrono::steady_clock::now();
+                    const std::size_t steps = app.controller.steps_per_frame();
+                    const std::uint64_t timing_generation =
+                        app.simulation_timing.generation();
+                    app.controller.advance_frame();
+                    const double elapsed_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - started).count();
+                    app.simulation_timing.publish(
+                        timing_generation,
+                        elapsed_ms,
+                        elapsed_ms > 0.0
+                            ? static_cast<double>(steps) * 1000.0 / elapsed_ms
+                            : 0.0);
+                }
                 app.simulation_error.clear();
             } catch (const std::exception& error) {
                 app.simulation_error = app.controller.last_error().empty()
@@ -2794,7 +3013,22 @@ int main(int argc, char** argv) {
             }
             if (actions.advance_one_step) {
                 try {
+                    const auto policy = app.workload_policy();
+                    if (app.scenario.kind == ScenarioKind::synthetic &&
+                        !policy.manual_single_step) {
+                        app.solver_error = policy.explanation;
+                        throw std::runtime_error(policy.explanation);
+                    }
+                    const auto started = std::chrono::steady_clock::now();
+                    const std::uint64_t timing_generation =
+                        app.simulation_timing.generation();
                     app.controller.advance_steps(1);
+                    const double elapsed_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - started).count();
+                    app.simulation_timing.publish(
+                        timing_generation,
+                        elapsed_ms,
+                        elapsed_ms > 0.0 ? 1000.0 / elapsed_ms : 0.0);
                     app.simulation_error.clear();
                     if (app.trails) {
                         app.trails->sample(app.controller.state());
@@ -2810,24 +3044,37 @@ int main(int argc, char** argv) {
                               << app.simulation_error << '\n';
                 }
             }
-            if (actions.synthetic_body_count) {
-                app.switch_scenario(
-                    ScenarioKind::synthetic, *actions.synthetic_body_count, app.synthetic_seed);
-                camera.reset();
-                state_replaced = true;
-            } else if (actions.catalog_subset) {
-                app.switch_scenario(
-                    ScenarioKind::astronomical_catalog,
-                    app.synthetic_body_count,
-                    app.synthetic_seed,
-                    *actions.catalog_subset);
-                camera.reset();
-                state_replaced = true;
-            } else if (actions.scenario) {
-                app.switch_scenario(
-                    *actions.scenario, app.synthetic_body_count, app.synthetic_seed);
-                camera.reset();
-                state_replaced = true;
+            try {
+                if (actions.apply_synthetic_configuration) {
+                    app.switch_scenario(
+                        ScenarioKind::synthetic,
+                        app.synthetic_body_count_draft,
+                        app.synthetic_seed_draft,
+                        app.synthetic_distribution_draft);
+                    camera.reset();
+                    state_replaced = true;
+                } else if (actions.catalog_subset) {
+                    app.switch_scenario(
+                        ScenarioKind::astronomical_catalog,
+                        app.synthetic_body_count,
+                        app.synthetic_seed,
+                        app.synthetic_distribution,
+                        *actions.catalog_subset);
+                    camera.reset();
+                    state_replaced = true;
+                } else if (actions.scenario) {
+                    app.switch_scenario(
+                        *actions.scenario,
+                        app.synthetic_body_count_draft,
+                        app.synthetic_seed_draft,
+                        app.synthetic_distribution_draft);
+                    camera.reset();
+                    state_replaced = true;
+                }
+            } catch (const std::exception& error) {
+                app.view_error = error.what();
+                std::cerr << "scenario replacement rejected; active state was preserved: "
+                          << app.view_error << '\n';
             }
             if (state_replaced) {
                 refresh_render_origin(app);
@@ -2880,6 +3127,15 @@ int main(int argc, char** argv) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             glfwSwapBuffers(window.get());
         }
+        std::cout << "live_display_fps_not_benchmark=" << ImGui::GetIO().Framerate
+                  << " live_simulation_batch_ms_not_benchmark="
+                  << (app.simulation_timing.sample()
+                          ? app.simulation_timing.sample()->batch_milliseconds : 0.0)
+                  << " live_simulation_steps_per_second_not_benchmark="
+                  << (app.simulation_timing.sample()
+                          ? app.simulation_timing.sample()->simulation_steps_per_second
+                          : 0.0)
+                  << '\n';
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "visualization error: " << error.what() << '\n';

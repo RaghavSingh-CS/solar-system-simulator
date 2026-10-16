@@ -1,4 +1,4 @@
-#include "nbody/visualization/scenario.hpp"
+#include "nbody/visualization/application_transaction.hpp"
 
 #include "nbody/astronomy/solar_system_60.hpp"
 #include "nbody/scenarios.hpp"
@@ -7,8 +7,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstring>
+#include <iomanip>
+#include <limits>
 #include <set>
+#include <sstream>
 #include <stdexcept>
+#include <type_traits>
+#include <tuple>
+#include <unordered_set>
 #include <utility>
 
 namespace nbody::visualization {
@@ -105,6 +113,127 @@ void append_legacy_metadata(ScenarioDefinition& result) {
     }
 }
 
+// This is the presentation adapter for the committed Large-N generator. It
+// deliberately preserves that generator's SplitMix64 sequence, distribution
+// geometry, SI scales, mass order, identity format, and barycentric reduction.
+// Keeping the adapter here avoids changing CMakeLists.txt, whose exact bytes are
+// part of the immutable L1/L2 benchmark source custody.
+class ViewerSplitMix64 {
+public:
+    explicit ViewerSplitMix64(std::uint64_t seed) : state_(seed) {}
+
+    std::uint64_t next() noexcept {
+        std::uint64_t value = (state_ += 0x9e3779b97f4a7c15ULL);
+        value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+        value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
+        return value ^ (value >> 31U);
+    }
+
+    double unit() noexcept {
+        return static_cast<double>(next() >> 11U) * 0x1.0p-53;
+    }
+
+    double symmetric() noexcept { return 2.0 * unit() - 1.0; }
+
+private:
+    std::uint64_t state_;
+};
+
+std::uint64_t binary64_bits(double value) noexcept {
+    std::uint64_t result = 0;
+    static_assert(sizeof(result) == sizeof(value), "binary64 storage is required");
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
+}
+
+Vec3 viewer_generated_position(
+    ViewerSplitMix64& random,
+    LargeNDistribution distribution,
+    std::size_t index) {
+    constexpr double scale = 1.0e9;
+    if (distribution == LargeNDistribution::uniform) {
+        return {scale * random.symmetric(), scale * random.symmetric(),
+                scale * random.symmetric()};
+    }
+    if (distribution == LargeNDistribution::clustered) {
+        constexpr double centers[4][3] = {
+            {-0.55, -0.25, 0.15}, {0.48, -0.38, -0.20},
+            {-0.20, 0.55, -0.35}, {0.42, 0.40, 0.38},
+        };
+        const auto& center = centers[index % 4U];
+        constexpr double radius = 0.08;
+        return {
+            scale * (center[0] + radius * random.symmetric()),
+            scale * (center[1] + radius * random.symmetric()),
+            scale * (center[2] + radius * random.symmetric()),
+        };
+    }
+    if (distribution == LargeNDistribution::planar) {
+        constexpr double thickness = 0.01;
+        return {scale * random.symmetric(), scale * random.symmetric(),
+                scale * thickness * random.symmetric()};
+    }
+    throw std::invalid_argument("unknown synthetic distribution");
+}
+
+SimulationState make_viewer_large_n_synthetic_system(
+    std::size_t body_count,
+    std::uint64_t seed,
+    LargeNDistribution distribution) {
+    ViewerSplitMix64 random(seed);
+    SimulationState state;
+    state.bodies.reserve(body_count);
+    std::set<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>> positions;
+    for (std::size_t index = 0; index < body_count; ++index) {
+        Vec3 position;
+        bool unique = false;
+        for (int attempt = 0; attempt < 16 && !unique; ++attempt) {
+            position = viewer_generated_position(random, distribution, index);
+            unique = positions.emplace(
+                binary64_bits(position.x), binary64_bits(position.y),
+                binary64_bits(position.z)).second;
+        }
+        if (!unique) {
+            throw std::domain_error(
+                "Large-N viewer generator could not produce a unique body position");
+        }
+        Body body;
+        std::ostringstream identity;
+        identity << "large_n_" << std::setw(8) << std::setfill('0') << index;
+        body.name = identity.str();
+        body.mass_kg = 1.0e20 + 9.0e20 * random.unit();
+        body.position_m = position;
+        body.velocity_m_s = {
+            100.0 * random.symmetric(),
+            100.0 * random.symmetric(),
+            100.0 * random.symmetric(),
+        };
+        state.bodies.push_back(std::move(body));
+    }
+
+    double total_mass = 0.0;
+    Vec3 weighted_position;
+    Vec3 momentum;
+    for (const auto& body : state.bodies) {
+        total_mass += body.mass_kg;
+        weighted_position += body.position_m * body.mass_kg;
+        momentum += body.velocity_m_s * body.mass_kg;
+    }
+    if (!(total_mass > 0.0) || !std::isfinite(total_mass) ||
+        !std::isfinite(weighted_position.x) || !std::isfinite(weighted_position.y) ||
+        !std::isfinite(weighted_position.z) || !std::isfinite(momentum.x) ||
+        !std::isfinite(momentum.y) || !std::isfinite(momentum.z)) {
+        throw std::domain_error("Large-N viewer barycentric reduction is nonrepresentable");
+    }
+    const Vec3 center = weighted_position / total_mass;
+    const Vec3 center_velocity = momentum / total_mass;
+    for (auto& body : state.bodies) {
+        body.position_m -= center;
+        body.velocity_m_s -= center_velocity;
+    }
+    return state;
+}
+
 }  // namespace
 
 const char* astronomical_body_class_name(
@@ -120,6 +249,60 @@ const char* astronomical_body_class_name(
             return "Trans-Neptunian object";
     }
     return "Unknown";
+}
+
+const char* synthetic_distribution_name(LargeNDistribution distribution) noexcept {
+    switch (distribution) {
+        case LargeNDistribution::uniform: return "uniform";
+        case LargeNDistribution::clustered: return "clustered";
+        case LargeNDistribution::planar: return "planar";
+    }
+    return "unknown";
+}
+
+bool valid_synthetic_distribution(LargeNDistribution distribution) noexcept {
+    return distribution == LargeNDistribution::uniform ||
+        distribution == LargeNDistribution::clustered ||
+        distribution == LargeNDistribution::planar;
+}
+
+void validate_visual_scenario(const ScenarioDefinition& scenario) {
+    const std::size_t body_count = scenario.initial_state.bodies.size();
+    if (body_count == 0U || !std::isfinite(scenario.initial_state.time_s) ||
+        !(scenario.dt_s > 0.0) || !std::isfinite(scenario.dt_s) ||
+        scenario.speed_presets.empty() ||
+        scenario.default_speed_index >= scenario.speed_presets.size() ||
+        !(scenario.trail_sample_interval_s > 0.0) ||
+        !std::isfinite(scenario.trail_sample_interval_s) ||
+        scenario.stable_ids.size() != body_count ||
+        scenario.body_metadata.size() != body_count ||
+        scenario.styles.size() != body_count) {
+        throw std::invalid_argument("visual scenario structure is invalid");
+    }
+    std::unordered_set<std::string> stable_ids;
+    stable_ids.reserve(body_count);
+    const auto finite_vector = [](const Vec3& value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) &&
+            std::isfinite(value.z);
+    };
+    for (std::size_t index = 0; index < body_count; ++index) {
+        const auto& body = scenario.initial_state.bodies[index];
+        if (body.name.empty() || !(body.mass_kg > 0.0) ||
+            !std::isfinite(body.mass_kg) || !finite_vector(body.position_m) ||
+            !finite_vector(body.velocity_m_s) || scenario.stable_ids[index].empty() ||
+            scenario.body_metadata[index].stable_id != scenario.stable_ids[index] ||
+            !stable_ids.insert(scenario.stable_ids[index]).second) {
+            throw std::invalid_argument("visual scenario body identity or state is invalid");
+        }
+    }
+    if (scenario.kind == ScenarioKind::synthetic) {
+        if (!is_supported_compute_body_count(body_count) ||
+            !scenario.synthetic_distribution.has_value() ||
+            !valid_synthetic_distribution(*scenario.synthetic_distribution) ||
+            !scenario.synthetic_seed.has_value() || !render_resource_admitted(body_count)) {
+            throw std::invalid_argument("synthetic visual scenario admission is invalid");
+        }
+    }
 }
 
 std::optional<std::size_t> find_body_index(
@@ -223,7 +406,8 @@ ScenarioDefinition make_astronomical_catalog_scenario(
 ScenarioDefinition make_visual_scenario(
     ScenarioKind kind,
     std::size_t synthetic_body_count,
-    std::uint64_t synthetic_seed) {
+    std::uint64_t synthetic_seed,
+    LargeNDistribution synthetic_distribution) {
     ScenarioDefinition result;
     result.kind = kind;
 
@@ -263,10 +447,32 @@ ScenarioDefinition make_visual_scenario(
         return make_astronomical_catalog_scenario();
     }
 
-    result.name = "Compute Experiment";
-    result.provenance = "deterministic seed fixture; not the Solar System";
-    result.initial_state = make_seeded_synthetic_system(synthetic_body_count, synthetic_seed);
+    if (kind != ScenarioKind::synthetic) {
+        throw std::invalid_argument("unknown visualization scenario kind");
+    }
+
+    if (!is_supported_compute_body_count(synthetic_body_count)) {
+        throw std::invalid_argument(
+            "synthetic viewer body count must be one of 256, 1024, 4096, or 8192");
+    }
+    if (!valid_synthetic_distribution(synthetic_distribution)) {
+        throw std::invalid_argument(
+            "synthetic distribution must be uniform, clustered, or planar");
+    }
+    result.name = "Synthetic N-body Sandbox";
+    result.provenance = "deterministic Large-N generator; distribution=" +
+        std::string(synthetic_distribution_name(synthetic_distribution)) + "; seed=" +
+        std::to_string(synthetic_seed) + "; not an astronomical ephemeris";
+    result.initial_state = make_viewer_large_n_synthetic_system(
+        synthetic_body_count, synthetic_seed, synthetic_distribution);
+    result.synthetic_distribution = synthetic_distribution;
+    result.synthetic_seed = synthetic_seed;
     result.dt_s = 10.0;
+    result.timestep_validation_complete = false;
+    result.scientific_limitations =
+        "Synthetic deterministic point masses are a compute/visualization fixture, not an "
+        "astronomical model. The 10-second timestep is a bounded demonstration setting, "
+        "not a general accuracy guarantee.";
     const std::size_t balanced_steps = synthetic_body_count > 1024 ? 1 :
         synthetic_body_count <= 64 ? 32 :
         synthetic_body_count <= 128 ? 16 :
@@ -283,7 +489,7 @@ ScenarioDefinition make_visual_scenario(
     result.default_radius_multiplier = 1.0F;
     result.label_policy = LabelPolicy::selected_only;
     for (std::size_t index = 0; index < result.initial_state.bodies.size(); ++index) {
-        result.stable_ids.push_back("synthetic_" + std::to_string(index));
+        result.stable_ids.push_back("synthetic:" + result.initial_state.bodies[index].name);
         result.styles.push_back({
             synthetic_colors[index % synthetic_colors.size()],
             0.0,
@@ -297,6 +503,226 @@ ScenarioDefinition make_visual_scenario(
         });
     }
     return result;
+}
+
+PreparedScenarioReplacement prepare_visual_scenario_replacement(
+    ScenarioKind kind,
+    std::size_t synthetic_body_count,
+    std::uint64_t synthetic_seed,
+    LargeNDistribution synthetic_distribution,
+    const std::vector<std::string>& included_stable_ids) {
+    ScenarioDefinition candidate = kind == ScenarioKind::astronomical_catalog
+        ? make_astronomical_catalog_scenario(included_stable_ids)
+        : make_visual_scenario(
+            kind, synthetic_body_count, synthetic_seed, synthetic_distribution);
+    validate_visual_scenario(candidate);
+    const std::size_t speed_index = candidate.default_speed_index;
+    std::size_t selected_body = 0U;
+    if (const auto earth = find_body_index(
+            candidate, candidate.kind == ScenarioKind::astronomical_catalog
+                ? "sol:earth" : "earth")) {
+        selected_body = *earth;
+    }
+    RenderSpaceTransform render_space(
+        candidate.initial_state, candidate.styles, 9.0F,
+        candidate.default_radius_multiplier);
+    std::vector<bool> profile_visibility(candidate.initial_state.bodies.size(), true);
+    std::vector<bool> individual_visibility(candidate.initial_state.bodies.size(), true);
+    return {
+        std::move(candidate),
+        std::move(render_space),
+        std::move(profile_visibility),
+        std::move(individual_visibility),
+        speed_index,
+        selected_body,
+    };
+}
+
+bool SimulationTimingTracker::publish(
+    std::uint64_t generation,
+    double batch_milliseconds,
+    double simulation_steps_per_second) noexcept {
+    if (generation_ == 0U || generation != generation_ ||
+        !std::isfinite(batch_milliseconds) || batch_milliseconds < 0.0 ||
+        !std::isfinite(simulation_steps_per_second) ||
+        simulation_steps_per_second < 0.0) {
+        return false;
+    }
+    sample_ = SimulationTimingSample{
+        batch_milliseconds, simulation_steps_per_second};
+    return true;
+}
+
+void SimulationTimingTracker::invalidate() noexcept {
+    sample_.reset();
+    if (generation_ == 0U) {
+        return;
+    }
+    if (generation_ == std::numeric_limits<std::uint64_t>::max()) {
+        generation_ = 0U;
+        return;
+    }
+    ++generation_;
+}
+
+bool same_barnes_hut_configuration(
+    const BarnesHutConfiguration& left,
+    const BarnesHutConfiguration& right) noexcept {
+    return left.theta == right.theta &&
+        left.leaf_capacity == right.leaf_capacity &&
+        left.maximum_depth == right.maximum_depth &&
+        left.minimum_cell_size_m == right.minimum_cell_size_m &&
+        left.maximum_nodes == right.maximum_nodes &&
+        left.maximum_traversal_work == right.maximum_traversal_work &&
+        left.memory_budget_bytes == right.memory_budget_bytes;
+}
+
+bool backend_selection_changes_execution(
+    const SimulationController& controller,
+    BackendKind backend,
+    int openmp_threads,
+    int cuda_device) noexcept {
+    return backend != controller.backend_kind() ||
+        (backend == BackendKind::openmp &&
+         openmp_threads != controller.openmp_threads()) ||
+        (backend == BackendKind::cuda &&
+         cuda_device != controller.cuda_device());
+}
+
+bool solver_selection_changes_execution(
+    const SimulationController& controller,
+    SolverKind solver,
+    const BarnesHutConfiguration& barnes_hut) noexcept {
+    return solver != controller.solver_kind() ||
+        (solver == SolverKind::barnes_hut &&
+         !same_barnes_hut_configuration(
+             barnes_hut, controller.barnes_hut_configuration()));
+}
+
+bool steps_per_frame_changes_execution(
+    const SimulationController& controller,
+    std::size_t steps_per_frame) noexcept {
+    return steps_per_frame != controller.steps_per_frame();
+}
+
+void select_application_backend(
+    SimulationController& controller,
+    SimulationTimingTracker& timing,
+    BackendKind backend,
+    int openmp_threads,
+    int cuda_device) {
+    const bool changed = backend_selection_changes_execution(
+        controller, backend, openmp_threads, cuda_device);
+    controller.select_backend(backend, openmp_threads, cuda_device);
+    if (changed) {
+        timing.invalidate();
+    }
+}
+
+void select_application_solver(
+    SimulationController& controller,
+    SimulationTimingTracker& timing,
+    SolverKind solver,
+    const BarnesHutConfiguration& barnes_hut) {
+    const bool changed = solver_selection_changes_execution(
+        controller, solver, barnes_hut);
+    controller.select_solver(solver, barnes_hut);
+    if (changed) {
+        timing.invalidate();
+    }
+}
+
+void set_application_steps_per_frame(
+    SimulationController& controller,
+    SimulationTimingTracker& timing,
+    std::size_t steps_per_frame) {
+    const bool changed = steps_per_frame_changes_execution(
+        controller, steps_per_frame);
+    controller.set_steps_per_frame(steps_per_frame);
+    if (changed) {
+        timing.invalidate();
+    }
+}
+
+namespace {
+
+WorkloadBackend transaction_workload_backend(BackendKind backend) noexcept {
+    switch (backend) {
+        case BackendKind::sequential: return WorkloadBackend::sequential;
+        case BackendKind::openmp: return WorkloadBackend::openmp;
+        case BackendKind::cuda: return WorkloadBackend::cuda;
+    }
+    return WorkloadBackend::sequential;
+}
+
+WorkloadSolver transaction_workload_solver(SolverKind solver) noexcept {
+    return solver == SolverKind::barnes_hut
+        ? WorkloadSolver::barnes_hut : WorkloadSolver::direct;
+}
+
+}  // namespace
+
+PreparedApplicationScenarioTransaction prepare_application_scenario_transaction(
+    ScenarioKind kind,
+    std::size_t synthetic_body_count,
+    std::uint64_t synthetic_seed,
+    LargeNDistribution synthetic_distribution,
+    const std::vector<std::string>& included_stable_ids,
+    const SimulationController& controller,
+    const CounterfactualPublicationGate& gate,
+    const ScenarioPreparationCompletion& completion) {
+    const std::uint64_t next_generation =
+        checked_next_counterfactual_generation(gate.scenario_generation());
+    auto visual = prepare_visual_scenario_replacement(
+        kind, synthetic_body_count, synthetic_seed, synthetic_distribution,
+        included_stable_ids);
+    const auto workload = visual.scenario.kind == ScenarioKind::synthetic
+        ? interactive_workload_policy(
+            visual.scenario.initial_state.bodies.size(),
+            transaction_workload_backend(controller.backend_kind()),
+            transaction_workload_solver(controller.solver_kind()))
+        : InteractiveWorkloadPolicy{};
+    if (visual.scenario.kind == ScenarioKind::synthetic &&
+        !workload.continuous_advancement && !workload.manual_single_step) {
+        throw std::invalid_argument(workload.explanation);
+    }
+    if (completion) {
+        completion(visual);
+    }
+    return {std::move(visual), workload, next_generation};
+}
+
+void commit_application_scenario_transaction(
+    PreparedApplicationScenarioTransaction&& prepared,
+    ApplicationScenarioTransactionTargets targets) {
+    const std::size_t speed_index = prepared.visual.speed_index;
+    targets.controller.replace_scenario(
+        prepared.visual.scenario.initial_state,
+        prepared.visual.scenario.dt_s,
+        prepared.visual.scenario.speed_presets[speed_index].steps_per_frame);
+
+    // checked_next_counterfactual_generation() already succeeded during
+    // preparation. Under single UI-thread ownership, the generation cannot
+    // change between prepare and commit except through this transaction.
+    targets.experiment_worker.request_cancel();
+    targets.experiment_gate.replace_scenario();
+    if (targets.experiment_gate.scenario_generation() !=
+        prepared.next_scenario_generation) {
+        std::terminate();
+    }
+
+    static_assert(std::is_nothrow_swappable_v<ScenarioDefinition>);
+    static_assert(std::is_nothrow_swappable_v<RenderSpaceTransform>);
+    static_assert(std::is_nothrow_move_assignable_v<
+        CounterfactualWorkerPublication>);
+    using std::swap;
+    swap(targets.scenario, prepared.visual.scenario);
+    swap(targets.render_space, prepared.visual.render_space);
+    targets.profile_visibility.swap(prepared.visual.profile_visibility);
+    targets.individual_visibility.swap(prepared.visual.individual_visibility);
+    targets.experiment_publication = {};
+    targets.presentation.clear();
+    targets.timing.invalidate();
 }
 
 }  // namespace nbody::visualization

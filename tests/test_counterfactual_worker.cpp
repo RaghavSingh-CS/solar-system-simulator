@@ -157,7 +157,7 @@ void test_snapshot_handoff_and_eligibility() {
         "legacy removal eligibility admitted the Sun or omitted a planet");
 
     const auto synthetic = nbody::visualization::make_visual_scenario(
-        nbody::visualization::ScenarioKind::synthetic, 32U, 24301U);
+        nbody::visualization::ScenarioKind::synthetic, 256U, 24301U);
     require(nbody::visualization::counterfactual_removal_candidates(synthetic).empty(),
         "synthetic bodies were admitted for curated astronomical removal");
 }
