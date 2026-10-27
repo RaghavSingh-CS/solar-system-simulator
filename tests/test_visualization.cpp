@@ -147,6 +147,12 @@ void require_barnes_hut_boundary(
     require(statistics->worker_threads == expected_threads &&
                 same_barnes_hut_work_statistics(reference_statistics, *statistics),
         context + " differs in deterministic force/tree statistics");
+    const auto& executed = controller.last_execution();
+    require(executed && executed->backend == expected_backend &&
+                executed->solver == nbody::visualization::SolverKind::barnes_hut &&
+                executed->steps == 1U && executed->end_time_s == reference.time_s &&
+                executed->openmp_threads == expected_threads,
+        context + " did not identify the code path that actually committed");
 }
 
 std::size_t required_index(
@@ -723,7 +729,7 @@ void test_astronomical_catalog_composition() {
                 full.body_metadata.size() == 60U && full.styles.size() == 60U,
             "default astronomical scenario does not contain exactly 60 complete bodies");
     require(full.dt_s == nbody::visualization::astronomical_catalog_initial_dt_s &&
-                !full.timestep_validation_complete && full.reference_paths_m.empty(),
+                !full.timestep_validation_complete && full.reference_paths_m.size() == 60U,
             "catalog timestep status or reference-guide policy is misleading");
     require(full.composition_warnings.empty(),
             "complete catalog scenario unexpectedly reports missing-source warnings");
@@ -1279,6 +1285,74 @@ void test_camera_math() {
     camera.reset();
     require(camera.target() == glm::vec3(0.0F),
             "camera overview reset did not restore the origin target");
+    camera.orbit(0.0F, -450.0F); // Pass through the previous 85-degree clamp.
+    require(camera.pitch_degrees() > 85.0F, "camera still restricts full pitch orbit");
+    for (int pass = 0; pass < 12; ++pass) {
+        camera.orbit(73.0F, 150.0F);
+        const auto rotated = camera.view_matrix();
+        for (int index = 0; index < 16; ++index) {
+            require(std::isfinite(glm::value_ptr(rotated)[index]), "full orbit produced a singular view");
+        }
+    }
+    camera.set_pose(0.0F, 90.0F, 1.0F, {});
+    const auto pole = camera.view_matrix();
+    for (int index = 0; index < 16; ++index) require(std::isfinite(glm::value_ptr(pole)[index]), "pole view is singular");
+    camera.pan(30.0F, -20.0F);
+    require(camera.target() != glm::vec3(0.0F), "right-drag camera pan is ineffective");
+    camera.dolly(10000.0F);
+    require(camera.distance() >= 0.15F && camera.distance() < 2.0F, "local zoom still stops at legacy bound");
+    for (int pass = 0; pass < 10; ++pass) camera.dolly(-10000.0F);
+    require(camera.distance() <= 160.0F, "camera zoom escaped far bound");
+}
+
+void test_demo_execution_and_catalog_guides() {
+    using namespace nbody::visualization;
+    const auto catalog = make_astronomical_catalog_scenario();
+    require(catalog.initial_state.bodies.size() == 60U && catalog.reference_paths_m.size() == 60U,
+        "catalog guides changed physical inclusion or identity alignment");
+    const auto earth = required_index(catalog, "sol:earth");
+    const auto moon = required_index(catalog, "sol:moon");
+    for (const auto index : {earth, moon}) {
+        const auto& path = catalog.reference_paths_m[index];
+        require(path.size() == 193U, "catalog planet/moon lacks bounded initial orbit guide");
+        for (const auto& position : path) {
+            require(std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z),
+                "catalog guide contains a nonfinite point");
+        }
+        require(nbody::norm(path.front() - path.back()) < 1.0, "catalog guide is not closed");
+    }
+    SimulationController controller(catalog.initial_state, {catalog.dt_s, 1U, BackendKind::sequential});
+    require(!controller.last_execution(), "mere backend selection claims executed physics");
+    controller.set_paused(true);
+    controller.advance_frame();
+    require(!controller.last_execution(), "paused frame claims execution");
+    controller.advance_steps(1U);
+    require(controller.last_execution() && controller.last_execution()->backend == BackendKind::sequential &&
+            controller.last_execution()->solver == SolverKind::direct, "direct execution identity is wrong");
+    const auto at_switch = controller.state();
+    if (SimulationController::openmp_available()) {
+        controller.select_backend(BackendKind::openmp, 2);
+        require(!controller.last_execution() && same_state(at_switch, controller.state()),
+            "backend switch resets state or falsely reports prior execution");
+        controller.select_solver(SolverKind::barnes_hut);
+        controller.advance_steps(1U);
+        require(controller.last_execution() && controller.barnes_hut_statistics() &&
+                controller.last_execution()->backend == BackendKind::openmp &&
+                controller.last_execution()->solver == SolverKind::barnes_hut &&
+                controller.barnes_hut_statistics()->worker_threads == 2,
+            "OpenMP Barnes-Hut did not execute the requested path");
+    }
+    controller.reset();
+    require(!controller.last_execution() && same_state(controller.state(), catalog.initial_state),
+        "reset left a stale execution record or changed initial state");
+    TrailHistory history(catalog.initial_state, 16U, catalog.trail_sample_interval_s);
+    controller.advance_steps(1U);
+    history.sample(controller.state());
+    require(history.positions()[moon].size() == 2U, "catalog history does not sample a completed step");
+    require(responsive_viewer_batch_steps(true, 120U) == 4U &&
+            responsive_viewer_batch_steps(true, 1U) == 1U &&
+            responsive_viewer_batch_steps(false, 120U) == 120U,
+        "responsive batching changes CPU work or exceeds GPU frame bound");
 }
 
 void test_presentation_helpers() {
@@ -1965,6 +2039,7 @@ int main() {
         test_planet_trail_geometry_fidelity();
         test_inner_system_guide_projection();
         test_camera_math();
+        test_demo_execution_and_catalog_guides();
         test_presentation_helpers();
         test_compute_experiment_scaling_and_comparison();
         test_application_transaction_and_timing_provenance();

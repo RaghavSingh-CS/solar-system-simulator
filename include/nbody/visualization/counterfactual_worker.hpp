@@ -220,6 +220,19 @@ private:
     std::optional<std::uint64_t> accepted_worker_generation_;
 };
 
+// Renders committed paired endpoints in baseline identity order. The removed
+// body is invisible in the counterfactual; the live controller is never edited.
+// Both endpoints use the same baseline endpoint origin. Returns false for
+// stale, failed, partial or mismatched publications and unavailable origins.
+bool build_counterfactual_endpoint_snapshot(
+    const CounterfactualWorkerPublication& publication,
+    const CounterfactualPublicationGate& gate,
+    const ScenarioDefinition& scenario,
+    const RenderSpaceTransform& transform,
+    bool counterfactual,
+    const std::optional<std::string>& common_origin_stable_id,
+    std::vector<RenderBody>& output);
+
 // Returns the persistent scientific notice for an eligible Barnes--Hut job.
 // Eligibility must include the real generation gate and current stable-ID
 // composition; bounded diagnostic storage is intentionally irrelevant.

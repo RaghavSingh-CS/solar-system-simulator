@@ -4,6 +4,7 @@
 #include "nbody/scenarios.hpp"
 #include "nbody/solar_system.hpp"
 #include "nbody/visualization/workload.hpp"
+#include "nbody/visualization/presentation.hpp"
 
 #include <algorithm>
 #include <array>
@@ -351,7 +352,7 @@ ScenarioDefinition make_astronomical_catalog_scenario(
         {"2 simulated hours per frame", 120},
     };
     result.default_speed_index = 1;
-    result.trail_sample_interval_s = 1800.0;
+    result.trail_sample_interval_s = astronomical_catalog_initial_dt_s;
     result.default_radius_multiplier = 1.0F;
     result.label_policy = LabelPolicy::all_bodies;
     result.timestep_validation_complete = false;
@@ -400,6 +401,7 @@ ScenarioDefinition make_astronomical_catalog_scenario(
                 *metadata.parent_stable_id);
         }
     }
+    result.reference_paths_m = catalog_osculating_orbit_guides(result);
     return result;
 }
 

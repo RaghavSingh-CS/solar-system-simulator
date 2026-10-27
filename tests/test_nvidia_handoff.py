@@ -183,6 +183,13 @@ def test_inventory_and_scripts() -> None:
     config = json.loads((HANDOFF / "config" / "handoff.json").read_text(encoding="utf-8"))
     require(manifest["cuda_architecture"] == "89", "manifest architecture differs")
     require(config["required_compute_capability"] == "8.9", "compute capability differs")
+    presets = json.loads((ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
+    cuda = next(item for item in presets["configurePresets"] if item["name"] == "cuda-release")
+    require(cuda["cacheVariables"]["NBODY_ENABLE_CUDA"] == "ON",
+            "CUDA preset does not compile CUDA")
+    ordinary_builder = (ROOT / "scripts" / "test-local.ps1").read_text(encoding="utf-8")
+    require("'-DNBODY_ENABLE_OPENMP=ON'" in ordinary_builder,
+            "ordinary CUDA viewer builder does not enable OpenMP alongside CUDA")
     cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     targets = set(re.findall(r"add_executable\s*\(\s*([A-Za-z0-9_]+)", cmake))
     declared = [item["target"] for item in manifest["targets"]]
@@ -346,6 +353,30 @@ def test_collection_scope_limits_and_spaces() -> None:
                 "collection success status missing from ZIP")
 
 
+def test_cuda_launcher_requires_openmp() -> None:
+    # Exercise the production launcher without executing a GPU binary.
+    fixture = SCRATCH / "launcher checkout with spaces"
+    (fixture / "scripts").mkdir(parents=True)
+    launcher = fixture / "scripts" / "run-visualizer.ps1"
+    shutil.copyfile(ROOT / "scripts" / "run-visualizer.ps1", launcher)
+    build = fixture / "build" / "cuda-release"
+    build.mkdir(parents=True)
+    (build / "nbody_visualizer.exe").write_bytes(b"not executed: PrintCommand fixture")
+    cache = build / "CMakeCache.txt"
+    cache.write_text("NBODY_ENABLE_OPENMP:BOOL=OFF\n", encoding="utf-8")
+    rejected = run_script(launcher, "-Backend", "CUDA", "-PrintCommand")
+    require(rejected.returncode != 0 and "cache lacks OpenMP" in rejected.stderr,
+            "CUDA launcher accepted the observed OpenMP-disabled build")
+    cache.write_text("NBODY_ENABLE_OPENMP:BOOL=ON\n", encoding="utf-8")
+    command = f"& '{launcher}' -Backend CUDA -PrintCommand | ConvertTo-Json -Depth 4"
+    accepted = run(powershell(), "-NoProfile", "-NonInteractive", "-Command", command)
+    require(accepted.returncode == 0,
+            f"combined CUDA/OpenMP build was rejected: {accepted.stderr}")
+    selected = json.loads(accepted.stdout)
+    require(selected["Backend"] == "cuda" and selected["Arguments"] == ["--backend", "cuda"],
+            "combined CUDA/OpenMP launcher substituted another backend")
+
+
 def test_stage5_is_disabled() -> None:
     directory = make_marked_run("stage5-disabled")
     completed = run_script(SCRIPTS / "07_stage5_pilot.ps1", "-RunDirectory", str(directory))
@@ -408,6 +439,7 @@ def main() -> int:
         test_cuda_test_outcomes()
         test_repeat_stage_is_immutable()
         test_collection_scope_limits_and_spaces()
+        test_cuda_launcher_requires_openmp()
         test_stage5_is_disabled()
         test_master_stops_and_collects_after_preflight_failure()
     finally:

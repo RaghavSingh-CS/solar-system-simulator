@@ -1,6 +1,6 @@
 # Master ledger
 
-Last updated: 2026-10-16
+Last updated: 2026-10-27
 
 ## Stage status
 
@@ -35,6 +35,7 @@ Last updated: 2026-10-16
 | Large-N Laboratory Phase L3 | **CLOSED / INDEPENDENTLY REVIEWED / TOOLING COMMITTED / 16384 CHECKPOINT TIMED OUT / NO EVIDENCE** | Tooling `32af36a` implements the guarded performance-only protocol and explicit unavailable-science serialization; the first Sequential/uniform/theta-0.25 subprocess exceeded its 70-second hard timeout, so the remaining five groups and all larger sizes were not run |
 | Stage G1 GUI completion and synthetic scenes | **COMMITTED / INDEPENDENTLY SOURCE-REVIEWED / CPU+OPENMP VALIDATED / REAL-CONTEXT SMOKE PASSED** | Uses the deterministic Large-N generation contract for uniform/clustered/planar 256/1024/4096/8192-body scenes; adds solver-aware admission, bounded one-draw point rendering, scenario-generation invalidation, and separate display/simulation diagnostics without changing physics |
 | RTX 4050 NVIDIA handoff package | **HANDOFF READY / HOST-ONLY VALIDATED / NVIDIA UNVERIFIED** | Exact-target Windows launchers provide isolated preflight, CUDA/full Release build modes, strict no-skip CUDA gates, staged-executable identity checks, a five-minute CUDA Direct viewer path, immutable stage records, and bounded transactional result collection; automated Stage 5 execution is disabled |
+| October 29 presentation GUI correction | **UNCOMMITTED / CPU+OPENMP FOCUSED TESTS PASSED / RTX VERIFICATION PENDING** | Operator-observed defects supersede GUI-complete assumptions; corrects combined CUDA/OpenMP build workflow, actual execution display, paired endpoint/removal presentation, catalog guide/history visibility, navigation and sidebar layout; GPU jitter mitigation remains hardware-unverified; additional 5000 bodies deferred |
 
 ## Decisions and rationale
 
@@ -2663,3 +2664,93 @@ passed `25/25`. Strict L1 run
 layout/dependency/diff checks passed. Genuine RTX 4050 compilation/execution,
 zero unexpected CUDA skips, manual visual inspection, and returned-result
 review remain pending.
+
+## October 27 presentation-critical GUI correction
+
+Status: uncommitted on `feature/cuda-visualizer`, starting from
+`23262a44de862750464216c5106c8b563ee1db34`. No commit or push is authorized
+until the correction is verified on the RTX 4050. The operator reports actual
+CUDA viewer launch and interaction on the previous version; that report does
+not validate the new patch or replace recorded CUDA test/toolchain provenance.
+
+### Implementation and bug record
+
+- OpenMP was disabled by the ordinary CUDA preset, while the special NVIDIA
+  handoff builder already overrode it. The preset is a hashed L2 input and is
+  retained byte-for-byte (SHA-256
+  `7cce7ef1a54dfa85f5a0dbfce42ff125ac8cc85647548ad29b03107abfe14f16`).
+  `scripts/test-local.ps1 -Configuration CUDA` now enables OpenMP; the launcher
+  rejects an OpenMP-disabled CUDA cache and gives the exact rebuild command.
+- Controller execution metadata is published only after a successful commit
+  and cleared on selection/reset/replacement. The fixed sidebar header shows
+  configured live execution, last committed path, display FPS and physics
+  batch timing separately. Experiments show their immutable executed path.
+- The existing counterfactual engine is unchanged. A new presentation helper
+  renders its completed baseline/counterfactual endpoints in baseline stable-ID
+  order, hides the removed body only in the altered branch, and uses the same
+  baseline origin/time. Stale, failed, partial, mismatched and removed-origin
+  previews are rejected. Visibility filters still apply. Live state is never
+  replaced by the experiment. Resume/Step returns to live display; Reset clears
+  publication through the existing generation gate.
+- Independent experiment settings no longer silently become Sequential when a
+  backend is unavailable. Removal preparation uses the current live backend
+  and solver as an explicit starting choice. Submission pauses live simulation
+  so the live CUDA stream does not compete with a paired CUDA worker.
+- Sequential/OpenMP Barnes--Hut continues through the reviewed force backends;
+  executed node/worker statistics are visible. CUDA Barnes--Hut GUI and paired
+  execution remain unavailable. No force law or integrator changed.
+- Verified synchronous CUDA batching can stall the GL/event thread. The GUI
+  limits each GPU batch to four unchanged physical steps and reports actual
+  throughput. Frame-time-dependent camera target following replaces a fixed
+  per-frame fraction. These are bounded mitigations, not proof that RTX jitter
+  is resolved. No intermediate physical states are invented.
+- Catalog history now samples completed boundaries at >=60 simulated seconds.
+  Bounded initial parent-relative osculating ellipses provide immediate orbit
+  context. They are clearly labelled presentation guides, not histories or
+  ephemeris predictions. Full/inner guides are heliocentric; local moon guides
+  use their parent. Missing-parent/unbound/degenerate cases omit closed guides.
+  Legacy nine-body initialization and reference-guide source are unchanged.
+- Camera pitch/yaw can orbit fully with a nonsingular analytic up vector;
+  proportional zoom uses 0.15–160 render-unit bounds, and right drag pans.
+  Demo/Comparison/Advanced pages put primary controls on one compact page.
+  A fixed header and independently scrolling child prevent old saved scroll
+  offsets from hiding actual execution status. Picking uses the final displayed
+  endpoint snapshot. Reference/history line styles are restored on exit from
+  a comparison.
+- Additional 5000 bodies are deferred. Existing synthetic scenes retain their
+  original Direct and Barnes--Hut admission limits and separate identities.
+
+### Validation record and remaining defects
+
+Canonical CPU and OpenMP Release builds passed. Focused CPU visualization/worker
+CTest passed `2/2`; focused OpenMP visualization/worker/backend CTest passed `3/3`.
+The extended host handoff suite passed, including a production-launcher fixture
+with spaces that rejects OpenMP OFF, accepts ON, and preserves CUDA selection
+without executing its dummy binary. New controller tests verify executed-path
+identity at all seven Barnes--Hut boundaries, reset/pause/switch behavior, actual
+catalog history sampling and guide admission; camera tests cross the old pitch
+limit and poles. The paired display test executes a real catalog removal job
+and verifies compacted mapping, absent Earth, common baseline origin, failed
+publication rejection, stale generation rejection and source preservation.
+
+Full serial CPU CTest: `20/21` passed. Full OpenMP CTest: `24/25` passed.
+Both failures are the existing layout checker rejecting six copied CSV artifacts
+inside the pre-existing untracked `interview_handoff/solar_simulator_2026-10-26/`
+directory. It is preserved, and the checker is not weakened. An initial L2
+source-custody failure from editing the preset was corrected by restoring its
+exact bytes; the final L2 tooling tests and strict verifier pass. Strict L1/L2
+evidence verification, dependency-cache verification and `git diff --check`
+pass without changing evidence. The layout failure remains explicitly open.
+
+Real AMD/OpenGL windows were launched with requested 1280x720 and 1920x1080
+sizes; tool inspection confirmed catalog guides, CPU Barnes--Hut nodes/workers
+and the fixed header. This is local inspection, not the teammate's human
+acceptance of the final patch. No fresh CUDA translation unit compiled locally;
+CUDA compilation, the added CUDA execution-record assertion, actual frame
+pacing and human interaction on the RTX remain pending. No controlled rendering
+FPS, GPU speedup or new numerical-accuracy result is claimed.
+
+See `docs/presentation_demo.md` for all ten findings, the actual execution-path
+matrix, exact RTX commands and a five-minute rehearsal. Frozen Stage 5,
+existing numerical sources/CUDA kernels, JPL data, L1/L2 evidence and the L3
+negative result remain unchanged. No new scientific experiment was run.

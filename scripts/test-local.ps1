@@ -72,7 +72,10 @@ try {
         )
     }
 
-    Invoke-Checked $cmakeProgram (@('--preset', $preset) + $dependencyOverrides + $ConfigureArguments)
+    # Keep the source-custodied research presets unchanged. Ordinary CUDA GUI
+    # builds must also compile the supported OpenMP choices.
+    $viewerOverrides = if ($Configuration -eq 'CUDA') { @('-DNBODY_ENABLE_OPENMP=ON') } else { @() }
+    Invoke-Checked $cmakeProgram (@('--preset', $preset) + $dependencyOverrides + $viewerOverrides + $ConfigureArguments)
     Invoke-Checked $cmakeProgram @('--build', '--preset', $preset)
     $testTemp = Join-Path $repositoryRoot "build/$preset/tmp"
     New-Item -ItemType Directory -Path $testTemp -Force | Out-Null

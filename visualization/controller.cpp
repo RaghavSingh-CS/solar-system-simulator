@@ -162,6 +162,9 @@ SimulationController::barnes_hut_statistics() const noexcept {
 const std::string& SimulationController::last_error() const noexcept {
     return last_error_;
 }
+const std::optional<ControllerExecution>& SimulationController::last_execution() const noexcept {
+    return last_execution_;
+}
 
 void SimulationController::set_paused(bool paused_value) noexcept { paused_ = paused_value; }
 void SimulationController::toggle_paused() noexcept { paused_ = !paused_; }
@@ -224,6 +227,7 @@ void SimulationController::replace_scenario(
     config_.steps_per_frame = steps_per_frame;
     last_barnes_hut_statistics_.reset();
     last_error_.clear();
+    last_execution_.reset();
 #ifdef NBODY_VIS_HAS_CUDA
     if (replacement_cuda) {
         cuda_integrator_ = std::move(replacement_cuda);
@@ -253,6 +257,9 @@ void SimulationController::advance_steps(std::size_t steps) {
             }
             auto result = cuda_integrator_->integrator.run(state_, steps, config_.dt_s);
             state_ = std::move(result.final_state);
+            last_execution_ = ControllerExecution{
+                config_.backend, config_.solver, steps, state_.time_s,
+                config_.openmp_threads, config_.cuda_device};
             last_error_.clear();
             return;
 #else
@@ -281,6 +288,9 @@ void SimulationController::advance_steps(std::size_t steps) {
             last_barnes_hut_statistics_.reset();
         }
         last_error_.clear();
+        last_execution_ = ControllerExecution{
+            config_.backend, config_.solver, steps, state_.time_s,
+            config_.openmp_threads, config_.cuda_device};
     } catch (const std::exception& error) {
         paused_ = true;
         last_error_ = "backend=" + std::string(backend_name()) +
@@ -305,6 +315,7 @@ void SimulationController::reset() {
     state_ = initial_state_;
     last_barnes_hut_statistics_.reset();
     last_error_.clear();
+    last_execution_.reset();
 }
 
 bool SimulationController::openmp_available() noexcept {
@@ -395,6 +406,7 @@ void SimulationController::configure_execution(
         config_.cuda_device = 0;
         last_barnes_hut_statistics_.reset();
         last_error_.clear();
+        last_execution_.reset();
         return;
     }
     if (backend == BackendKind::openmp) {
@@ -419,6 +431,7 @@ void SimulationController::configure_execution(
         config_.cuda_device = 0;
         last_barnes_hut_statistics_.reset();
         last_error_.clear();
+        last_execution_.reset();
         return;
 #else
         throw std::runtime_error(
@@ -442,6 +455,7 @@ void SimulationController::configure_execution(
     config_.cuda_device = cuda_device;
     last_barnes_hut_statistics_.reset();
     last_error_.clear();
+    last_execution_.reset();
 #else
     (void)cuda_device;
     throw std::runtime_error(

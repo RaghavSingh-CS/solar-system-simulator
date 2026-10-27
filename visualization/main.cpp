@@ -289,6 +289,7 @@ struct ApplicationModel {
         std::vector<bool> monitored;
         bool show_overlay{true};
         bool show_significant{true};
+        int comparison_view{0}; // 0 live, 1 paired baseline, 2 body-removed endpoint
         std::string error;
         nbody::visualization::CounterfactualPresentationCache presentation;
     };
@@ -346,6 +347,8 @@ struct ApplicationModel {
     bool show_barycentric_motion{true};
     float sun_motion_amplification{10.0F};
     float panel_width{438.0F};
+    int panel_page{0}; // Demo / Comparison / Advanced
+    int previous_panel_page{-1};
 
     static nbody::visualization::ControllerConfig controller_config(
         const Options& options,
@@ -538,7 +541,7 @@ struct ApplicationModel {
                     visual.scenario.kind != ScenarioKind::synthetic ||
                     visual.scenario.initial_state.bodies.size() <= 1024U;
                 next_show_reference_orbits =
-                    visual.scenario.kind == ScenarioKind::solar_system;
+                    visual.scenario.kind != ScenarioKind::synthetic;
             }
         );
         return {
@@ -601,6 +604,8 @@ struct ApplicationModel {
         trails.swap(prepared.trails);
         catalog_inclusion_draft.swap(prepared.catalog_inclusion);
         experiment_ui = std::move(prepared.experiment_ui);
+        experiment_ui.backend_index = static_cast<int>(controller.backend_kind());
+        experiment_ui.solver_index = static_cast<int>(controller.solver_kind());
         speed_index = next_speed;
         selected_body = next_selected_body;
         class_visibility.fill(true);
@@ -632,12 +637,17 @@ struct ApplicationModel {
 
     void reset_experiment_ui() {
         experiment_ui = make_experiment_ui(scenario);
+        experiment_ui.backend_index = static_cast<int>(controller.backend_kind());
+        experiment_ui.solver_index = static_cast<int>(controller.solver_kind());
     }
 
     void refresh_experiment_publication() {
         auto next = experiment_worker.publication();
         if (experiment_gate.accepts(next)) {
             experiment_publication = std::move(next);
+        }
+        if (experiment_publication.state == nbody::visualization::CounterfactualWorkerState::failed) {
+            experiment_ui.comparison_view = 0;
         }
         const auto* result = experiment_publication.result.get();
         if (experiment_ui.presentation.generation ==
@@ -691,6 +701,7 @@ struct ApplicationModel {
             experiment_publication,
             experiment_ui.presentation);
         experiment_ui.error.clear();
+        experiment_ui.comparison_view = 0;
         controller.reset();
         simulation_error.clear();
         simulation_timing.invalidate();
@@ -706,6 +717,15 @@ struct ApplicationModel {
 
 void refresh_render_origin(ApplicationModel& app) {
     if (app.local_origin_body && *app.local_origin_body < app.controller.state().bodies.size()) {
+        if (app.experiment_ui.comparison_view != 0 &&
+            app.experiment_gate.accepts(app.experiment_publication) &&
+            app.experiment_publication.state == nbody::visualization::CounterfactualWorkerState::completed &&
+            app.experiment_publication.result &&
+            app.scenario.stable_ids[*app.local_origin_body] != app.experiment_publication.removed_body_stable_id) {
+            app.render_space.set_origin_m(app.experiment_publication.result->baseline_state
+                .bodies[*app.local_origin_body].position_m);
+            return;
+        }
         app.render_space.set_origin_m(
             app.controller.state().bodies[*app.local_origin_body].position_m);
     } else {
@@ -798,6 +818,7 @@ struct InteractionState {
     ApplicationModel* application{nullptr};
     int preferred_openmp_threads{1};
     bool dragging{false};
+    bool panning{false};
     double last_x{0.0};
     double last_y{0.0};
     double drag_distance{0.0};
@@ -854,6 +875,7 @@ void key_callback(GLFWwindow* window, int key, int, int action, int) {
                     "Continuous advancement is not admitted for this synthetic workload; "
                     "use an enabled bounded manual step.";
             } else {
+                app.experiment_ui.comparison_view = 0;
                 app.controller.toggle_paused();
             }
         } else if (key == GLFW_KEY_R && initial_press) {
@@ -902,20 +924,26 @@ void key_callback(GLFWwindow* window, int key, int, int action, int) {
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int) {
-    if (button != GLFW_MOUSE_BUTTON_LEFT) {
+    if (button != GLFW_MOUSE_BUTTON_LEFT && button != GLFW_MOUSE_BUTTON_RIGHT) {
         return;
     }
     auto* input = interaction(window);
-    if (input == nullptr || wants_mouse()) {
+    if (input == nullptr) {
+        return;
+    }
+    if (wants_mouse()) {
+        // A viewport drag can end over ImGui; never leave orbit/pan latched.
+        if (action == GLFW_RELEASE) input->dragging = false;
         return;
     }
     if (action == GLFW_PRESS) {
         input->dragging = true;
+        input->panning = button == GLFW_MOUSE_BUTTON_RIGHT;
         input->drag_distance = 0.0;
         glfwGetCursorPos(window, &input->last_x, &input->last_y);
     } else if (action == GLFW_RELEASE && input->dragging) {
         input->dragging = false;
-        if (input->drag_distance < 5.0) {
+        if (!input->panning && input->drag_distance < 5.0) {
             input->pending_selection = true;
             glfwGetCursorPos(window, &input->selection_x, &input->selection_y);
         }
@@ -930,7 +958,12 @@ void cursor_callback(GLFWwindow* window, double x, double y) {
     const double delta_x = x - input->last_x;
     const double delta_y = y - input->last_y;
     input->drag_distance += std::hypot(delta_x, delta_y);
-    input->camera->orbit(static_cast<float>(delta_x), static_cast<float>(delta_y));
+    if (input->panning) {
+        input->camera->pan(static_cast<float>(delta_x), static_cast<float>(delta_y));
+        input->application->focused_body.reset();
+    } else {
+        input->camera->orbit(static_cast<float>(delta_x), static_cast<float>(delta_y));
+    }
     input->last_x = x;
     input->last_y = y;
 }
@@ -1003,9 +1036,10 @@ void update_render_trails(
         output.resize(physical.size());
         for (std::size_t index = 0; index < physical.size(); ++index) {
             auto& trail = output[index];
-            trail.color = app.scenario.styles[index].color * 0.76F;
-            trail.alpha = 0.68F;
+            trail.color = app.scenario.styles[index].color;
+            trail.alpha = 0.86F;
             trail.fade_with_age = true;
+            trail.line_style = nbody::visualization::RenderLineStyle::solid;
             trail.points.clear();
             if (!app.body_visible(index)) {
                 continue;
@@ -1056,12 +1090,22 @@ void update_render_trails(
         output.resize(first_reference + app.scenario.reference_paths_m.size());
         for (std::size_t index = 0; index < app.scenario.reference_paths_m.size(); ++index) {
             auto& guide = output[first_reference + index];
-            guide.color = app.scenario.styles[index].color * 0.48F;
-            guide.alpha = 0.24F;
+            guide.color = app.scenario.styles[index].color *
+                (app.scenario.kind == ScenarioKind::astronomical_catalog ? 0.82F : 0.48F);
+            guide.alpha = app.scenario.kind == ScenarioKind::astronomical_catalog ? 0.55F : 0.24F;
             guide.fade_with_age = false;
+            guide.line_style = nbody::visualization::RenderLineStyle::solid;
             guide.points.clear();
             if (!app.body_visible(index)) {
                 continue;
+            }
+            if (app.scenario.kind == ScenarioKind::astronomical_catalog) {
+                const auto& parent_id = app.scenario.body_metadata[index].parent_stable_id;
+                // In the full/inner view show heliocentric guides; in a local
+                // view show only guides about that view's actual parent.
+                if (!parent_id || (app.trail_reference_body
+                        ? *parent_id != app.scenario.stable_ids[*app.trail_reference_body]
+                        : *parent_id != "sol:sun")) continue;
             }
             guide.points.reserve(app.scenario.reference_paths_m[index].size());
             for (const auto& point : app.scenario.reference_paths_m[index]) {
@@ -1097,6 +1141,7 @@ void append_counterfactual_trails(
     std::vector<nbody::visualization::RenderTrail>& output) {
     app.experiment_ui.presentation.frame_error.clear();
     if (!app.experiment_ui.show_overlay || !app.experiment_publication.result ||
+        app.experiment_publication.state == nbody::visualization::CounterfactualWorkerState::failed ||
         !publication_matches_scenario(app)) {
         return;
     }
@@ -1112,6 +1157,13 @@ void append_counterfactual_trails(
                     displayed.end()) {
                 displayed.push_back(summary.stable_id);
             }
+        }
+    }
+    // A visible comparison must not depend on significance at global scale.
+    for (std::size_t index = 0; index < app.scenario.stable_ids.size(); ++index) {
+        if (app.body_visible(index) &&
+            std::find(displayed.begin(), displayed.end(), app.scenario.stable_ids[index]) == displayed.end()) {
+            displayed.push_back(app.scenario.stable_ids[index]);
         }
     }
     std::optional<std::string> common_origin;
@@ -1526,6 +1578,147 @@ void draw_counterfactual_warning_groups(
     }
 }
 
+void start_counterfactual(ApplicationModel& app, int threads) {
+    try {
+        auto snapshot = make_ui_experiment_snapshot(app);
+        auto configuration = make_experiment_configuration(app, threads);
+        const auto scenario_generation = app.experiment_gate.scenario_generation();
+        const auto generation = app.experiment_worker.start(
+            std::move(snapshot), std::move(configuration),
+            {scenario_generation, app.experiment_ui.capture_current_state
+                ? nbody::visualization::CounterfactualSnapshotSource::current_state
+                : nbody::visualization::CounterfactualSnapshotSource::initial_state});
+        app.experiment_gate.accept_job(generation, scenario_generation);
+        app.controller.set_paused(true);
+        app.experiment_ui.comparison_view = 2;
+        app.experiment_ui.error.clear();
+        app.refresh_experiment_publication();
+    } catch (const std::exception& error) {
+        app.experiment_ui.error = error.what();
+    }
+}
+
+void draw_demo_controls(ApplicationModel& app, UiActions& actions, int threads) {
+    int scene = app.scenario.kind == ScenarioKind::solar_system ? 0 :
+        app.scenario.kind == ScenarioKind::astronomical_catalog ? 1 : 2;
+    ImGui::TextUnformatted("Scene");
+    ImGui::SameLine(68.0F);
+    ImGui::SetNextItemWidth(-1.0F);
+    if (ImGui::Combo("##demo_scene", &scene,
+            "Legacy Solar (9)\0Horizons Solar (60)\0Synthetic laboratory\0")) {
+        actions.scenario = scene == 0 ? ScenarioKind::solar_system :
+            scene == 1 ? ScenarioKind::astronomical_catalog : ScenarioKind::synthetic;
+    }
+    ImGui::TextUnformatted("Backend");
+    ImGui::SameLine(68.0F);
+    for (int index = 0; index < 3; ++index) {
+        const auto backend = static_cast<BackendKind>(index);
+        const bool available = index == 0 || (index == 1
+            ? nbody::visualization::SimulationController::openmp_available()
+            : app.cuda_device_available && app.controller.solver_kind() == SolverKind::direct);
+        if (index) ImGui::SameLine();
+        ImGui::BeginDisabled(!available);
+        if (ImGui::RadioButton(index == 0 ? "Sequential" : index == 1 ? "OpenMP" : "CUDA",
+                              app.controller.backend_kind() == backend)) {
+            try { app.select_backend_admitted(backend, threads, app.preferred_cuda_device); app.solver_error.clear(); }
+            catch (const std::exception& error) { app.solver_error = error.what(); }
+        }
+        ImGui::EndDisabled();
+    }
+    if (!nbody::visualization::SimulationController::openmp_available()) {
+        ImGui::TextWrapped("OpenMP not compiled: rebuild the CUDA preset with NBODY_ENABLE_OPENMP=ON.");
+    }
+    ImGui::TextUnformatted("Solver");
+    ImGui::SameLine(68.0F);
+    for (int index = 0; index < 2; ++index) {
+        if (index) ImGui::SameLine();
+        const auto solver = static_cast<SolverKind>(index);
+        ImGui::BeginDisabled(index == 1 && app.controller.backend_kind() == BackendKind::cuda);
+        if (ImGui::RadioButton(index == 0 ? "Direct" : "Barnes-Hut",
+                              app.controller.solver_kind() == solver)) {
+            try { app.select_solver_admitted(solver, app.controller.barnes_hut_configuration()); app.solver_error.clear(); }
+            catch (const std::exception& error) { app.solver_error = error.what(); }
+        }
+        ImGui::EndDisabled();
+    }
+    if (app.controller.solver_kind() == SolverKind::barnes_hut) {
+        ImGui::Text("Theta %.2f", app.controller.barnes_hut_configuration().theta);
+        if (const auto statistics = app.controller.barnes_hut_statistics()) {
+            ImGui::Text("Executed tree: %zu nodes, %d workers", statistics->node_count, statistics->worker_threads);
+        } else { ImGui::TextDisabled("Advance once to build the tree."); }
+    } else if (app.controller.backend_kind() == BackendKind::cuda) {
+        ImGui::TextWrapped("CUDA Direct; select OpenMP to use Barnes-Hut. GPU batches capped at 4 steps for responsiveness.");
+    }
+    const auto policy = app.workload_policy();
+    ImGui::BeginDisabled(!policy.continuous_advancement);
+    if (ImGui::Button(app.controller.paused() ? "Start / Resume" : "Pause")) {
+        app.experiment_ui.comparison_view = 0;
+        app.controller.toggle_paused();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!policy.manual_single_step);
+    if (ImGui::Button("Step")) {
+        app.experiment_ui.comparison_view = 0;
+        actions.advance_one_step = true;
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) actions.reset = true;
+    if (!policy.continuous_advancement) ImGui::TextWrapped("%s", policy.explanation);
+    std::vector<const char*> speeds;
+    for (const auto& preset : app.scenario.speed_presets) speeds.push_back(preset.name);
+    int speed = static_cast<int>(app.speed_index);
+    ImGui::TextUnformatted("Speed");
+    ImGui::SameLine(68.0F);
+    ImGui::SetNextItemWidth(-1.0F);
+    if (ImGui::Combo("##demo_speed", &speed, speeds.data(), static_cast<int>(speeds.size()))) {
+        app.speed_index = static_cast<std::size_t>(speed);
+        app.set_steps_per_frame(app.scenario.speed_presets[app.speed_index].steps_per_frame);
+    }
+    static int view = 0;
+    if (ImGui::Button("Reframe")) actions.camera_preset = static_cast<nbody::visualization::CameraPreset>(view);
+    ImGui::SameLine(82.0F);
+    ImGui::SetNextItemWidth(-1.0F);
+    if (ImGui::Combo("##demo_view", &view,
+            "Full System\0Inner System\0Earth-Moon\0Jupiter\0Saturn\0Uranus\0Neptune-Triton\0Pluto-Charon\0Asteroid Belt\0")) {
+        actions.camera_preset = static_cast<nbody::visualization::CameraPreset>(view);
+    }
+    tooltip_for_last_item("Left drag: full orbit. Right drag: pan. Wheel: proportional zoom. Reframe restores a preset.");
+    if (app.astronomical()) {
+        std::vector<const char*> names;
+        for (const auto& body : app.controller.state().bodies) names.push_back(body.name.c_str());
+        int selected = static_cast<int>(app.selected_body);
+        ImGui::TextUnformatted("Body");
+        ImGui::SameLine(68.0F);
+        ImGui::SetNextItemWidth(-1.0F);
+        if (ImGui::Combo("##demo_body", &selected, names.data(), static_cast<int>(names.size()))) app.selected_body = static_cast<std::size_t>(selected);
+        if (ImGui::Button("Focus body")) actions.frame_focus = true;
+        ImGui::SameLine();
+        bool visible = app.individual_visibility[app.selected_body];
+        if (ImGui::Checkbox("Visible", &visible)) app.individual_visibility[app.selected_body] = visible;
+        const auto candidates = nbody::visualization::counterfactual_removal_candidates(app.scenario);
+        const auto& id = app.scenario.stable_ids[app.selected_body];
+        ImGui::SameLine();
+        ImGui::BeginDisabled(std::find(candidates.begin(), candidates.end(), id) == candidates.end());
+        if (ImGui::Button("Remove / compare")) {
+            app.experiment_ui.removed_body_stable_id = id;
+            app.experiment_ui.backend_index = static_cast<int>(app.controller.backend_kind());
+            app.experiment_ui.solver_index = static_cast<int>(app.controller.solver_kind());
+            app.panel_page = 1;
+        }
+        ImGui::EndDisabled();
+    }
+    ImGui::Checkbox("History trails", &app.show_trails);
+    ImGui::SameLine();
+    ImGui::Checkbox("Orbit guides", &app.show_reference_orbits);
+    if (app.scenario.kind == ScenarioKind::astronomical_catalog) {
+        ImGui::TextWrapped("Guides = initial osculating ellipses. History = completed integration.");
+    }
+    if (!app.solver_error.empty()) ImGui::TextWrapped("%s", app.solver_error.c_str());
+    if (!app.view_error.empty()) ImGui::TextWrapped("%s", app.view_error.c_str());
+}
+
 UiActions draw_control_panel(
     ApplicationModel& app,
     int& preferred_openmp_threads) {
@@ -1538,16 +1731,75 @@ UiActions draw_control_panel(
     ImGui::SetNextWindowSizeConstraints(
         {width_policy.minimum, 480.0F},
         {width_policy.maximum, std::max(480.0F, ImGui::GetIO().DisplaySize.y - 24.0F)});
-    ImGui::Begin("Scientific Visualization", nullptr, ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin("Scientific Visualization", nullptr, ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     app.panel_width = ImGui::GetWindowSize().x;
+    ImGui::SetScrollY(0.0F);
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96F, 0.79F, 0.35F, 1.0F));
     ImGui::SetWindowFontScale(1.20F);
     ImGui::TextUnformatted("N-body Dynamics");
     ImGui::SetWindowFontScale(1.0F);
     ImGui::PopStyleColor();
-    ImGui::TextWrapped("Scientific simulation and parallel-computing explorer");
-    ImGui::TextDisabled("Drag the right edge to resize this panel");
+
+    const auto& body = app.controller.state().bodies[app.selected_body];
+    const auto& executed = app.controller.last_execution();
+    ImGui::TextWrapped("Configured LIVE solver: %s / %s | %zu bodies | %s",
+        app.controller.backend_name(), app.controller.solver_name(),
+        app.controller.state().bodies.size(), app.controller.paused() ? "PAUSED" : "RUNNING");
+    if (executed) {
+        ImGui::TextColored(ImVec4(0.40F, 0.88F, 0.62F, 1.0F),
+            "ACTIVE EXECUTION: %s / %s",
+            executed->backend == BackendKind::cuda ? "CUDA" : executed->backend == BackendKind::openmp ? "OpenMP" : "Sequential",
+            executed->solver == SolverKind::direct ? "Direct" : "Barnes-Hut");
+        if (app.panel_page == 2) ImGui::Text("Last commit: %zu steps, t=%.0f s", executed->steps, executed->end_time_s);
+    } else { ImGui::TextDisabled("ACTIVE EXECUTION: no step committed since selection/reset"); }
+    ImGui::Text("Display %.1f FPS", ImGui::GetIO().Framerate);
+    if (const auto& timing = app.simulation_timing.sample()) {
+        ImGui::SameLine(); ImGui::Text("| physics %.1f steps/s (%.2f ms)",
+            timing->simulation_steps_per_second, timing->batch_milliseconds);
+    }
+    if (!app.simulation_error.empty()) ImGui::TextWrapped("Paused: %s", app.simulation_error.c_str());
+    if (app.experiment_gate.accepts(app.experiment_publication)) {
+        const auto& publication = app.experiment_publication;
+        ImGui::TextWrapped("Paired experiment: %s / %s — %s",
+            publication.run ? nbody::experiments::experiment_backend_name(publication.run->backend) : "unknown",
+            publication.run ? nbody::experiments::experiment_solver_name(publication.run->solver) : "unknown",
+            nbody::visualization::counterfactual_worker_state_name(publication.state));
+        if (publication.state == nbody::visualization::CounterfactualWorkerState::completed && publication.result) {
+            ImGui::RadioButton("Baseline", &app.experiment_ui.comparison_view, 1);
+            ImGui::SameLine();
+            ImGui::RadioButton("Body removed", &app.experiment_ui.comparison_view, 2);
+            ImGui::TextWrapped("Paired t = %.0f s. Solid = baseline; dashed pink = counterfactual. Separation is not amplified.",
+                publication.result->baseline_state.time_s);
+            if (app.experiment_ui.comparison_view != 0 && app.local_origin_body &&
+                app.scenario.stable_ids[*app.local_origin_body] == publication.removed_body_stable_id) {
+                ImGui::TextWrapped("Comparison unavailable in the removed body's frame. Select Full System or a surviving parent view.");
+            }
+            if (ImGui::Button("Return to live baseline")) app.experiment_ui.comparison_view = 0;
+        }
+        if (!publication.worker_error.empty()) ImGui::TextWrapped("%s", publication.worker_error.c_str());
+    }
+    const bool showing_comparison = app.experiment_ui.comparison_view != 0 &&
+        publication_matches_scenario(app) &&
+        app.experiment_publication.state == nbody::visualization::CounterfactualWorkerState::completed &&
+        app.experiment_publication.result &&
+        (!app.local_origin_body || app.scenario.stable_ids[*app.local_origin_body] !=
+            app.experiment_publication.removed_body_stable_id);
+    ImGui::TextWrapped("DISPLAY: %s", showing_comparison
+        ? (app.experiment_ui.comparison_view == 1 ? "PAIRED BASELINE endpoint" : "BODY-REMOVED endpoint")
+        : "LIVE BASELINE (comparison may be pending/unavailable)");
+    ImGui::RadioButton("Demo", &app.panel_page, 0); ImGui::SameLine();
+    ImGui::RadioButton("Comparison", &app.panel_page, 1); ImGui::SameLine();
+    ImGui::RadioButton("Advanced", &app.panel_page, 2);
+    ImGui::Separator();
+    ImGui::BeginChild("control_page", {0.0F, 0.0F}, false);
+    if (app.previous_panel_page != app.panel_page) {
+        ImGui::SetScrollY(0.0F);
+        app.previous_panel_page = app.panel_page;
+    }
+    if (app.panel_page == 0) draw_demo_controls(app, actions, preferred_openmp_threads);
+    if (app.panel_page == 2) {
 
     section_heading("Simulation");
     int scenario_index = app.scenario.kind == ScenarioKind::solar_system ? 0 :
@@ -1618,6 +1870,7 @@ UiActions draw_control_panel(
     ImGui::BeginDisabled(!continuous_controls);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16F, 0.38F, 0.42F, 1.0F));
     if (ImGui::Button(app.controller.paused() ? "Resume" : "Pause", {118.0F, 0.0F})) {
+        app.experiment_ui.comparison_view = 0;
         app.controller.toggle_paused();
     }
     ImGui::PopStyleColor();
@@ -1972,7 +2225,6 @@ UiActions draw_control_panel(
         }
     }
     help_for_last_item(nbody::visualization::HelpTopic::body_selector);
-    const auto& body = app.controller.state().bodies[app.selected_body];
     const auto& style = app.scenario.styles[app.selected_body];
     const auto sun_index = nbody::visualization::find_body_index(
         app.scenario,
@@ -2074,6 +2326,8 @@ UiActions draw_control_panel(
             "The bounded benchmark runner retains correctness checks.");
     }
 
+    }
+    if (app.panel_page == 1) {
     section_heading("Counterfactual Experiment");
     ImGui::TextWrapped(
         "Hypothetical gravitational counterfactual: one curated body is removed from a copied "
@@ -2131,6 +2385,11 @@ UiActions draw_control_panel(
                 "The selected body is physically absent from the counterfactual solver branch; this is not a visibility toggle.");
         }
         ImGui::TextDisabled("Sun and unapproved catalog bodies are not eligible.");
+        ImGui::BeginDisabled(app.experiment_worker.busy() || candidates.empty());
+        if (ImGui::Button("Run selected removal / show result")) start_counterfactual(app, preferred_openmp_threads);
+        ImGui::EndDisabled();
+        ImGui::TextWrapped("Launch pauses the live scene. Completed paired endpoints are displayed at the same time; the live solver is preserved.");
+        if (!experiment.error.empty()) ImGui::TextWrapped("%s", experiment.error.c_str());
 
         ImGui::TextUnformatted("Experiment backend");
         ImGui::RadioButton("Sequential CPU", &experiment.backend_index, 0);
@@ -2143,11 +2402,8 @@ UiActions draw_control_panel(
         ImGui::RadioButton("OpenMP CPU", &experiment.backend_index, 1);
         ImGui::EndDisabled();
         if (!experiment_openmp_available) {
-            if (experiment.backend_index == 1) {
-                experiment.backend_index = 0;
-            }
             ImGui::TextDisabled(
-                "OpenMP is unavailable in this build; Sequential will be used explicitly.");
+                "OpenMP is unavailable in this build. Select a supported backend explicitly.");
         }
         if (nbody::experiments::CounterfactualExperimentRunner::cuda_compiled()) {
             if (!control_layout.stacked) {
@@ -2158,9 +2414,6 @@ UiActions draw_control_panel(
             ImGui::RadioButton("CUDA GPU", &experiment.backend_index, 2);
             ImGui::EndDisabled();
             if (!experiment_cuda_available) {
-                if (experiment.backend_index == 2) {
-                    experiment.backend_index = 0;
-                }
                 ImGui::TextDisabled(
                     "CUDA support is compiled, but the selected NVIDIA device is unavailable; CUDA experiments cannot start.");
             }
@@ -2171,8 +2424,11 @@ UiActions draw_control_panel(
         if (!control_layout.stacked) {
             ImGui::SameLine();
         }
+        ImGui::BeginDisabled(experiment.backend_index == 2);
         ImGui::RadioButton("Barnes-Hut (approximate)",
             &experiment.solver_index, 1);
+        ImGui::EndDisabled();
+        if (experiment.backend_index == 2) ImGui::TextWrapped("CUDA counterfactuals support Direct only. Select OpenMP or Sequential explicitly for Barnes-Hut.");
         if (experiment.solver_index == 1) {
             ImGui::TextWrapped(
                 "Barnes-Hut approximates distant groups. Measured separation can contain both the removal response and solver approximation error; compare against Direct before scientific interpretation.");
@@ -2327,25 +2583,7 @@ UiActions draw_control_panel(
             estimate_error.empty();
         ImGui::BeginDisabled(!start_allowed);
         if (ImGui::Button("Start counterfactual", {178.0F, 0.0F})) {
-            try {
-                auto snapshot = make_ui_experiment_snapshot(app);
-                auto configuration = make_experiment_configuration(
-                    app, preferred_openmp_threads);
-                const auto scenario_generation =
-                    app.experiment_gate.scenario_generation();
-                const auto worker_generation = app.experiment_worker.start(
-                    std::move(snapshot), std::move(configuration),
-                    {scenario_generation,
-                     experiment.capture_current_state
-                        ? nbody::visualization::CounterfactualSnapshotSource::current_state
-                        : nbody::visualization::CounterfactualSnapshotSource::initial_state});
-                app.experiment_gate.accept_job(
-                    worker_generation, scenario_generation);
-                experiment.error.clear();
-                app.refresh_experiment_publication();
-            } catch (const std::exception& error) {
-                experiment.error = error.what();
-            }
+            start_counterfactual(app, preferred_openmp_threads);
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
@@ -2655,6 +2893,8 @@ UiActions draw_control_panel(
             "linear swept-step screened, not collision-resolved.");
     }
 
+    }
+    if (app.panel_page == 2) {
     section_heading("Visualization & View");
     if (!app.view_error.empty()) {
         ImGui::TextColored(ImVec4(0.96F, 0.67F, 0.28F, 1.0F), "%s", app.view_error.c_str());
@@ -2723,6 +2963,10 @@ UiActions draw_control_panel(
                 "The trail uses integrated Sun positions; amplification affects only display.");
         }
     }
+    if (app.scenario.kind == ScenarioKind::astronomical_catalog) {
+        ImGui::Checkbox("Initial osculating orbit guides", &app.show_reference_orbits);
+        ImGui::TextWrapped("Two-body presentation guides from the initial catalog state; not ephemeris predictions or integrated histories.");
+    }
     ImGui::Checkbox("Body labels", &app.show_labels);
     help_for_last_item(nbody::visualization::HelpTopic::labels);
     float radius_multiplier = app.render_space.radius_multiplier();
@@ -2780,9 +3024,38 @@ UiActions draw_control_panel(
         help_for_last_item(nbody::visualization::HelpTopic::advanced_details);
     }
 
+    }
+    ImGui::EndChild();
     actions.panel_right = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x;
     ImGui::End();
     return actions;
+}
+
+bool apply_counterfactual_display(
+    ApplicationModel& app,
+    std::vector<nbody::visualization::RenderBody>& snapshot,
+    std::vector<nbody::visualization::RenderTrail>& render_trails) {
+    if (app.experiment_ui.comparison_view == 0) return false;
+    std::optional<std::string> origin;
+    if (app.local_origin_body) origin = app.scenario.stable_ids[*app.local_origin_body];
+    std::vector<nbody::visualization::RenderBody> endpoints;
+    if (!nbody::visualization::build_counterfactual_endpoint_snapshot(
+            app.experiment_publication, app.experiment_gate, app.scenario,
+            app.render_space, app.experiment_ui.comparison_view == 2, origin, endpoints)) {
+        return false;
+    }
+    for (std::size_t index = 0; index < endpoints.size(); ++index) {
+        endpoints[index].visible = endpoints[index].visible && app.body_visible(index);
+        if (app.experiment_ui.comparison_view == 2 && !endpoints[index].emissive) {
+            endpoints[index].color = endpoints[index].color * 0.45F + glm::vec3(0.55F, 0.12F, 0.38F);
+        }
+    }
+    snapshot = std::move(endpoints);
+    // The result has its own matched-time history. Never overlay live history
+    // or initial conic guides on a future paired endpoint as if it were live.
+    render_trails.clear();
+    append_counterfactual_trails(app, render_trails);
+    return true;
 }
 
 void draw_labels(
@@ -2960,10 +3233,12 @@ int main(int argc, char** argv) {
                         throw std::runtime_error(policy.explanation);
                     }
                     const auto started = std::chrono::steady_clock::now();
-                    const std::size_t steps = app.controller.steps_per_frame();
+                    const std::size_t steps = nbody::visualization::responsive_viewer_batch_steps(
+                        app.controller.backend_kind() == BackendKind::cuda,
+                        app.controller.steps_per_frame());
                     const std::uint64_t timing_generation =
                         app.simulation_timing.generation();
-                    app.controller.advance_frame();
+                    app.controller.advance_steps(steps);
                     const double elapsed_ms = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - started).count();
                     app.simulation_timing.publish(
@@ -2990,20 +3265,12 @@ int main(int argc, char** argv) {
             app.render_space.update_snapshot(app.controller.state(), snapshot);
             app.apply_visibility(snapshot);
             if (app.focused_body && *app.focused_body < snapshot.size()) {
-                camera.approach_target(snapshot[*app.focused_body].position, 0.14F);
+                camera.approach_target(snapshot[*app.focused_body].position,
+                    1.0F - std::exp(-9.0F * std::clamp(ImGui::GetIO().DeltaTime, 0.0F, 0.1F)));
             }
-            update_render_trails(app, render_trails);
-            append_counterfactual_trails(app, render_trails);
-
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
-            if (input.pending_selection && !ImGui::GetIO().WantCaptureMouse) {
-                select_nearest_body(
-                    app, snapshot, camera, input.selection_x, input.selection_y, input.scene_left);
-            }
-            input.pending_selection = false;
-
             const UiActions actions = draw_control_panel(
                 app, input.preferred_openmp_threads);
             bool state_replaced = false;
@@ -3080,8 +3347,6 @@ int main(int argc, char** argv) {
                 refresh_render_origin(app);
                 app.render_space.update_snapshot(app.controller.state(), snapshot);
                 app.apply_visibility(snapshot);
-                update_render_trails(app, render_trails);
-                append_counterfactual_trails(app, render_trails);
             }
             if (actions.camera_preset) {
                 try {
@@ -3100,6 +3365,13 @@ int main(int argc, char** argv) {
             const ImVec2 display = ImGui::GetIO().DisplaySize;
             const float logical_scene_width = std::max(1.0F, display.x - input.scene_left);
             camera.set_aspect_ratio(logical_scene_width / std::max(display.y, 1.0F));
+            refresh_render_origin(app);
+            app.render_space.update_snapshot(app.controller.state(), snapshot);
+            app.apply_visibility(snapshot);
+            if (!apply_counterfactual_display(app, snapshot, render_trails)) {
+                update_render_trails(app, render_trails);
+                append_counterfactual_trails(app, render_trails);
+            }
             nbody::visualization::apply_screen_space_body_sizing(
                 snapshot, camera, display.y,
                 nbody::visualization::find_body_index(
@@ -3107,6 +3379,11 @@ int main(int argc, char** argv) {
                     app.scenario.kind == ScenarioKind::astronomical_catalog
                         ? "sol:sun" : "sun"));
 
+            if (input.pending_selection && !ImGui::GetIO().WantCaptureMouse) {
+                select_nearest_body(
+                    app, snapshot, camera, input.selection_x, input.selection_y, input.scene_left);
+            }
+            input.pending_selection = false;
             draw_labels(app, snapshot, camera, actions.panel_right);
             ImGui::Render();
             std::optional<nbody::visualization::RenderMarker> barycenter_marker;

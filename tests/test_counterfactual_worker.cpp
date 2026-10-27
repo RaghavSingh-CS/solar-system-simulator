@@ -1004,6 +1004,64 @@ void test_openmp_worker() {
 
 }  // namespace
 
+void test_counterfactual_endpoint_display() {
+    using namespace nbody::visualization;
+    const auto scenario = make_astronomical_catalog_scenario();
+    const auto source = scenario.initial_state;
+    auto snapshot = capture_counterfactual_snapshot(scenario, source);
+    CounterfactualExperimentConfiguration config;
+    config.removed_body_stable_id = "sol:earth";
+    config.limits.observation_horizon_s = 120.0;
+    config.limits.sample_cadence_s = 60.0;
+    config.limits.integration_steps_per_batch = 1U;
+    CounterfactualExperimentWorker worker;
+    CounterfactualPublicationGate gate;
+    const auto generation = worker.start(std::move(snapshot), config,
+        {gate.scenario_generation(), CounterfactualSnapshotSource::initial_state});
+    gate.accept_job(generation, gate.scenario_generation());
+    worker.wait_until_idle();
+    const auto publication = worker.publication();
+    require(publication.state == CounterfactualWorkerState::completed,
+        "endpoint fixture did not complete an actual paired experiment");
+    RenderSpaceTransform view(source, scenario.styles);
+    const auto sun = *find_body_index(scenario, "sol:sun");
+    const auto earth = *find_body_index(scenario, "sol:earth");
+    view.set_origin_m(publication.result->baseline_state.bodies[sun].position_m);
+    std::vector<RenderBody> baseline, removed;
+    require(build_counterfactual_endpoint_snapshot(publication, gate, scenario, view,
+                false, std::string{"sol:sun"}, baseline) &&
+            build_counterfactual_endpoint_snapshot(publication, gate, scenario, view,
+                true, std::string{"sol:sun"}, removed),
+        "paired endpoints are not wired into render snapshots");
+    require(baseline.size() == 60U && removed.size() == 60U &&
+            baseline[earth].visible && !removed[earth].visible,
+        "removed body still appears active or render identities were compacted");
+    for (const auto& mapping : publication.result->survivor_mapping) {
+        const auto index = mapping.baseline_index;
+        require(removed[index].visible &&
+                removed[index].position == view.to_render_position(
+                    publication.result->counterfactual_state.bodies[mapping.counterfactual_index].position_m) &&
+                baseline[index].position == view.to_render_position(
+                    publication.result->baseline_state.bodies[index].position_m),
+            "paired endpoint body mapping or common baseline origin is wrong");
+    }
+    const auto preserved = removed;
+    require(!build_counterfactual_endpoint_snapshot(publication, gate, scenario, view,
+                true, std::string{"sol:earth"}, removed) &&
+            removed[earth].visible == preserved[earth].visible,
+        "removed local origin was silently used");
+    auto failed = publication;
+    failed.state = CounterfactualWorkerState::failed;
+    require(!build_counterfactual_endpoint_snapshot(failed, gate, scenario, view,
+                true, {}, removed), "failed experiment left active endpoint overlays");
+    gate.replace_scenario();
+    require(!build_counterfactual_endpoint_snapshot(publication, gate, scenario, view,
+                true, {}, removed), "stale same-ID scenario result remained visible");
+    require(source.time_s == 0.0 && source.bodies.size() == 60U &&
+            source.bodies[earth].position_m.x == scenario.initial_state.bodies[earth].position_m.x,
+        "counterfactual presentation mutated the live snapshot");
+}
+
 int main() {
     try {
         static_assert(!std::is_copy_constructible_v<CounterfactualExperimentWorker>);
@@ -1015,6 +1073,7 @@ int main() {
         test_barnes_hut_worker_metadata_is_immutable();
         test_barnes_hut_failure_context_and_persistent_notice();
         test_application_publication_generation_gate();
+        test_counterfactual_endpoint_display();
         test_immutable_executed_run_descriptor();
         test_cuda_worker_metadata_and_rejection();
         test_cancellation_and_active_destruction();

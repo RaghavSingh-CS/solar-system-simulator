@@ -6,6 +6,15 @@ The literature review found that CPU/GPU crossover and adaptive heterogeneous ma
 
 ## Current capabilities
 
+The October 29 presentation correction is an uncommitted candidate awaiting RTX
+4050 verification. The ordinary CUDA build script now also enables OpenMP. The viewer has Demo,
+Comparison, and Advanced pages, a last-committed execution indicator, visible
+paired endpoints for body-removal experiments, catalog osculating orbit guides,
+and full-orbit/pan camera controls. See
+[presentation remediation and RTX instructions](docs/presentation_demo.md).
+CUDA Barnes--Hut GUI execution remains unavailable; use OpenMP Barnes--Hut or
+CUDA Direct explicitly. The optional additional 5,000-body population is deferred.
+
 - Newtonian direct O(N^2) force evaluation in double precision plus an
   accuracy-first 3D Barnes--Hut monopole solver with Sequential and OpenMP
   execution.

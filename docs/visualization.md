@@ -1,5 +1,19 @@
 # Visualization system (Stage G1)
 
+## October 29 presentation correction (awaiting RTX verification)
+
+Real operator observations supersede earlier GUI-complete assumptions. The
+current uncommitted correction enables OpenMP in the ordinary CUDA build script, separates
+configured from last-committed execution identity, shows immutable paired
+baseline/body-removed endpoints, and moves primary controls to a compact Demo
+page. Comparison and Advanced have their own scrolling content beneath a fixed
+execution header. Full orbit, pan and proportional local zoom are supported.
+Catalog osculating guides are explicitly distinguished from actual history.
+The live GPU batch is capped at four fixed physical steps and live advancement
+pauses during counterfactual submission. See [the targeted findings and RTX
+verification instructions](presentation_demo.md). Extra 5000-body population
+is deferred, and CUDA Barnes--Hut GUI remains unavailable.
+
 ## Scope and status
 
 Stage G1 retains the validated Stage 6D astronomical and counterfactual viewer

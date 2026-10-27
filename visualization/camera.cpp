@@ -30,20 +30,33 @@ void OrbitCamera::set_aspect_ratio(float aspect_ratio) {
 }
 
 void OrbitCamera::orbit(float delta_x, float delta_y) {
-    yaw_degrees_ += delta_x * 0.2F;
-    pitch_degrees_ = std::clamp(pitch_degrees_ - delta_y * 0.2F, -85.0F, 85.0F);
+    if (!std::isfinite(delta_x) || !std::isfinite(delta_y)) return;
+    yaw_degrees_ = std::remainder(yaw_degrees_ + std::remainder(delta_x, 1800.0F) * 0.2F, 360.0F);
+    pitch_degrees_ = std::remainder(pitch_degrees_ - std::remainder(delta_y, 1800.0F) * 0.2F, 360.0F);
+}
+
+void OrbitCamera::pan(float delta_x, float delta_y) {
+    if (!std::isfinite(delta_x) || !std::isfinite(delta_y)) return;
+    const float yaw = glm::radians(yaw_degrees_);
+    const float pitch = glm::radians(pitch_degrees_);
+    const glm::vec3 right(-std::sin(yaw), 0.0F, std::cos(yaw));
+    const glm::vec3 up(-std::sin(pitch) * std::cos(yaw), std::cos(pitch),
+                       -std::sin(pitch) * std::sin(yaw));
+    target_ += (-right * std::clamp(delta_x, -2000.0F, 2000.0F) +
+               up * std::clamp(delta_y, -2000.0F, 2000.0F)) * (distance_ * 0.0015F);
 }
 
 void OrbitCamera::dolly(float amount) {
-    distance_ *= std::exp(-amount * 0.12F);
-    distance_ = std::clamp(distance_, 2.0F, 120.0F);
+    if (!std::isfinite(amount)) return;
+    distance_ *= std::exp(-std::clamp(amount, -12.0F, 12.0F) * 0.08F);
+    distance_ = std::clamp(distance_, 0.15F, 160.0F);
 }
 
 void OrbitCamera::set_distance(float distance) {
     if (!(distance > 0.0F) || !std::isfinite(distance)) {
         throw std::invalid_argument("camera distance must be finite and positive");
     }
-    distance_ = std::clamp(distance, 2.0F, 120.0F);
+    distance_ = std::clamp(distance, 0.15F, 160.0F);
 }
 
 void OrbitCamera::set_pose(
@@ -56,9 +69,9 @@ void OrbitCamera::set_pose(
         !std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z)) {
         throw std::invalid_argument("camera pose must be finite with positive distance");
     }
-    yaw_degrees_ = yaw_degrees;
-    pitch_degrees_ = std::clamp(pitch_degrees, -85.0F, 85.0F);
-    distance_ = std::clamp(distance, 2.0F, 120.0F);
+    yaw_degrees_ = std::remainder(yaw_degrees, 360.0F);
+    pitch_degrees_ = std::remainder(pitch_degrees, 360.0F);
+    distance_ = std::clamp(distance, 0.15F, 160.0F);
     target_ = target;
 }
 
@@ -94,11 +107,15 @@ glm::vec3 OrbitCamera::position() const {
 }
 
 glm::mat4 OrbitCamera::view_matrix() const {
-    return glm::lookAt(position(), target_, glm::vec3(0.0F, 1.0F, 0.0F));
+    const float yaw = glm::radians(yaw_degrees_);
+    const float pitch = glm::radians(pitch_degrees_);
+    const glm::vec3 up(-std::sin(pitch) * std::cos(yaw), std::cos(pitch),
+                       -std::sin(pitch) * std::sin(yaw));
+    return glm::lookAt(position(), target_, up);
 }
 
 glm::mat4 OrbitCamera::projection_matrix() const {
-    return glm::perspective(glm::radians(45.0F), aspect_ratio_, 0.05F, 200.0F);
+    return glm::perspective(glm::radians(45.0F), aspect_ratio_, 0.002F, 512.0F);
 }
 
 }  // namespace nbody::visualization

@@ -11,6 +11,51 @@
 
 namespace nbody::visualization {
 
+std::size_t responsive_viewer_batch_steps(bool cuda, std::size_t requested_steps) {
+    if (requested_steps == 0U) throw std::invalid_argument("viewer batch must be positive");
+    return cuda ? std::min<std::size_t>(requested_steps, 4U) : requested_steps;
+}
+
+std::vector<std::vector<Vec3>> catalog_osculating_orbit_guides(
+    const ScenarioDefinition& scenario) {
+    std::vector<std::vector<Vec3>> paths(scenario.stable_ids.size());
+    if (scenario.kind != ScenarioKind::astronomical_catalog) return paths;
+    constexpr std::size_t segments = 192U;
+    for (std::size_t index = 0; index < paths.size(); ++index) {
+        const auto& parent_id = scenario.body_metadata[index].parent_stable_id;
+        if (!parent_id) continue;
+        const auto parent = find_body_index(scenario, *parent_id);
+        if (!parent) continue;
+        const auto& body = scenario.initial_state.bodies[index];
+        const auto& primary = scenario.initial_state.bodies[*parent];
+        const auto r = body.position_m - primary.position_m;
+        const auto v = body.velocity_m_s - primary.velocity_m_s;
+        const double radius = norm(r);
+        const double mu = gravitational_constant * (body.mass_kg + primary.mass_kg);
+        const auto h = cross(r, v);
+        const double h_norm = norm(h);
+        if (!(radius > 0.0) || !(mu > 0.0) || !(h_norm > 0.0)) continue;
+        const auto eccentricity_vector = cross(v, h) / mu - r / radius;
+        const double eccentricity = norm(eccentricity_vector);
+        const double p = h_norm * (h_norm / mu);
+        if (!std::isfinite(p) || !(p > 0.0) || !std::isfinite(eccentricity) ||
+            eccentricity >= 0.999) continue;
+        const auto x_axis = eccentricity > 1.0e-10
+            ? eccentricity_vector / eccentricity : r / radius;
+        const auto y_axis = cross(h / h_norm, x_axis);
+        auto& path = paths[index];
+        path.reserve(segments + 1U);
+        for (std::size_t sample = 0; sample <= segments; ++sample) {
+            const double angle = 6.2831853071795864769 *
+                static_cast<double>(sample) / static_cast<double>(segments);
+            const double distance = p / (1.0 + eccentricity * std::cos(angle));
+            path.push_back(primary.position_m +
+                (x_axis * std::cos(angle) + y_axis * std::sin(angle)) * distance);
+        }
+    }
+    return paths;
+}
+
 NumericalHealth classify_numerical_health(
     double energy_relative,
     double angular_momentum_relative) noexcept {

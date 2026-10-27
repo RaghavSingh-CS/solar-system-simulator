@@ -1,5 +1,14 @@
 # Five-minute RTX 4050 academic demonstration
 
+For the October 29 GUI correction, first use the
+[candidate build and visual-check instructions](../docs/presentation_demo.md).
+This correction remains uncommitted until RTX verification; the clean-source
+handoff preflight cannot certify a dirty candidate checkout. The updated Demo
+page exposes live controls and the Comparison page displays baseline versus
+body-removed paired endpoints. Select OpenMP explicitly before Barnes--Hut.
+CUDA Direct synchronous batches are capped at four fixed steps. Inspect actual
+RTX frame pacing before making any performance statement.
+
 Prepare before the presentation from an x64 VS2022 Native Tools PowerShell:
 
 ```powershell

@@ -550,6 +550,57 @@ std::string counterfactual_optional_measurement(
     return text.str();
 }
 
+bool build_counterfactual_endpoint_snapshot(
+    const CounterfactualWorkerPublication& publication,
+    const CounterfactualPublicationGate& gate,
+    const ScenarioDefinition& scenario,
+    const RenderSpaceTransform& transform,
+    bool counterfactual,
+    const std::optional<std::string>& common_origin_stable_id,
+    std::vector<RenderBody>& output) {
+    if (!gate.accepts(publication) ||
+        publication.state != CounterfactualWorkerState::completed ||
+        !publication.result || !publication.identities ||
+        publication.result->status != experiments::ExperimentStatus::completed ||
+        publication.identities->size() != scenario.stable_ids.size()) return false;
+    const auto& result = *publication.result;
+    const auto count = scenario.stable_ids.size();
+    if (result.baseline_state.bodies.size() != count ||
+        result.counterfactual_state.bodies.size() + 1U != count ||
+        result.survivor_mapping.size() + 1U != count ||
+        result.baseline_state.time_s != result.counterfactual_state.time_s) return false;
+    for (std::size_t index = 0; index < count; ++index) {
+        if ((*publication.identities)[index].stable_id != scenario.stable_ids[index]) return false;
+    }
+    auto view = transform;
+    if (common_origin_stable_id) {
+        const auto origin = find_body_index(scenario, *common_origin_stable_id);
+        if (!origin || *common_origin_stable_id == result.removed_body_stable_id) return false;
+        view.set_origin_m(result.baseline_state.bodies[*origin].position_m);
+    }
+    std::vector<RenderBody> candidate;
+    view.update_snapshot(result.baseline_state, candidate);
+    if (counterfactual) {
+        for (auto& body : candidate) body.visible = false;
+        std::vector<bool> used_baseline(count, false);
+        std::vector<bool> used_counterfactual(count - 1U, false);
+        for (const auto& mapping : result.survivor_mapping) {
+            if (mapping.baseline_index >= count || mapping.counterfactual_index >= count - 1U ||
+                used_baseline[mapping.baseline_index] || used_counterfactual[mapping.counterfactual_index] ||
+                scenario.stable_ids[mapping.baseline_index] != mapping.stable_id ||
+                mapping.stable_id == result.removed_body_stable_id) return false;
+            used_baseline[mapping.baseline_index] = true;
+            used_counterfactual[mapping.counterfactual_index] = true;
+            auto& body = candidate[mapping.baseline_index];
+            body.position = view.to_render_position(
+                result.counterfactual_state.bodies[mapping.counterfactual_index].position_m);
+            body.visible = true;
+        }
+    }
+    output = std::move(candidate);
+    return true;
+}
+
 CounterfactualRenderPathResult build_counterfactual_render_paths(
     const CounterfactualWorkerPublication& publication,
     const RenderSpaceTransform& transform,

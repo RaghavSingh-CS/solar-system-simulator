@@ -32,6 +32,16 @@ struct ControllerConfig {
     BarnesHutConfiguration barnes_hut{};
 };
 
+// Published only after an advancement commits. Selection alone is not execution.
+struct ControllerExecution {
+    BackendKind backend;
+    SolverKind solver;
+    std::size_t steps;
+    double end_time_s;
+    int openmp_threads;
+    int cuda_device;
+};
+
 class SimulationController {
 public:
     SimulationController(SimulationState initial_state, ControllerConfig config);
@@ -55,6 +65,7 @@ public:
     const BarnesHutConfiguration& barnes_hut_configuration() const noexcept;
     std::optional<BarnesHutStatistics> barnes_hut_statistics() const noexcept;
     const std::string& last_error() const noexcept;
+    const std::optional<ControllerExecution>& last_execution() const noexcept;
 
     void set_paused(bool paused) noexcept;
     void toggle_paused() noexcept;
@@ -101,6 +112,7 @@ private:
     std::unique_ptr<CudaExecutor> cuda_integrator_;
     std::optional<BarnesHutStatistics> last_barnes_hut_statistics_;
     std::string last_error_;
+    std::optional<ControllerExecution> last_execution_;
 };
 
 }  // namespace visualization

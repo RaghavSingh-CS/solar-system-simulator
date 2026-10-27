@@ -60,6 +60,15 @@ CameraFraming camera_framing(
 
 void apply_camera_framing(OrbitCamera& camera, const CameraFraming& framing);
 
+// Presentation only: instantaneous two-body ellipses from catalog r/v and
+// parent mass. Empty for missing parents, unbound or degenerate conics.
+// These guides are neither integrated histories nor ephemeris predictions.
+std::vector<std::vector<Vec3>> catalog_osculating_orbit_guides(
+    const ScenarioDefinition& scenario);
+
+// Bound synchronous GPU work on the GL/event thread; never alter physical dt.
+std::size_t responsive_viewer_batch_steps(bool cuda, std::size_t requested_steps);
+
 glm::vec3 amplify_from_barycenter(
     const glm::vec3& render_position,
     const glm::vec3& barycenter,

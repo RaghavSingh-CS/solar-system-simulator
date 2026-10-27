@@ -11,6 +11,7 @@ public:
 
     void set_aspect_ratio(float aspect_ratio);
     void orbit(float delta_x, float delta_y);
+    void pan(float delta_x, float delta_y);
     void dolly(float amount);
     void set_distance(float distance);
     void set_pose(float yaw_degrees, float pitch_degrees, float distance, const glm::vec3& target);

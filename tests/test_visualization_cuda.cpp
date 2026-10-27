@@ -96,6 +96,11 @@ void test_cuda_controller() {
     const auto reference = integrate_sequential(switch_state, 3, dt_s);
     controller.advance_frame();
     compare_states(reference, controller.state(), "batched CUDA frame");
+    require(controller.last_execution() &&
+                controller.last_execution()->backend == nbody::visualization::BackendKind::cuda &&
+                controller.last_execution()->solver == nbody::visualization::SolverKind::direct &&
+                controller.last_execution()->steps == 3U,
+            "committed CUDA execution is not identified as CUDA Direct");
 
     controller.set_paused(true);
     const auto paused_state = controller.state();
@@ -113,6 +118,24 @@ void test_cuda_controller() {
     controller.select_backend(nbody::visualization::BackendKind::sequential);
     require(same_state(before_cpu_switch, controller.state()),
             "switching from CUDA to Sequential changed state");
+
+    if (nbody::visualization::SimulationController::openmp_available()) {
+        const auto openmp_reference = integrate_sequential(controller.state(), 1U, dt_s);
+        controller.select_backend(nbody::visualization::BackendKind::openmp, 2);
+        controller.advance_steps(1U);
+        compare_states(openmp_reference, controller.state(), "OpenMP Direct in CUDA-enabled viewer");
+        require(controller.last_execution() &&
+                    controller.last_execution()->backend == nbody::visualization::BackendKind::openmp,
+                "CUDA-enabled viewer reported an OpenMP request without executing OpenMP");
+        controller.select_solver(nbody::visualization::SolverKind::barnes_hut);
+        controller.advance_steps(1U);
+        require(controller.barnes_hut_statistics() &&
+                    controller.last_execution() &&
+                    controller.barnes_hut_statistics()->worker_threads == 2 &&
+                    controller.last_execution()->solver == nbody::visualization::SolverKind::barnes_hut,
+                "OpenMP Barnes-Hut is inactive in the combined CUDA build");
+        controller.select_solver(nbody::visualization::SolverKind::direct);
+    }
 
     const auto replacement = nbody::make_seeded_synthetic_system(16, 91);
     controller.select_backend(nbody::visualization::BackendKind::cuda, 1, 0);

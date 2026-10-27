@@ -22,6 +22,14 @@ if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Viewer not found at '$executable'. Build it first with '.\scripts\test-local.ps1 -Configuration $Backend'. No backend substitution was attempted."
 }
 
+if ($Backend -eq 'CUDA') {
+    $cachePath = Join-Path $repositoryRoot 'build/cuda-release/CMakeCache.txt'
+    if (-not (Test-Path -LiteralPath $cachePath -PathType Leaf) -or
+        (Get-Content -Raw -LiteralPath $cachePath) -notmatch '(?m)^NBODY_ENABLE_OPENMP:[^=]+=ON\r?$') {
+        throw "CUDA viewer cache lacks OpenMP. Rebuild with '.\scripts\test-local.ps1 -Configuration CUDA' or 'cmake --preset cuda-release -DNBODY_ENABLE_OPENMP=ON -DCMAKE_CUDA_ARCHITECTURES=89', then build. The source-custodied preset itself is retained unchanged."
+    }
+}
+
 if ($PrintCommand) {
     [pscustomobject]@{
         Executable = $executable
